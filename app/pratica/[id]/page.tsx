@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { applicaAzioneOperatore } from "./actions";
+import { applicaAzioneOperatore, verificaCodiceOperatore } from "./actions";
 
 type RawCode = {
   codice?: string;
@@ -82,6 +82,14 @@ type AzioneStorico = {
   created_at: string;
 };
 
+type VerificaCodice = {
+  id: number;
+  codice: string;
+  codice_normalizzato: string;
+  esito: "confermato" | "scartato";
+  updated_at: string;
+};
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -121,25 +129,32 @@ async function getPratica(id: string) {
     notFound();
   }
 
-  const [codici, allegati, storicoOperatore] = await Promise.all([
-    selectSupabase<Codice[]>(
-      `codici_identificativi?pratica_id=eq.${encodeURIComponent(id)}&select=*`
-    ),
-    selectSupabase<Allegato[]>(
-      `allegati?pratica_id=eq.${encodeURIComponent(id)}&select=*`
-    ),
-    selectSupabase<AzioneStorico[]>(
-      `azioni_operatore?pratica_id=eq.${encodeURIComponent(
-        id
-      )}&select=id,azione,nota,created_at&order=created_at.desc`
-    ),
-  ]);
+  const [codici, allegati, storicoOperatore, verificheCodici] =
+    await Promise.all([
+      selectSupabase<Codice[]>(
+        `codici_identificativi?pratica_id=eq.${encodeURIComponent(id)}&select=*`
+      ),
+      selectSupabase<Allegato[]>(
+        `allegati?pratica_id=eq.${encodeURIComponent(id)}&select=*`
+      ),
+      selectSupabase<AzioneStorico[]>(
+        `azioni_operatore?pratica_id=eq.${encodeURIComponent(
+          id
+        )}&select=id,azione,nota,created_at&order=created_at.desc`
+      ),
+      selectSupabase<VerificaCodice[]>(
+        `verifiche_codici_operatore?pratica_id=eq.${encodeURIComponent(
+          id
+        )}&select=id,codice,codice_normalizzato,esito,updated_at`
+      ),
+    ]);
 
   return {
     pratica: pratiche[0],
     codici,
     allegati,
     storicoOperatore,
+    verificheCodici,
   };
 }
 
@@ -238,6 +253,8 @@ function etichettaAzione(azione: string) {
     commerciale_preventivo_inviato: "Preventivo segnato come inviato",
     commerciale_ordine_acquisito: "Ordine segnato come acquisito",
     commerciale_fatturata: "Pratica segnata come fatturata",
+    codice_confermato: "Codice identificativo confermato",
+    codice_scartato: "Codice identificativo scartato",
   };
 
   return labels[azione] || etichettaStato(azione);
@@ -259,7 +276,13 @@ export default async function PraticaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { pratica, codici, allegati, storicoOperatore } = await getPratica(id);
+  const {
+    pratica,
+    codici,
+    allegati,
+    storicoOperatore,
+    verificheCodici,
+  } = await getPratica(id);
 
   const rawCodes = rawArray<RawCode>(
     pratica.dati_raw,
@@ -284,25 +307,83 @@ export default async function PraticaPage({
     "riepilogo_operativo"
   );
 
-  const codiciVisualizzati =
-    codici.length > 0
-      ? codici.map((item) => ({
-          codice: item.codice || "—",
-          tipo: item.tipo_codice || "Identificativo",
-          fonte: item.fonte || "database",
-          verificato: Boolean(item.verificato_operatore),
-          note: item.note || null,
-        }))
-      : rawCodes.map((item) => ({
-          codice: item.codice || "—",
-          tipo: "Identificativo",
-          fonte:
-            item.fonte === "cliente"
-              ? "Cliente"
-              : "Estrazione automatica dalla chat",
-          verificato: Boolean(item.verificato),
-          note: null,
-        }));
+  const verifichePerCodice = new Map(
+    verificheCodici.map((item) => [
+      item.codice_normalizzato,
+      item.esito,
+    ])
+  );
+
+  const codiciMappa = new Map<
+    string,
+    {
+      codice: string;
+      tipo: string;
+      fonte: string;
+      esito: "confermato" | "scartato" | null;
+      note: string | null;
+    }
+  >();
+
+  for (const item of codici) {
+    const codice = (item.codice || "").trim();
+    if (!codice) continue;
+
+    const chiave = codice.toUpperCase();
+    codiciMappa.set(chiave, {
+      codice,
+      tipo: item.tipo_codice || "Identificativo",
+      fonte: item.fonte || "Database",
+      esito:
+        verifichePerCodice.get(chiave) ||
+        (item.verificato_operatore ? "confermato" : null),
+      note: item.note || null,
+    });
+  }
+
+  for (const item of rawCodes) {
+    const codice = (item.codice || "").trim();
+    if (!codice) continue;
+
+    const chiave = codice.toUpperCase();
+    if (!codiciMappa.has(chiave)) {
+      codiciMappa.set(chiave, {
+        codice,
+        tipo: "Identificativo",
+        fonte:
+          item.fonte === "cliente"
+            ? "Cliente"
+            : "Estrazione automatica dalla chat",
+        esito:
+          verifichePerCodice.get(chiave) ||
+          (item.verificato ? "confermato" : null),
+        note: null,
+      });
+    } else {
+      const esistente = codiciMappa.get(chiave)!;
+      esistente.esito =
+        verifichePerCodice.get(chiave) || esistente.esito;
+    }
+  }
+
+  const codiciVisualizzati = Array.from(codiciMappa.values());
+
+  const codiciConfermati = codiciVisualizzati.filter(
+    (item) => item.esito === "confermato"
+  ).length;
+
+  const codiciScartati = codiciVisualizzati.filter(
+    (item) => item.esito === "scartato"
+  ).length;
+
+  const codiciInAttesa = codiciVisualizzati.filter(
+    (item) => !item.esito
+  ).length;
+
+  const codiciPronti =
+    codiciVisualizzati.length > 0 &&
+    codiciInAttesa === 0 &&
+    codiciConfermati > 0;
 
   const allegatiVisualizzati =
     allegati.length > 0
@@ -417,49 +498,102 @@ export default async function PraticaPage({
 
             <Card titolo="Codici identificativi">
               {codiciVisualizzati.length ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="py-3 pr-4">Tipo</th>
-                        <th className="py-3 pr-4">Codice</th>
-                        <th className="py-3 pr-4">Fonte</th>
-                        <th className="py-3">Verifica</th>
-                      </tr>
-                    </thead>
+                <>
+                  <div className="mb-5 flex flex-wrap gap-2 text-xs font-bold">
+                    <span className="rounded-full bg-green-100 px-3 py-1 text-green-800">
+                      Confermati: {codiciConfermati}
+                    </span>
+                    <span className="rounded-full bg-red-100 px-3 py-1 text-red-800">
+                      Scartati: {codiciScartati}
+                    </span>
+                    <span className="rounded-full bg-orange-100 px-3 py-1 text-orange-800">
+                      Da verificare: {codiciInAttesa}
+                    </span>
+                  </div>
 
-                    <tbody className="divide-y divide-slate-100">
-                      {codiciVisualizzati.map((codice, index) => (
-                        <tr key={`${codice.codice}-${index}`}>
-                          <td className="py-3 pr-4 text-slate-600">
-                            {codice.tipo}
-                          </td>
-                          <td className="py-3 pr-4 font-mono font-bold text-slate-950">
-                            {codice.codice}
-                          </td>
-                          <td className="py-3 pr-4 text-slate-600">
-                            {codice.fonte}
-                          </td>
-                          <td className="py-3">
-                            {codice.verificato ? (
-                              <span className="font-bold text-green-700">
-                                Verificato
-                              </span>
-                            ) : (
-                              <span className="font-bold text-orange-700">
-                                Da verificare
-                              </span>
-                            )}
-                          </td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="py-3 pr-4">Tipo</th>
+                          <th className="py-3 pr-4">Codice</th>
+                          <th className="py-3 pr-4">Fonte</th>
+                          <th className="py-3 pr-4">Esito</th>
+                          <th className="py-3">Azioni</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+                        {codiciVisualizzati.map((codice, index) => (
+                          <tr key={`${codice.codice}-${index}`}>
+                            <td className="py-3 pr-4 text-slate-600">
+                              {codice.tipo}
+                            </td>
+
+                            <td className="py-3 pr-4 font-mono font-bold text-slate-950">
+                              {codice.codice}
+                            </td>
+
+                            <td className="py-3 pr-4 text-slate-600">
+                              {codice.fonte}
+                            </td>
+
+                            <td className="py-3 pr-4">
+                              {codice.esito === "confermato" ? (
+                                <span className="font-bold text-green-700">
+                                  ✓ Confermato
+                                </span>
+                              ) : codice.esito === "scartato" ? (
+                                <span className="font-bold text-red-700">
+                                  ✕ Scartato
+                                </span>
+                              ) : (
+                                <span className="font-bold text-orange-700">
+                                  Da verificare
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3">
+                              <div className="flex flex-wrap gap-2">
+                                <VerificaCodiceButton
+                                  praticaId={pratica.id}
+                                  codice={codice.codice}
+                                  esito="confermato"
+                                  label="✓ Conferma"
+                                  disabilitato={
+                                    codice.esito === "confermato"
+                                  }
+                                  className="bg-green-100 text-green-800 hover:bg-green-200"
+                                />
+
+                                <VerificaCodiceButton
+                                  praticaId={pratica.id}
+                                  codice={codice.codice}
+                                  esito="scartato"
+                                  label="✕ Scarta"
+                                  disabilitato={codice.esito === "scartato"}
+                                  className="bg-red-100 text-red-800 hover:bg-red-200"
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               ) : (
-                <p className="text-sm text-slate-500">
-                  Nessun codice identificativo estratto automaticamente.
-                </p>
+                <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+                  <p className="text-sm font-bold text-orange-900">
+                    Nessun codice identificativo disponibile.
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-orange-800">
+                    Per una pratica commerciale il preventivo resta bloccato
+                    finché non è presente almeno un codice identificativo
+                    confermato.
+                  </p>
+                </div>
               )}
             </Card>
 
@@ -606,7 +740,38 @@ export default async function PraticaPage({
                   />
                 </div>
               ) : (
-                <div className="grid gap-3">
+                <div>
+                  <div
+                    className={`mb-4 rounded-xl border p-4 ${
+                      codiciPronti
+                        ? "border-green-200 bg-green-50"
+                        : "border-orange-200 bg-orange-50"
+                    }`}
+                  >
+                    <div
+                      className={`text-sm font-bold ${
+                        codiciPronti ? "text-green-800" : "text-orange-900"
+                      }`}
+                    >
+                      {codiciPronti
+                        ? "Codici verificati: pratica sbloccata"
+                        : "Verifica codici necessaria"}
+                    </div>
+
+                    <div className="mt-1 text-xs leading-5 text-slate-600">
+                      {codiciVisualizzati.length === 0
+                        ? "Non è presente alcun codice identificativo."
+                        : `${codiciConfermati} confermati · ${codiciScartati} scartati · ${codiciInAttesa} da verificare`}
+                    </div>
+
+                    {!codiciPronti && (
+                      <div className="mt-2 text-xs font-semibold text-orange-800">
+                        Dati verificati e Preventivo inviato restano bloccati.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid gap-3">
                   <AzioneOperatore
                     praticaId={pratica.id}
                     azione="commerciale_dati_mancanti"
@@ -621,7 +786,8 @@ export default async function PraticaPage({
                     label="Dati verificati → da preventivare"
                     className="bg-orange-100 text-orange-900 hover:bg-orange-200"
                     disabilitata={
-                      pratica.stato_commerciale === "da_preventivare"
+                      pratica.stato_commerciale === "da_preventivare" ||
+                      !codiciPronti
                     }
                   />
 
@@ -631,7 +797,8 @@ export default async function PraticaPage({
                     label="Preventivo inviato"
                     className="bg-blue-600 text-white hover:bg-blue-700"
                     disabilitata={
-                      pratica.stato_commerciale === "preventivo_inviato"
+                      pratica.stato_commerciale === "preventivo_inviato" ||
+                      !codiciPronti
                     }
                   />
 
@@ -641,8 +808,7 @@ export default async function PraticaPage({
                     label="Ordine acquisito"
                     className="bg-red-100 text-red-900 hover:bg-red-200"
                     disabilitata={
-                      pratica.stato_commerciale === "ordine_acquisito" &&
-                      pratica.stato_fatturazione !== "fatturato"
+                      pratica.stato_commerciale !== "preventivo_inviato"
                     }
                   />
 
@@ -651,8 +817,12 @@ export default async function PraticaPage({
                     azione="commerciale_fatturata"
                     label="Fatturata"
                     className="bg-green-600 text-white hover:bg-green-700"
-                    disabilitata={pratica.stato_fatturazione === "fatturato"}
+                    disabilitata={
+                      pratica.stato_fatturazione === "fatturato" ||
+                      pratica.stato_commerciale !== "ordine_acquisito"
+                    }
                   />
+                  </div>
                 </div>
               )}
             </Card>
@@ -819,6 +989,43 @@ function Campo({
   );
 }
 
+
+
+function VerificaCodiceButton({
+  praticaId,
+  codice,
+  esito,
+  label,
+  className,
+  disabilitato = false,
+}: {
+  praticaId: string;
+  codice: string;
+  esito: "confermato" | "scartato";
+  label: string;
+  className: string;
+  disabilitato?: boolean;
+}) {
+  return (
+    <form action={verificaCodiceOperatore}>
+      <input type="hidden" name="pratica_id" value={praticaId} />
+      <input type="hidden" name="codice" value={codice} />
+      <input type="hidden" name="esito" value={esito} />
+
+      <button
+        type="submit"
+        disabled={disabilitato}
+        className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+          disabilitato
+            ? "cursor-not-allowed bg-slate-100 text-slate-400"
+            : className
+        }`}
+      >
+        {disabilitato ? "Stato attuale" : label}
+      </button>
+    </form>
+  );
+}
 
 function AzioneOperatore({
   praticaId,
