@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type Pratica = {
   id: string;
   codice_pratica: string;
@@ -388,7 +390,15 @@ export default async function Home() {
                       </td>
 
                       <td className="px-4 py-4 font-semibold text-slate-950">
-                        {pratica.codice_pratica}
+                        <Link
+                          href={`/pratica/${pratica.id}`}
+                          className="inline-flex flex-col rounded-lg px-2 py-1 -mx-2 -my-1 transition hover:bg-blue-50 hover:text-blue-700"
+                        >
+                          <span>{pratica.codice_pratica}</span>
+                          <span className="mt-1 text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                            Apri pratica
+                          </span>
+                        </Link>
                       </td>
 
                       <td className="px-4 py-4">
