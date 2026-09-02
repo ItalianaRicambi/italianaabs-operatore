@@ -45,7 +45,6 @@ async function getPratiche(): Promise<{
       {
         headers: {
           apikey: secretKey,
-          Authorization: `Bearer ${secretKey}`,
         },
         cache: "no-store",
       }
@@ -82,7 +81,9 @@ function conta(pratiche: Pratica[], coda: string) {
 }
 
 function formattaData(data: string | null) {
-  if (!data) return "—";
+  if (!data) {
+    return "—";
+  }
 
   return new Intl.DateTimeFormat("it-IT", {
     dateStyle: "short",
@@ -91,7 +92,9 @@ function formattaData(data: string | null) {
 }
 
 function formattaImporto(importo: number | null) {
-  if (importo === null || importo === undefined) return "—";
+  if (importo === null || importo === undefined) {
+    return "—";
+  }
 
   return new Intl.NumberFormat("it-IT", {
     style: "currency",
@@ -103,18 +106,25 @@ function badgeClass(coda: string) {
   switch (coda) {
     case "ORDINE ACQUISITO - DA FATTURARE":
       return "bg-red-100 text-red-800";
+
     case "DA PREVENTIVARE":
       return "bg-orange-100 text-orange-800";
+
     case "DATI INTEGRATI - DA VERIFICARE":
       return "bg-yellow-100 text-yellow-800";
+
     case "INCOMPLETA - OPERATORE":
       return "bg-rose-100 text-rose-800";
+
     case "DATI MANCANTI":
       return "bg-slate-200 text-slate-800";
+
     case "PREVENTIVO INVIATO":
       return "bg-blue-100 text-blue-800";
+
     case "FATTURATA":
       return "bg-green-100 text-green-800";
+
     default:
       return "bg-gray-100 text-gray-800";
   }
@@ -123,21 +133,39 @@ function badgeClass(coda: string) {
 export default async function Home() {
   const { pratiche, errore } = await getPratiche();
 
-  const datiMancanti = conta(pratiche, "DATI MANCANTI");
+  const datiMancanti = conta(
+    pratiche,
+    "DATI MANCANTI"
+  );
+
   const daVerificare = conta(
     pratiche,
     "DATI INTEGRATI - DA VERIFICARE"
   );
-  const daPreventivare = conta(pratiche, "DA PREVENTIVARE");
+
+  const daPreventivare = conta(
+    pratiche,
+    "DA PREVENTIVARE"
+  );
+
   const daFatturare = conta(
     pratiche,
     "ORDINE ACQUISITO - DA FATTURARE"
   );
-  const fatturate = conta(pratiche, "FATTURATA");
+
+  const fatturate = conta(
+    pratiche,
+    "FATTURATA"
+  );
 
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-[1600px] px-6 py-8">
+
+        {/* =====================================================
+            TESTATA
+        ===================================================== */}
+
         <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="mb-1 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -166,13 +194,23 @@ export default async function Home() {
           </div>
         </header>
 
+        {/* =====================================================
+            EVENTUALE ERRORE DATABASE
+        ===================================================== */}
+
         {errore && (
           <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-            <strong>Errore di collegamento:</strong> {errore}
+            <strong>Errore di collegamento:</strong>{" "}
+            {errore}
           </div>
         )}
 
+        {/* =====================================================
+            CONTATORI PRINCIPALI
+        ===================================================== */}
+
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+
           <DashboardCard
             titolo="Dati mancanti"
             valore={datiMancanti}
@@ -207,10 +245,17 @@ export default async function Home() {
             descrizione="Pratiche amministrativamente completate"
             className="border-green-300"
           />
+
         </section>
 
+        {/* =====================================================
+            CODA OPERATIVA
+        ===================================================== */}
+
         <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
           <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+
             <div>
               <h2 className="text-lg font-bold text-slate-950">
                 Coda operativa
@@ -224,52 +269,112 @@ export default async function Home() {
             <div className="text-sm font-semibold text-slate-600">
               {pratiche.length} pratiche
             </div>
+
           </div>
 
+          {/* =================================================
+              DATABASE VUOTO
+          ================================================= */}
+
           {pratiche.length === 0 && !errore ? (
+
             <div className="px-6 py-16 text-center">
+
               <div className="text-lg font-semibold text-slate-800">
                 Nessuna pratica presente
               </div>
 
               <p className="mt-2 text-sm text-slate-500">
-                Il collegamento al database è attivo. Le pratiche compariranno
-                qui quando inizieremo a importare le conversazioni.
+                Il collegamento al database è attivo.
+                Le pratiche compariranno qui quando inizieremo
+                a importare le conversazioni.
               </p>
+
             </div>
+
           ) : (
+
+            /* ===============================================
+               TABELLA PRATICHE
+            =============================================== */
+
             <div className="overflow-x-auto">
+
               <table className="w-full min-w-[1200px] text-left text-sm">
+
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+
                   <tr>
-                    <th className="px-5 py-4">Priorità</th>
-                    <th className="px-5 py-4">Pratica</th>
-                    <th className="px-5 py-4">Cliente</th>
-                    <th className="px-5 py-4">Targa</th>
-                    <th className="px-5 py-4">Veicolo</th>
-                    <th className="px-5 py-4">Componente</th>
-                    <th className="px-5 py-4">Stato</th>
-                    <th className="px-5 py-4">Preventivo</th>
-                    <th className="px-5 py-4">Fattura</th>
-                    <th className="px-5 py-4">Creata</th>
+                    <th className="px-5 py-4">
+                      Priorità
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Pratica
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Cliente
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Targa
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Veicolo
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Componente
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Stato
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Preventivo
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Fattura
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Creata
+                    </th>
                   </tr>
+
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
+
                   {pratiche.map((pratica) => (
+
                     <tr
                       key={pratica.id}
                       className="transition hover:bg-slate-50"
                     >
+
+                      {/* Priorità */}
+
                       <td className="px-5 py-4 font-bold text-slate-900">
                         {pratica.priorita}
                       </td>
+
+
+                      {/* Numero pratica */}
 
                       <td className="px-5 py-4 font-semibold text-slate-950">
                         {pratica.codice_pratica}
                       </td>
 
+
+                      {/* Cliente */}
+
                       <td className="px-5 py-4">
+
                         <div className="font-medium text-slate-900">
                           {pratica.nome_cliente || "Cliente"}
                         </div>
@@ -277,23 +382,42 @@ export default async function Home() {
                         <div className="text-xs text-slate-500">
                           {pratica.telefono || "—"}
                         </div>
+
                       </td>
+
+
+                      {/* Targa */}
 
                       <td className="px-5 py-4 font-mono font-semibold text-slate-900">
                         {pratica.targa || "—"}
                       </td>
 
+
+                      {/* Veicolo */}
+
                       <td className="px-5 py-4 text-slate-700">
-                        {[pratica.marca_veicolo, pratica.modello_veicolo]
+
+                        {[
+                          pratica.marca_veicolo,
+                          pratica.modello_veicolo,
+                        ]
                           .filter(Boolean)
                           .join(" ") || "—"}
+
                       </td>
+
+
+                      {/* Componente */}
 
                       <td className="px-5 py-4 text-slate-700">
                         {pratica.tipo_componente || "—"}
                       </td>
 
+
+                      {/* Stato */}
+
                       <td className="px-5 py-4">
+
                         <span
                           className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${badgeClass(
                             pratica.coda
@@ -301,17 +425,29 @@ export default async function Home() {
                         >
                           {pratica.coda}
                         </span>
+
                       </td>
 
+
+                      {/* Importo preventivo */}
+
                       <td className="px-5 py-4 font-semibold text-slate-900">
+
                         {formattaImporto(
                           pratica.ultimo_importo_preventivo
                         )}
+
                       </td>
 
+
+                      {/* Fattura */}
+
                       <td className="px-5 py-4">
+
                         {pratica.numero_fattura ? (
+
                           <div>
+
                             <div className="font-semibold text-green-700">
                               {pratica.numero_fattura}
                             </div>
@@ -319,35 +455,65 @@ export default async function Home() {
                             <div className="text-xs text-slate-500">
                               {pratica.data_fattura || ""}
                             </div>
+
                           </div>
+
                         ) : pratica.stato_fatturazione ===
                           "da_fatturare" ? (
+
                           <span className="font-bold text-red-700">
                             DA EMETTERE
                           </span>
+
                         ) : (
+
                           "—"
+
                         )}
+
                       </td>
 
+
+                      {/* Data creazione */}
+
                       <td className="px-5 py-4 text-slate-500">
-                        {formattaData(pratica.created_at)}
+
+                        {formattaData(
+                          pratica.created_at
+                        )}
+
                       </td>
+
                     </tr>
+
                   ))}
+
                 </tbody>
+
               </table>
+
             </div>
+
           )}
+
         </section>
+
+        {/* =====================================================
+            FOOTER
+        ===================================================== */}
 
         <footer className="mt-6 text-center text-xs text-slate-400">
           Italiana Ricambi · Dashboard Operatore
         </footer>
+
       </div>
     </main>
   );
 }
+
+/* =========================================================
+   CARD CONTATORI
+========================================================= */
 
 function DashboardCard({
   titolo,
