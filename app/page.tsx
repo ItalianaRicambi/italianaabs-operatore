@@ -212,8 +212,86 @@ function prioritaClass(pratica: Pratica) {
   return "bg-slate-100 text-slate-700";
 }
 
-export default async function Home() {
+
+function filtraPratiche(pratiche: Pratica[], filtro: string) {
+  switch (filtro) {
+    case "assistenza_aperta":
+      return pratiche.filter(
+        (pratica) =>
+          pratica.tipo_flusso === "assistenza" &&
+          !["risolta", "chiusa"].includes(pratica.stato_assistenza)
+      );
+
+    case "assistenza_prioritaria":
+      return pratiche.filter(
+        (pratica) =>
+          pratica.tipo_flusso === "assistenza" &&
+          pratica.priorita_assistenza === "urgente" &&
+          !["risolta", "chiusa"].includes(pratica.stato_assistenza)
+      );
+
+    case "dati_mancanti":
+      return pratiche.filter((pratica) => pratica.coda === "DATI MANCANTI");
+
+    case "da_verificare":
+      return pratiche.filter(
+        (pratica) => pratica.coda === "DATI INTEGRATI - DA VERIFICARE"
+      );
+
+    case "da_preventivare":
+      return pratiche.filter((pratica) => pratica.coda === "DA PREVENTIVARE");
+
+    case "preventivi_inviati":
+      return pratiche.filter((pratica) => pratica.coda === "PREVENTIVO INVIATO");
+
+    case "da_fatturare":
+      return pratiche.filter(
+        (pratica) => pratica.coda === "ORDINE ACQUISITO - DA FATTURARE"
+      );
+
+    case "fatturate":
+      return pratiche.filter((pratica) => pratica.coda === "FATTURATA");
+
+    default:
+      return pratiche;
+  }
+}
+
+function labelFiltro(filtro: string) {
+  switch (filtro) {
+    case "assistenza_aperta":
+      return "Assistenza aperta";
+    case "assistenza_prioritaria":
+      return "Assistenza prioritaria";
+    case "dati_mancanti":
+      return "Dati mancanti";
+    case "da_verificare":
+      return "Da verificare";
+    case "da_preventivare":
+      return "Da preventivare";
+    case "preventivi_inviati":
+      return "Preventivi inviati";
+    case "da_fatturare":
+      return "Da fatturare";
+    case "fatturate":
+      return "Fatturati";
+    default:
+      return "Tutte le pratiche";
+  }
+}
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ filtro?: string | string[] }>;
+}) {
   const { pratiche, errore } = await getPratiche();
+  const params = await searchParams;
+  const filtroAttivo = Array.isArray(params?.filtro)
+    ? params.filtro[0]
+    : params?.filtro || "tutte";
+
+  const praticheFiltrate = filtraPratiche(pratiche, filtroAttivo);
 
   const assistenzaAperta = contaAssistenzaAperta(pratiche);
   const assistenzaPrioritaria = contaAssistenzaPrioritaria(pratiche);
@@ -266,17 +344,21 @@ export default async function Home() {
           </h2>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <DashboardCard
+            <DashboardFilterCard
               titolo="Assistenza aperta"
               valore={assistenzaAperta}
               descrizione="Richieste di assistenza ancora da gestire o concludere"
               className="border-purple-400"
+              href="/?filtro=assistenza_aperta"
+              attiva={filtroAttivo === "assistenza_aperta"}
             />
-            <DashboardCard
+            <DashboardFilterCard
               titolo="Assistenza prioritaria"
               valore={assistenzaPrioritaria}
               descrizione="Richieste urgenti che richiedono intervento immediato"
               className="border-red-500"
+              href="/?filtro=assistenza_prioritaria"
+              attiva={filtroAttivo === "assistenza_prioritaria"}
             />
           </div>
         </section>
@@ -287,41 +369,53 @@ export default async function Home() {
           </h2>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-            <DashboardCard
+            <DashboardFilterCard
               titolo="Dati mancanti"
               valore={datiMancanti}
               descrizione="Pratiche ancora incomplete"
               className="border-slate-300"
+              href="/?filtro=dati_mancanti"
+              attiva={filtroAttivo === "dati_mancanti"}
             />
-            <DashboardCard
+            <DashboardFilterCard
               titolo="Da verificare"
               valore={daVerificare}
               descrizione="Nuovi dati dopo intervento operatore"
               className="border-yellow-300"
+              href="/?filtro=da_verificare"
+              attiva={filtroAttivo === "da_verificare"}
             />
-            <DashboardCard
+            <DashboardFilterCard
               titolo="Da preventivare"
               valore={daPreventivare}
               descrizione="Dati completi, offerta da preparare"
               className="border-orange-300"
+              href="/?filtro=da_preventivare"
+              attiva={filtroAttivo === "da_preventivare"}
             />
-            <DashboardCard
+            <DashboardFilterCard
               titolo="Preventivi inviati"
               valore={preventiviInviati}
               descrizione="Offerte inviate, in attesa di esito o follow-up"
               className="border-blue-400"
+              href="/?filtro=preventivi_inviati"
+              attiva={filtroAttivo === "preventivi_inviati"}
             />
-            <DashboardCard
+            <DashboardFilterCard
               titolo="Da fatturare"
               valore={daFatturare}
               descrizione="Ordini acquisiti senza fattura"
               className="border-red-300"
+              href="/?filtro=da_fatturare"
+              attiva={filtroAttivo === "da_fatturare"}
             />
-            <DashboardCard
+            <DashboardFilterCard
               titolo="Fatturati"
               valore={fatturate}
               descrizione="Pratiche amministrativamente completate"
               className="border-green-300"
+              href="/?filtro=fatturate"
+              attiva={filtroAttivo === "fatturate"}
             />
           </div>
         </section>
@@ -333,14 +427,32 @@ export default async function Home() {
               <p className="mt-1 text-sm text-slate-500">
                 Assistenza e pratiche commerciali ordinate automaticamente per priorità
               </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Filtro attivo:
+                </span>
+
+                <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  {labelFiltro(filtroAttivo)}
+                </span>
+
+                {filtroAttivo !== "tutte" && (
+                  <Link
+                    href="/"
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                  >
+                    Rimuovi filtro
+                  </Link>
+                )}
+              </div>
             </div>
 
             <div className="text-sm font-semibold text-slate-600">
-              {pratiche.length} {pratiche.length === 1 ? "pratica" : "pratiche"}
+              {praticheFiltrate.length} {praticheFiltrate.length === 1 ? "pratica" : "pratiche"}
             </div>
           </div>
 
-          {pratiche.length === 0 && !errore ? (
+          {praticheFiltrate.length === 0 && !errore ? (
             <div className="px-6 py-16 text-center">
               <div className="text-lg font-semibold text-slate-800">
                 Nessuna pratica presente
@@ -370,7 +482,7 @@ export default async function Home() {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {pratiche.map((pratica) => (
+                  {praticheFiltrate.map((pratica) => (
                     <tr
                       key={pratica.id}
                       className={
@@ -507,28 +619,42 @@ export default async function Home() {
   );
 }
 
-function DashboardCard({
+function DashboardFilterCard({
   titolo,
   valore,
   descrizione,
   className,
+  href,
+  attiva,
 }: {
   titolo: string;
   valore: number;
   descrizione: string;
   className: string;
+  href: string;
+  attiva: boolean;
 }) {
   return (
-    <div
-      className={`rounded-2xl border-t-4 bg-white p-5 shadow-sm ${className}`}
+    <Link
+      href={href}
+      className={`block rounded-2xl border-t-4 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+        attiva ? "ring-2 ring-slate-300" : ""
+      } ${className}`}
     >
-      <div className="text-sm font-semibold text-slate-600">{titolo}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-sm font-semibold text-slate-600">{titolo}</div>
+        <span className="text-[10px] font-bold uppercase tracking-wide text-blue-600">
+          Filtra
+        </span>
+      </div>
+
       <div className="mt-2 text-4xl font-bold tracking-tight text-slate-950">
         {valore}
       </div>
+
       <div className="mt-2 text-xs leading-5 text-slate-500">
         {descrizione}
       </div>
-    </div>
+    </Link>
   );
 }
