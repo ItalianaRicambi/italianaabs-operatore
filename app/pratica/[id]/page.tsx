@@ -821,6 +821,7 @@ export default async function PraticaPage({
                     label="Prendi in carico"
                     className="bg-blue-600 text-white hover:bg-blue-700"
                     disabilitata={pratica.stato_assistenza === "in_gestione"}
+                    motivoDisabilitata="Stato attuale"
                   />
 
                   <AzioneOperatore
@@ -829,6 +830,7 @@ export default async function PraticaPage({
                     label="Attesa cliente"
                     className="bg-amber-100 text-amber-900 hover:bg-amber-200"
                     disabilitata={pratica.stato_assistenza === "attesa_cliente"}
+                    motivoDisabilitata="Stato attuale"
                   />
 
                   <AzioneOperatore
@@ -837,6 +839,7 @@ export default async function PraticaPage({
                     label="Attesa rientro"
                     className="bg-orange-100 text-orange-900 hover:bg-orange-200"
                     disabilitata={pratica.stato_assistenza === "attesa_rientro"}
+                    motivoDisabilitata="Stato attuale"
                   />
 
                   <AzioneOperatore
@@ -847,6 +850,7 @@ export default async function PraticaPage({
                     disabilitata={["risolta", "chiusa"].includes(
                       pratica.stato_assistenza || ""
                     )}
+                    motivoDisabilitata="Stato attuale"
                   />
                 </div>
               ) : (
@@ -888,6 +892,7 @@ export default async function PraticaPage({
                     label="Dati mancanti"
                     className="bg-slate-200 text-slate-900 hover:bg-slate-300"
                     disabilitata={pratica.stato_completezza === "dati_mancanti"}
+                    motivoDisabilitata="Stato attuale"
                   />
 
                   <AzioneOperatore
@@ -898,6 +903,11 @@ export default async function PraticaPage({
                     disabilitata={
                       pratica.stato_commerciale === "da_preventivare" ||
                       !codiciPronti
+                    }
+                    motivoDisabilitata={
+                      pratica.stato_commerciale === "da_preventivare"
+                        ? "Stato attuale"
+                        : "Bloccato: verifica codici"
                     }
                   />
 
@@ -910,6 +920,11 @@ export default async function PraticaPage({
                       pratica.stato_commerciale === "preventivo_inviato" ||
                       !codiciPronti
                     }
+                    motivoDisabilitata={
+                      pratica.stato_commerciale === "preventivo_inviato"
+                        ? "Stato attuale"
+                        : "Bloccato: verifica codici"
+                    }
                   />
 
                   <AzioneOperatore
@@ -919,6 +934,11 @@ export default async function PraticaPage({
                     className="bg-red-100 text-red-900 hover:bg-red-200"
                     disabilitata={
                       pratica.stato_commerciale !== "preventivo_inviato"
+                    }
+                    motivoDisabilitata={
+                      pratica.stato_commerciale === "ordine_acquisito"
+                        ? "Completato"
+                        : "Bloccato: prima invia il preventivo"
                     }
                   />
 
@@ -930,6 +950,11 @@ export default async function PraticaPage({
                     disabilitata={
                       pratica.stato_fatturazione === "fatturato" ||
                       pratica.stato_commerciale !== "ordine_acquisito"
+                    }
+                    motivoDisabilitata={
+                      pratica.stato_fatturazione === "fatturato"
+                        ? "Stato attuale"
+                        : "Bloccato: prima acquisisci l’ordine"
                     }
                   />
                   </div>
@@ -1143,12 +1168,14 @@ function AzioneOperatore({
   label,
   className,
   disabilitata = false,
+  motivoDisabilitata = "Bloccato",
 }: {
   praticaId: string;
   azione: string;
   label: string;
   className: string;
   disabilitata?: boolean;
+  motivoDisabilitata?: string;
 }) {
   return (
     <form action={applicaAzioneOperatore}>
@@ -1165,7 +1192,7 @@ function AzioneOperatore({
         }`}
       >
         {label}
-        {disabilitata ? " · stato attuale" : ""}
+        {disabilitata ? ` · ${motivoDisabilitata}` : ""}
       </button>
     </form>
   );
