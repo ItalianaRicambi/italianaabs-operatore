@@ -1,6 +1,26 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+type RawCode = {
+  codice?: string;
+  fonte?: string;
+  verificato?: boolean;
+};
+
+type RawAttachment = {
+  url?: string;
+  nome?: string;
+  tipo?: string;
+  timestamp?: string;
+};
+
+type RawMessage = {
+  sender?: string;
+  operator?: string | null;
+  message?: string;
+  timestamp?: string;
+};
+
 type Pratica = {
   id: string;
   numero_pratica?: number | null;
@@ -95,9 +115,7 @@ async function getPratica(id: string) {
 
   const [codici, allegati] = await Promise.all([
     selectSupabase<Codice[]>(
-      `codici_identificativi?pratica_id=eq.${encodeURIComponent(
-        id
-      )}&select=*`
+      `codici_identificativi?pratica_id=eq.${encodeURIComponent(id)}&select=*`
     ),
     selectSupabase<Allegato[]>(
       `allegati?pratica_id=eq.${encodeURIComponent(id)}&select=*`
@@ -157,11 +175,13 @@ function titoloAssistenza(tipo?: string | null) {
   }
 }
 
-function estraiRaw(
-  datiRaw: Record<string, unknown> | null | undefined,
-  chiave: string
-) {
-  const value = datiRaw?.[chiave];
+function rawArray<T>(raw: Record<string, unknown> | null | undefined, key: string): T[] {
+  const value = raw?.[key];
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function rawString(raw: Record<string, unknown> | null | undefined, key: string) {
+  const value = raw?.[key];
   return typeof value === "string" && value.trim() ? value : null;
 }
 
@@ -173,15 +193,69 @@ export default async function PraticaPage({
   const { id } = await params;
   const { pratica, codici, allegati } = await getPratica(id);
 
-  const ultimoCliente = estraiRaw(
+  const rawCodes = rawArray<RawCode>(
     pratica.dati_raw,
-    "ultimo_messaggio_cliente"
+    "codici_identificativi_estratti"
+  );
+  const rawDtc = rawArray<string>(pratica.dati_raw, "dtc_estratti");
+  const rawAttachments = rawArray<RawAttachment>(
+    pratica.dati_raw,
+    "allegati_keplero"
+  );
+  const rawMessages = rawArray<RawMessage>(
+    pratica.dati_raw,
+    "messaggi_keplero"
   );
 
-  const ultimoAssistente = estraiRaw(
+  const ultimoClienteUtile = rawString(
     pratica.dati_raw,
-    "ultimo_messaggio_assistente"
+    "ultimo_messaggio_cliente_utile"
   );
+  const riepilogoOperativo = rawString(
+    pratica.dati_raw,
+    "riepilogo_operativo"
+  );
+
+  const codiciVisualizzati =
+    codici.length > 0
+      ? codici.map((item) => ({
+          codice: item.codice || "—",
+          tipo: item.tipo_codice || "Identificativo",
+          fonte: item.fonte || "database",
+          verificato: Boolean(item.verificato_operatore),
+          note: item.note || null,
+        }))
+      : rawCodes.map((item) => ({
+          codice: item.codice || "—",
+          tipo: "Identificativo",
+          fonte:
+            item.fonte === "cliente"
+              ? "Cliente"
+              : "Estrazione automatica dalla chat",
+          verificato: Boolean(item.verificato),
+          note: null,
+        }));
+
+  const allegatiVisualizzati =
+    allegati.length > 0
+      ? allegati
+          .filter((item) => item.url)
+          .map((item) => ({
+            url: item.url || "",
+            tipo: item.tipo || "Allegato",
+            nome: item.tipo || "Allegato",
+            fonte: item.fonte || "database",
+            leggibile: item.leggibile,
+          }))
+      : rawAttachments
+          .filter((item) => item.url)
+          .map((item) => ({
+            url: item.url || "",
+            tipo: item.tipo || "Allegato",
+            nome: item.nome || item.tipo || "Allegato",
+            fonte: "Keplero",
+            leggibile: null,
+          }));
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -234,9 +308,7 @@ export default async function PraticaPage({
                       : "bg-slate-100 text-slate-700"
                   }`}
                 >
-                  PRIORITÀ {(
-                    pratica.priorita_assistenza || "normale"
-                  ).toUpperCase()}
+                  PRIORITÀ {(pratica.priorita_assistenza || "normale").toUpperCase()}
                 </span>
               )}
             </div>
@@ -252,53 +324,64 @@ export default async function PraticaPage({
                 <Campo label="Targa" value={pratica.targa} mono />
                 <Campo label="Marca" value={pratica.marca_veicolo} />
                 <Campo label="Modello" value={pratica.modello_veicolo} />
-                <Campo
-                  label="Componente"
-                  value={pratica.tipo_componente}
-                />
+                <Campo label="Componente" value={pratica.tipo_componente} />
               </div>
             </Card>
 
-            <Card titolo="Problema segnalato">
+            <Card titolo="Problema / riepilogo operativo">
               <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">
-                {pratica.descrizione_guasto || "Nessuna descrizione disponibile."}
+                {riepilogoOperativo ||
+                  pratica.descrizione_guasto ||
+                  "Nessuna descrizione disponibile."}
               </p>
+
+              {ultimoClienteUtile && (
+                <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="mb-2 text-xs font-bold uppercase tracking-wide text-blue-600">
+                    Ultimo messaggio cliente utile
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">
+                    {ultimoClienteUtile}
+                  </p>
+                </div>
+              )}
             </Card>
 
             <Card titolo="Codici identificativi">
-              {codici.length ? (
+              {codiciVisualizzati.length ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                       <tr>
                         <th className="py-3 pr-4">Tipo</th>
                         <th className="py-3 pr-4">Codice</th>
-                        <th className="py-3 pr-4">Verificato</th>
-                        <th className="py-3">Note</th>
+                        <th className="py-3 pr-4">Fonte</th>
+                        <th className="py-3">Verifica</th>
                       </tr>
                     </thead>
+
                     <tbody className="divide-y divide-slate-100">
-                      {codici.map((codice, index) => (
-                        <tr key={codice.id || `${codice.codice}-${index}`}>
+                      {codiciVisualizzati.map((codice, index) => (
+                        <tr key={`${codice.codice}-${index}`}>
                           <td className="py-3 pr-4 text-slate-600">
-                            {codice.tipo_codice || "—"}
+                            {codice.tipo}
                           </td>
                           <td className="py-3 pr-4 font-mono font-bold text-slate-950">
-                            {codice.codice || "—"}
+                            {codice.codice}
                           </td>
-                          <td className="py-3 pr-4">
-                            {codice.verificato_operatore ? (
+                          <td className="py-3 pr-4 text-slate-600">
+                            {codice.fonte}
+                          </td>
+                          <td className="py-3">
+                            {codice.verificato ? (
                               <span className="font-bold text-green-700">
-                                Sì
+                                Verificato
                               </span>
                             ) : (
-                              <span className="text-orange-700">
+                              <span className="font-bold text-orange-700">
                                 Da verificare
                               </span>
                             )}
-                          </td>
-                          <td className="py-3 text-slate-600">
-                            {codice.note || "—"}
                           </td>
                         </tr>
                       ))}
@@ -307,90 +390,117 @@ export default async function PraticaPage({
                 </div>
               ) : (
                 <p className="text-sm text-slate-500">
-                  Nessun codice identificativo registrato.
+                  Nessun codice identificativo estratto automaticamente.
                 </p>
               )}
             </Card>
 
-            <Card titolo="Allegati">
-              {allegati.length ? (
+            <Card titolo="DTC / codici guasto">
+              {rawDtc.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {rawDtc.map((dtc) => (
+                    <span
+                      key={dtc}
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-mono text-sm font-bold text-red-800"
+                    >
+                      {dtc}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Nessun DTC estratto dalla conversazione.
+                </p>
+              )}
+            </Card>
+
+            <Card titolo="Allegati Keplero">
+              {allegatiVisualizzati.length ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {allegati.map((allegato, index) => (
+                  {allegatiVisualizzati.map((allegato, index) => (
                     <div
-                      key={allegato.id || `${allegato.url}-${index}`}
+                      key={`${allegato.url}-${index}`}
                       className="rounded-xl border border-slate-200 bg-slate-50 p-4"
                     >
-                      <div className="text-sm font-bold text-slate-900">
-                        {allegato.tipo || "Allegato"}
+                      <div className="break-words text-sm font-bold text-slate-900">
+                        {allegato.nome}
                       </div>
 
                       <div className="mt-1 text-xs text-slate-500">
-                        Fonte: {allegato.fonte || "—"} · Leggibile:{" "}
-                        {leggibile(allegato.leggibile)}
+                        Tipo: {allegato.tipo} · Fonte: {allegato.fonte}
                       </div>
 
-                      {allegato.url && (
-                        <a
-                          href={allegato.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-700"
-                        >
-                          Apri allegato
-                        </a>
-                      )}
+                      <a
+                        href={allegato.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-700"
+                      >
+                        Apri allegato
+                      </a>
                     </div>
                   ))}
                 </div>
               ) : (
                 <p className="text-sm text-slate-500">
-                  Nessun allegato registrato nella pratica.
+                  Nessun allegato presente nella conversazione esportata.
                 </p>
               )}
             </Card>
 
-            {(ultimoCliente || ultimoAssistente) && (
-              <Card titolo="Ultimi messaggi importati da Keplero">
-                <div className="space-y-4">
-                  {ultimoCliente && (
-                    <Messaggio
-                      titolo="Cliente"
-                      testo={ultimoCliente}
-                      className="border-blue-200 bg-blue-50"
-                    />
-                  )}
+            <Card titolo="Conversazione Keplero">
+              {rawMessages.length ? (
+                <details>
+                  <summary className="cursor-pointer select-none text-sm font-bold text-blue-700">
+                    Mostra conversazione completa ({rawMessages.length} messaggi)
+                  </summary>
 
-                  {ultimoAssistente && (
-                    <Messaggio
-                      titolo="Keplero"
-                      testo={ultimoAssistente}
-                      className="border-slate-200 bg-slate-50"
-                    />
-                  )}
-                </div>
-              </Card>
-            )}
+                  <div className="mt-5 space-y-3">
+                    {rawMessages.map((messaggio, index) => (
+                      <div
+                        key={`${messaggio.timestamp}-${index}`}
+                        className={`rounded-xl border p-4 ${
+                          messaggio.sender === "user"
+                            ? "border-blue-200 bg-blue-50"
+                            : "border-slate-200 bg-slate-50"
+                        }`}
+                      >
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                            {messaggio.sender === "user"
+                              ? "Cliente"
+                              : messaggio.operator
+                              ? `Operatore: ${messaggio.operator}`
+                              : "Keplero"}
+                          </div>
+
+                          <div className="text-xs text-slate-400">
+                            {formattaData(messaggio.timestamp)}
+                          </div>
+                        </div>
+
+                        <p className="break-words whitespace-pre-wrap text-sm leading-6 text-slate-800">
+                          {messaggio.message}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Conversazione completa non ancora importata.
+                </p>
+              )}
+            </Card>
           </section>
 
           <aside className="space-y-6">
             <Card titolo="Stato pratica">
               <div className="space-y-4">
-                <Campo
-                  label="Completezza"
-                  value={pratica.stato_completezza}
-                />
-                <Campo
-                  label="Stato commerciale"
-                  value={pratica.stato_commerciale}
-                />
-                <Campo
-                  label="Fatturazione"
-                  value={pratica.stato_fatturazione}
-                />
-                <Campo
-                  label="Follow-up"
-                  value={pratica.stato_followup}
-                />
+                <Campo label="Completezza" value={pratica.stato_completezza} />
+                <Campo label="Stato commerciale" value={pratica.stato_commerciale} />
+                <Campo label="Fatturazione" value={pratica.stato_fatturazione} />
+                <Campo label="Follow-up" value={pratica.stato_followup} />
               </div>
             </Card>
 
@@ -432,9 +542,7 @@ export default async function PraticaPage({
                 <Campo
                   label="Classificazione bloccata"
                   value={
-                    pratica.blocco_classificazione_operatore
-                      ? "Sì"
-                      : "No"
+                    pratica.blocco_classificazione_operatore ? "Sì" : "No"
                   }
                 />
                 <Campo
@@ -452,7 +560,7 @@ export default async function PraticaPage({
               </Card>
             )}
 
-            <Card titolo="Origine">
+            <Card titolo="Origine e riferimenti">
               <div className="space-y-4">
                 <Campo
                   label="Keplero conversation ID"
@@ -516,27 +624,6 @@ function Campo({
       >
         {leggibile(value)}
       </div>
-    </div>
-  );
-}
-
-function Messaggio({
-  titolo,
-  testo,
-  className,
-}: {
-  titolo: string;
-  testo: string;
-  className: string;
-}) {
-  return (
-    <div className={`rounded-xl border p-4 ${className}`}>
-      <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-        {titolo}
-      </div>
-      <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">
-        {testo}
-      </p>
     </div>
   );
 }
