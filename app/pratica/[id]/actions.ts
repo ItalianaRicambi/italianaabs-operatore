@@ -98,3 +98,29 @@ export async function verificaCodiceOperatore(formData: FormData) {
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
 }
+
+export async function aggiungiCodiceOperatore(formData: FormData) {
+  const praticaId = String(formData.get("pratica_id") || "").trim();
+  const codice = String(formData.get("codice") || "").trim();
+  const tipoCodice = String(formData.get("tipo_codice") || "Altro").trim();
+  const note = String(formData.get("note") || "").trim();
+
+  if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
+    throw new Error("ID pratica non valido");
+  }
+
+  if (!codice) {
+    throw new Error("Inserire il codice corretto");
+  }
+
+  await chiamaRpc("aggiungi_codice_operatore", {
+    p_pratica_id: praticaId,
+    p_codice: codice,
+    p_tipo_codice: tipoCodice || "Altro",
+    p_note: note || null,
+  });
+
+  revalidatePath("/");
+  revalidatePath(`/pratica/${praticaId}`);
+}
+
