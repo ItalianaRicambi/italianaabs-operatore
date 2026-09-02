@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { applicaAzioneOperatore } from "./actions";
 
 type RawCode = {
   codice?: string;
@@ -495,6 +496,82 @@ export default async function PraticaPage({
           </section>
 
           <aside className="space-y-6">
+            <Card titolo="Azioni operatore">
+              <p className="mb-4 text-sm leading-6 text-slate-500">
+                Usa questi pulsanti solo quando vuoi cambiare realmente lo stato
+                della pratica. Ogni azione viene registrata nello storico.
+              </p>
+
+              {pratica.tipo_flusso === "assistenza" ? (
+                <div className="grid gap-3">
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="assistenza_in_gestione"
+                    label="Prendi in carico"
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                  />
+
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="assistenza_attesa_cliente"
+                    label="Attesa cliente"
+                    className="bg-amber-100 text-amber-900 hover:bg-amber-200"
+                  />
+
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="assistenza_attesa_rientro"
+                    label="Attesa rientro"
+                    className="bg-orange-100 text-orange-900 hover:bg-orange-200"
+                  />
+
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="assistenza_risolta"
+                    label="Segna come risolta"
+                    className="bg-green-600 text-white hover:bg-green-700"
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="commerciale_dati_mancanti"
+                    label="Dati mancanti"
+                    className="bg-slate-200 text-slate-900 hover:bg-slate-300"
+                  />
+
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="commerciale_dati_verificati"
+                    label="Dati verificati → da preventivare"
+                    className="bg-orange-100 text-orange-900 hover:bg-orange-200"
+                  />
+
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="commerciale_preventivo_inviato"
+                    label="Preventivo inviato"
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                  />
+
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="commerciale_ordine_acquisito"
+                    label="Ordine acquisito"
+                    className="bg-red-100 text-red-900 hover:bg-red-200"
+                  />
+
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="commerciale_fatturata"
+                    label="Fatturata"
+                    className="bg-green-600 text-white hover:bg-green-700"
+                  />
+                </div>
+              )}
+            </Card>
+
             <Card titolo="Stato pratica">
               <div className="space-y-4">
                 <Campo label="Completezza" value={pratica.stato_completezza} />
@@ -625,5 +702,32 @@ function Campo({
         {leggibile(value)}
       </div>
     </div>
+  );
+}
+
+
+function AzioneOperatore({
+  praticaId,
+  azione,
+  label,
+  className,
+}: {
+  praticaId: string;
+  azione: string;
+  label: string;
+  className: string;
+}) {
+  return (
+    <form action={applicaAzioneOperatore}>
+      <input type="hidden" name="pratica_id" value={praticaId} />
+      <input type="hidden" name="azione" value={azione} />
+
+      <button
+        type="submit"
+        className={`w-full rounded-xl px-4 py-3 text-left text-sm font-bold transition ${className}`}
+      >
+        {label}
+      </button>
+    </form>
   );
 }
