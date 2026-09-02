@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { applicaAzioneOperatore, verificaCodiceOperatore } from "./actions";
+import { aggiungiCodiceOperatore, applicaAzioneOperatore, verificaCodiceOperatore } from "./actions";
 
 type RawCode = {
   codice?: string;
@@ -90,6 +90,16 @@ type VerificaCodice = {
   updated_at: string;
 };
 
+type CodiceOperatore = {
+  id: number;
+  tipo_codice: string;
+  codice: string;
+  codice_normalizzato: string;
+  fonte: string;
+  note?: string | null;
+  created_at: string;
+};
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -129,25 +139,35 @@ async function getPratica(id: string) {
     notFound();
   }
 
-  const [codici, allegati, storicoOperatore, verificheCodici] =
-    await Promise.all([
-      selectSupabase<Codice[]>(
-        `codici_identificativi?pratica_id=eq.${encodeURIComponent(id)}&select=*`
-      ),
-      selectSupabase<Allegato[]>(
-        `allegati?pratica_id=eq.${encodeURIComponent(id)}&select=*`
-      ),
-      selectSupabase<AzioneStorico[]>(
-        `azioni_operatore?pratica_id=eq.${encodeURIComponent(
-          id
-        )}&select=id,azione,nota,created_at&order=created_at.desc`
-      ),
-      selectSupabase<VerificaCodice[]>(
-        `verifiche_codici_operatore?pratica_id=eq.${encodeURIComponent(
-          id
-        )}&select=id,codice,codice_normalizzato,esito,updated_at`
-      ),
-    ]);
+  const [
+    codici,
+    allegati,
+    storicoOperatore,
+    verificheCodici,
+    codiciOperatore,
+  ] = await Promise.all([
+    selectSupabase<Codice[]>(
+      `codici_identificativi?pratica_id=eq.${encodeURIComponent(id)}&select=*`
+    ),
+    selectSupabase<Allegato[]>(
+      `allegati?pratica_id=eq.${encodeURIComponent(id)}&select=*`
+    ),
+    selectSupabase<AzioneStorico[]>(
+      `azioni_operatore?pratica_id=eq.${encodeURIComponent(
+        id
+      )}&select=id,azione,nota,created_at&order=created_at.desc`
+    ),
+    selectSupabase<VerificaCodice[]>(
+      `verifiche_codici_operatore?pratica_id=eq.${encodeURIComponent(
+        id
+      )}&select=id,codice,codice_normalizzato,esito,updated_at`
+    ),
+    selectSupabase<CodiceOperatore[]>(
+      `codici_operatore?pratica_id=eq.${encodeURIComponent(
+        id
+      )}&select=id,tipo_codice,codice,codice_normalizzato,fonte,note,created_at&order=created_at.asc`
+    ),
+  ]);
 
   return {
     pratica: pratiche[0],
@@ -155,6 +175,7 @@ async function getPratica(id: string) {
     allegati,
     storicoOperatore,
     verificheCodici,
+    codiciOperatore,
   };
 }
 
@@ -255,6 +276,7 @@ function etichettaAzione(azione: string) {
     commerciale_fatturata: "Pratica segnata come fatturata",
     codice_confermato: "Codice identificativo confermato",
     codice_scartato: "Codice identificativo scartato",
+    codice_aggiunto_operatore: "Codice corretto aggiunto dall’operatore",
   };
 
   return labels[azione] || etichettaStato(azione);
@@ -282,6 +304,7 @@ export default async function PraticaPage({
     allegati,
     storicoOperatore,
     verificheCodici,
+    codiciOperatore,
   } = await getPratica(id);
 
   const rawCodes = rawArray<RawCode>(
@@ -314,6 +337,21 @@ export default async function PraticaPage({
     ])
   );
 
+  function normalizzaCodiceUi(codice: string) {
+    return codice.trim().toUpperCase().replace(/\s+/g, "");
+  }
+
+  function esitoCodice(codice: string) {
+    const conSpazi = codice.trim().toUpperCase();
+    const compatto = normalizzaCodiceUi(codice);
+
+    return (
+      verifichePerCodice.get(compatto) ||
+      verifichePerCodice.get(conSpazi) ||
+      null
+    );
+  }
+
   const codiciMappa = new Map<
     string,
     {
@@ -329,13 +367,14 @@ export default async function PraticaPage({
     const codice = (item.codice || "").trim();
     if (!codice) continue;
 
-    const chiave = codice.toUpperCase();
+    const chiave = normalizzaCodiceUi(codice);
+
     codiciMappa.set(chiave, {
       codice,
       tipo: item.tipo_codice || "Identificativo",
       fonte: item.fonte || "Database",
       esito:
-        verifichePerCodice.get(chiave) ||
+        esitoCodice(codice) ||
         (item.verificato_operatore ? "confermato" : null),
       note: item.note || null,
     });
@@ -345,7 +384,8 @@ export default async function PraticaPage({
     const codice = (item.codice || "").trim();
     if (!codice) continue;
 
-    const chiave = codice.toUpperCase();
+    const chiave = normalizzaCodiceUi(codice);
+
     if (!codiciMappa.has(chiave)) {
       codiciMappa.set(chiave, {
         codice,
@@ -355,15 +395,29 @@ export default async function PraticaPage({
             ? "Cliente"
             : "Estrazione automatica dalla chat",
         esito:
-          verifichePerCodice.get(chiave) ||
+          esitoCodice(codice) ||
           (item.verificato ? "confermato" : null),
         note: null,
       });
     } else {
       const esistente = codiciMappa.get(chiave)!;
-      esistente.esito =
-        verifichePerCodice.get(chiave) || esistente.esito;
+      esistente.esito = esitoCodice(codice) || esistente.esito;
     }
+  }
+
+  for (const item of codiciOperatore) {
+    const codice = (item.codice || "").trim();
+    if (!codice) continue;
+
+    const chiave = normalizzaCodiceUi(codice);
+
+    codiciMappa.set(chiave, {
+      codice,
+      tipo: item.tipo_codice || "Altro",
+      fonte: "Operatore",
+      esito: esitoCodice(codice) || "confermato",
+      note: item.note || null,
+    });
   }
 
   const codiciVisualizzati = Array.from(codiciMappa.values());
@@ -497,6 +551,56 @@ export default async function PraticaPage({
             </Card>
 
             <Card titolo="Codici identificativi">
+              <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <div className="text-sm font-bold text-blue-900">
+                  Aggiungi codice corretto
+                </div>
+                <p className="mt-1 text-xs leading-5 text-blue-800">
+                  Se l’AI ha letto male un codice, scartalo e inserisci qui
+                  quello corretto. Il nuovo codice viene registrato come
+                  <strong> Operatore</strong> e confermato automaticamente.
+                </p>
+
+                <form
+                  action={aggiungiCodiceOperatore}
+                  className="mt-4 grid gap-3 md:grid-cols-[150px_1fr_auto]"
+                >
+                  <input
+                    type="hidden"
+                    name="pratica_id"
+                    value={pratica.id}
+                  />
+
+                  <select
+                    name="tipo_codice"
+                    defaultValue="OE"
+                    className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+                  >
+                    <option value="OE">OE</option>
+                    <option value="Bosch">Bosch</option>
+                    <option value="ATE">ATE</option>
+                    <option value="Identificativo">Identificativo</option>
+                    <option value="Altro">Altro</option>
+                  </select>
+
+                  <input
+                    type="text"
+                    name="codice"
+                    required
+                    maxLength={100}
+                    placeholder="Inserisci il codice corretto"
+                    className="rounded-lg border border-blue-200 bg-white px-3 py-2 font-mono text-sm text-slate-900 outline-none focus:border-blue-500"
+                  />
+
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
+                  >
+                    Aggiungi e conferma
+                  </button>
+                </form>
+              </div>
+
               {codiciVisualizzati.length ? (
                 <>
                   <div className="mb-5 flex flex-wrap gap-2 text-xs font-bold">
@@ -535,7 +639,13 @@ export default async function PraticaPage({
                             </td>
 
                             <td className="py-3 pr-4 text-slate-600">
-                              {codice.fonte}
+                              {codice.fonte === "Operatore" ? (
+                                <span className="font-bold text-blue-700">
+                                  Operatore
+                                </span>
+                              ) : (
+                                codice.fonte
+                              )}
                             </td>
 
                             <td className="py-3 pr-4">
