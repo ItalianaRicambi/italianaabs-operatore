@@ -75,6 +75,13 @@ type Allegato = {
   fonte?: string | null;
 };
 
+type AzioneStorico = {
+  id: number;
+  azione: string;
+  nota?: string | null;
+  created_at: string;
+};
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -114,12 +121,17 @@ async function getPratica(id: string) {
     notFound();
   }
 
-  const [codici, allegati] = await Promise.all([
+  const [codici, allegati, storicoOperatore] = await Promise.all([
     selectSupabase<Codice[]>(
       `codici_identificativi?pratica_id=eq.${encodeURIComponent(id)}&select=*`
     ),
     selectSupabase<Allegato[]>(
       `allegati?pratica_id=eq.${encodeURIComponent(id)}&select=*`
+    ),
+    selectSupabase<AzioneStorico[]>(
+      `azioni_operatore?pratica_id=eq.${encodeURIComponent(
+        id
+      )}&select=id,azione,nota,created_at&order=created_at.desc`
     ),
   ]);
 
@@ -127,6 +139,7 @@ async function getPratica(id: string) {
     pratica: pratiche[0],
     codici,
     allegati,
+    storicoOperatore,
   };
 }
 
@@ -176,6 +189,60 @@ function titoloAssistenza(tipo?: string | null) {
   }
 }
 
+
+function etichettaStato(value?: string | null) {
+  if (!value) return "—";
+
+  const labels: Record<string, string> = {
+    dati_mancanti: "Dati mancanti",
+    completa_da_preventivare: "Completa / da preventivare",
+    completa: "Completa",
+    raccolta_dati: "Raccolta dati",
+    da_preventivare: "Da preventivare",
+    preventivo_inviato: "Preventivo inviato",
+    ordine_acquisito: "Ordine acquisito",
+    non_applicabile: "Non applicabile",
+    da_fatturare: "Da fatturare",
+    fatturato: "Fatturata",
+    non_previsto: "Non previsto",
+    previsto: "Previsto",
+    da_verificare: "Da verificare",
+    in_gestione: "In gestione",
+    attesa_cliente: "Attesa cliente",
+    attesa_rientro: "Attesa rientro",
+    risolta: "Risolta",
+    chiusa: "Chiusa",
+    urgente: "Urgente",
+    alta: "Alta",
+    normale: "Normale",
+    ai: "AI",
+    operatore: "Operatore",
+    cliente: "Cliente",
+  };
+
+  if (labels[value]) return labels[value];
+
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (lettera) => lettera.toUpperCase());
+}
+
+function etichettaAzione(azione: string) {
+  const labels: Record<string, string> = {
+    assistenza_in_gestione: "Pratica presa in carico",
+    assistenza_attesa_cliente: "Messa in attesa cliente",
+    assistenza_attesa_rientro: "Messa in attesa rientro",
+    assistenza_risolta: "Assistenza segnata come risolta",
+    commerciale_dati_mancanti: "Segnata come dati mancanti",
+    commerciale_dati_verificati: "Dati verificati / da preventivare",
+    commerciale_preventivo_inviato: "Preventivo segnato come inviato",
+    commerciale_ordine_acquisito: "Ordine segnato come acquisito",
+    commerciale_fatturata: "Pratica segnata come fatturata",
+  };
+
+  return labels[azione] || etichettaStato(azione);
+}
+
 function rawArray<T>(raw: Record<string, unknown> | null | undefined, key: string): T[] {
   const value = raw?.[key];
   return Array.isArray(value) ? (value as T[]) : [];
@@ -192,7 +259,7 @@ export default async function PraticaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { pratica, codici, allegati } = await getPratica(id);
+  const { pratica, codici, allegati, storicoOperatore } = await getPratica(id);
 
   const rawCodes = rawArray<RawCode>(
     pratica.dati_raw,
@@ -509,6 +576,7 @@ export default async function PraticaPage({
                     azione="assistenza_in_gestione"
                     label="Prendi in carico"
                     className="bg-blue-600 text-white hover:bg-blue-700"
+                    disabilitata={pratica.stato_assistenza === "in_gestione"}
                   />
 
                   <AzioneOperatore
@@ -516,6 +584,7 @@ export default async function PraticaPage({
                     azione="assistenza_attesa_cliente"
                     label="Attesa cliente"
                     className="bg-amber-100 text-amber-900 hover:bg-amber-200"
+                    disabilitata={pratica.stato_assistenza === "attesa_cliente"}
                   />
 
                   <AzioneOperatore
@@ -523,6 +592,7 @@ export default async function PraticaPage({
                     azione="assistenza_attesa_rientro"
                     label="Attesa rientro"
                     className="bg-orange-100 text-orange-900 hover:bg-orange-200"
+                    disabilitata={pratica.stato_assistenza === "attesa_rientro"}
                   />
 
                   <AzioneOperatore
@@ -530,6 +600,9 @@ export default async function PraticaPage({
                     azione="assistenza_risolta"
                     label="Segna come risolta"
                     className="bg-green-600 text-white hover:bg-green-700"
+                    disabilitata={["risolta", "chiusa"].includes(
+                      pratica.stato_assistenza || ""
+                    )}
                   />
                 </div>
               ) : (
@@ -539,6 +612,7 @@ export default async function PraticaPage({
                     azione="commerciale_dati_mancanti"
                     label="Dati mancanti"
                     className="bg-slate-200 text-slate-900 hover:bg-slate-300"
+                    disabilitata={pratica.stato_completezza === "dati_mancanti"}
                   />
 
                   <AzioneOperatore
@@ -546,6 +620,9 @@ export default async function PraticaPage({
                     azione="commerciale_dati_verificati"
                     label="Dati verificati → da preventivare"
                     className="bg-orange-100 text-orange-900 hover:bg-orange-200"
+                    disabilitata={
+                      pratica.stato_commerciale === "da_preventivare"
+                    }
                   />
 
                   <AzioneOperatore
@@ -553,6 +630,9 @@ export default async function PraticaPage({
                     azione="commerciale_preventivo_inviato"
                     label="Preventivo inviato"
                     className="bg-blue-600 text-white hover:bg-blue-700"
+                    disabilitata={
+                      pratica.stato_commerciale === "preventivo_inviato"
+                    }
                   />
 
                   <AzioneOperatore
@@ -560,6 +640,10 @@ export default async function PraticaPage({
                     azione="commerciale_ordine_acquisito"
                     label="Ordine acquisito"
                     className="bg-red-100 text-red-900 hover:bg-red-200"
+                    disabilitata={
+                      pratica.stato_commerciale === "ordine_acquisito" &&
+                      pratica.stato_fatturazione !== "fatturato"
+                    }
                   />
 
                   <AzioneOperatore
@@ -567,17 +651,47 @@ export default async function PraticaPage({
                     azione="commerciale_fatturata"
                     label="Fatturata"
                     className="bg-green-600 text-white hover:bg-green-700"
+                    disabilitata={pratica.stato_fatturazione === "fatturato"}
                   />
                 </div>
               )}
             </Card>
 
+            <Card titolo="Storico operatore">
+              {storicoOperatore.length ? (
+                <div className="space-y-3">
+                  {storicoOperatore.map((evento) => (
+                    <div
+                      key={evento.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="text-sm font-bold text-slate-900">
+                        {etichettaAzione(evento.azione)}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {formattaData(evento.created_at)}
+                      </div>
+                      {evento.nota && (
+                        <div className="mt-2 text-sm leading-6 text-slate-700">
+                          {evento.nota}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Nessuna azione manuale registrata.
+                </p>
+              )}
+            </Card>
+
             <Card titolo="Stato pratica">
               <div className="space-y-4">
-                <Campo label="Completezza" value={pratica.stato_completezza} />
-                <Campo label="Stato commerciale" value={pratica.stato_commerciale} />
-                <Campo label="Fatturazione" value={pratica.stato_fatturazione} />
-                <Campo label="Follow-up" value={pratica.stato_followup} />
+                <Campo label="Completezza" value={etichettaStato(pratica.stato_completezza)} />
+                <Campo label="Stato commerciale" value={etichettaStato(pratica.stato_commerciale)} />
+                <Campo label="Fatturazione" value={etichettaStato(pratica.stato_fatturazione)} />
+                <Campo label="Follow-up" value={etichettaStato(pratica.stato_followup)} />
               </div>
             </Card>
 
@@ -590,11 +704,11 @@ export default async function PraticaPage({
                   />
                   <Campo
                     label="Stato assistenza"
-                    value={pratica.stato_assistenza}
+                    value={etichettaStato(pratica.stato_assistenza)}
                   />
                   <Campo
                     label="Priorità"
-                    value={pratica.priorita_assistenza}
+                    value={etichettaStato(pratica.priorita_assistenza)}
                   />
                   <Campo
                     label="Aperta"
@@ -614,7 +728,7 @@ export default async function PraticaPage({
               <div className="space-y-4">
                 <Campo
                   label="Classificazione"
-                  value={pratica.fonte_classificazione}
+                  value={etichettaStato(pratica.fonte_classificazione)}
                 />
                 <Campo
                   label="Classificazione bloccata"
@@ -711,11 +825,13 @@ function AzioneOperatore({
   azione,
   label,
   className,
+  disabilitata = false,
 }: {
   praticaId: string;
   azione: string;
   label: string;
   className: string;
+  disabilitata?: boolean;
 }) {
   return (
     <form action={applicaAzioneOperatore}>
@@ -724,9 +840,15 @@ function AzioneOperatore({
 
       <button
         type="submit"
-        className={`w-full rounded-xl px-4 py-3 text-left text-sm font-bold transition ${className}`}
+        disabled={disabilitata}
+        className={`w-full rounded-xl px-4 py-3 text-left text-sm font-bold transition ${
+          disabilitata
+            ? "cursor-not-allowed bg-slate-100 text-slate-400"
+            : className
+        }`}
       >
         {label}
+        {disabilitata ? " · stato attuale" : ""}
       </button>
     </form>
   );
