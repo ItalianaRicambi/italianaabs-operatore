@@ -1,65 +1,380 @@
-import Image from "next/image";
+type Pratica = {
+  id: string;
+  codice_pratica: string;
+  created_at: string;
+  telefono: string | null;
+  nome_cliente: string | null;
+  targa: string | null;
+  marca_veicolo: string | null;
+  modello_veicolo: string | null;
+  tipo_componente: string | null;
+  stato_completezza: string;
+  stato_commerciale: string;
+  stato_fatturazione: string;
+  stato_followup: string;
+  motivo_incompletezza: string | null;
+  nota_incompletezza: string | null;
+  blocco_operatore: boolean;
+  preventivo_inviato_at: string | null;
+  ordine_acquisito_at: string | null;
+  followup_previsto_at: string | null;
+  ultimo_importo_preventivo: number | null;
+  numero_fattura: string | null;
+  data_fattura: string | null;
+  coda: string;
+  priorita: number;
+};
 
-export default function Home() {
+async function getPratiche(): Promise<{
+  pratiche: Pratica[];
+  errore: string | null;
+}> {
+  const url = process.env.SUPABASE_URL;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+
+  if (!url || !secretKey) {
+    return {
+      pratiche: [],
+      errore: "Variabili Supabase non configurate",
+    };
+  }
+
+  try {
+    const response = await fetch(
+      `${url}/rest/v1/v_coda_operatore?select=*&order=priorita.asc,created_at.asc`,
+      {
+        headers: {
+          apikey: secretKey,
+          Authorization: `Bearer ${secretKey}`,
+        },
+        cache: "no-store",
+      }
+    );
+
+    if (!response.ok) {
+      const dettaglio = await response.text();
+
+      return {
+        pratiche: [],
+        errore: `Errore Supabase ${response.status}: ${dettaglio}`,
+      };
+    }
+
+    const pratiche = (await response.json()) as Pratica[];
+
+    return {
+      pratiche,
+      errore: null,
+    };
+  } catch (error) {
+    return {
+      pratiche: [],
+      errore:
+        error instanceof Error
+          ? error.message
+          : "Errore sconosciuto durante la connessione",
+    };
+  }
+}
+
+function conta(pratiche: Pratica[], coda: string) {
+  return pratiche.filter((pratica) => pratica.coda === coda).length;
+}
+
+function formattaData(data: string | null) {
+  if (!data) return "—";
+
+  return new Intl.DateTimeFormat("it-IT", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(data));
+}
+
+function formattaImporto(importo: number | null) {
+  if (importo === null || importo === undefined) return "—";
+
+  return new Intl.NumberFormat("it-IT", {
+    style: "currency",
+    currency: "EUR",
+  }).format(importo);
+}
+
+function badgeClass(coda: string) {
+  switch (coda) {
+    case "ORDINE ACQUISITO - DA FATTURARE":
+      return "bg-red-100 text-red-800";
+    case "DA PREVENTIVARE":
+      return "bg-orange-100 text-orange-800";
+    case "DATI INTEGRATI - DA VERIFICARE":
+      return "bg-yellow-100 text-yellow-800";
+    case "INCOMPLETA - OPERATORE":
+      return "bg-rose-100 text-rose-800";
+    case "DATI MANCANTI":
+      return "bg-slate-200 text-slate-800";
+    case "PREVENTIVO INVIATO":
+      return "bg-blue-100 text-blue-800";
+    case "FATTURATA":
+      return "bg-green-100 text-green-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+export default async function Home() {
+  const { pratiche, errore } = await getPratiche();
+
+  const datiMancanti = conta(pratiche, "DATI MANCANTI");
+  const daVerificare = conta(
+    pratiche,
+    "DATI INTEGRATI - DA VERIFICARE"
+  );
+  const daPreventivare = conta(pratiche, "DA PREVENTIVARE");
+  const daFatturare = conta(
+    pratiche,
+    "ORDINE ACQUISITO - DA FATTURARE"
+  );
+  const fatturate = conta(pratiche, "FATTURATA");
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-[1600px] px-6 py-8">
+        <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="mb-1 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Italiana Ricambi / ItalianaABS
+            </p>
+
+            <h1 className="text-3xl font-bold tracking-tight text-slate-950">
+              Dashboard Operatore
+            </h1>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Coda preventivi, ordini acquisiti e controllo fatturazione
+            </p>
+          </div>
+
+          <div
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${
+              errore
+                ? "bg-red-100 text-red-800"
+                : "bg-green-100 text-green-800"
+            }`}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            {errore
+              ? "Connessione database da verificare"
+              : "Supabase collegato"}
+          </div>
+        </header>
+
+        {errore && (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            <strong>Errore di collegamento:</strong> {errore}
+          </div>
+        )}
+
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <DashboardCard
+            titolo="Dati mancanti"
+            valore={datiMancanti}
+            descrizione="Pratiche ancora incomplete"
+            className="border-slate-300"
+          />
+
+          <DashboardCard
+            titolo="Da verificare"
+            valore={daVerificare}
+            descrizione="Nuovi dati dopo intervento operatore"
+            className="border-yellow-300"
+          />
+
+          <DashboardCard
+            titolo="Da preventivare"
+            valore={daPreventivare}
+            descrizione="Dati completi, offerta da preparare"
+            className="border-orange-300"
+          />
+
+          <DashboardCard
+            titolo="Da fatturare"
+            valore={daFatturare}
+            descrizione="Ordini acquisiti senza fattura"
+            className="border-red-300"
+          />
+
+          <DashboardCard
+            titolo="Fatturati"
+            valore={fatturate}
+            descrizione="Pratiche amministrativamente completate"
+            className="border-green-300"
+          />
+        </section>
+
+        <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">
+                Coda operativa
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Ordinata automaticamente per priorità
+              </p>
+            </div>
+
+            <div className="text-sm font-semibold text-slate-600">
+              {pratiche.length} pratiche
+            </div>
+          </div>
+
+          {pratiche.length === 0 && !errore ? (
+            <div className="px-6 py-16 text-center">
+              <div className="text-lg font-semibold text-slate-800">
+                Nessuna pratica presente
+              </div>
+
+              <p className="mt-2 text-sm text-slate-500">
+                Il collegamento al database è attivo. Le pratiche compariranno
+                qui quando inizieremo a importare le conversazioni.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1200px] text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-5 py-4">Priorità</th>
+                    <th className="px-5 py-4">Pratica</th>
+                    <th className="px-5 py-4">Cliente</th>
+                    <th className="px-5 py-4">Targa</th>
+                    <th className="px-5 py-4">Veicolo</th>
+                    <th className="px-5 py-4">Componente</th>
+                    <th className="px-5 py-4">Stato</th>
+                    <th className="px-5 py-4">Preventivo</th>
+                    <th className="px-5 py-4">Fattura</th>
+                    <th className="px-5 py-4">Creata</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {pratiche.map((pratica) => (
+                    <tr
+                      key={pratica.id}
+                      className="transition hover:bg-slate-50"
+                    >
+                      <td className="px-5 py-4 font-bold text-slate-900">
+                        {pratica.priorita}
+                      </td>
+
+                      <td className="px-5 py-4 font-semibold text-slate-950">
+                        {pratica.codice_pratica}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="font-medium text-slate-900">
+                          {pratica.nome_cliente || "Cliente"}
+                        </div>
+
+                        <div className="text-xs text-slate-500">
+                          {pratica.telefono || "—"}
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-4 font-mono font-semibold text-slate-900">
+                        {pratica.targa || "—"}
+                      </td>
+
+                      <td className="px-5 py-4 text-slate-700">
+                        {[pratica.marca_veicolo, pratica.modello_veicolo]
+                          .filter(Boolean)
+                          .join(" ") || "—"}
+                      </td>
+
+                      <td className="px-5 py-4 text-slate-700">
+                        {pratica.tipo_componente || "—"}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${badgeClass(
+                            pratica.coda
+                          )}`}
+                        >
+                          {pratica.coda}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4 font-semibold text-slate-900">
+                        {formattaImporto(
+                          pratica.ultimo_importo_preventivo
+                        )}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        {pratica.numero_fattura ? (
+                          <div>
+                            <div className="font-semibold text-green-700">
+                              {pratica.numero_fattura}
+                            </div>
+
+                            <div className="text-xs text-slate-500">
+                              {pratica.data_fattura || ""}
+                            </div>
+                          </div>
+                        ) : pratica.stato_fatturazione ===
+                          "da_fatturare" ? (
+                          <span className="font-bold text-red-700">
+                            DA EMETTERE
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+
+                      <td className="px-5 py-4 text-slate-500">
+                        {formattaData(pratica.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <footer className="mt-6 text-center text-xs text-slate-400">
+          Italiana Ricambi · Dashboard Operatore
+        </footer>
+      </div>
+    </main>
+  );
+}
+
+function DashboardCard({
+  titolo,
+  valore,
+  descrizione,
+  className,
+}: {
+  titolo: string;
+  valore: number;
+  descrizione: string;
+  className: string;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border-t-4 bg-white p-5 shadow-sm ${className}`}
+    >
+      <div className="text-sm font-semibold text-slate-600">
+        {titolo}
+      </div>
+
+      <div className="mt-2 text-4xl font-bold tracking-tight text-slate-950">
+        {valore}
+      </div>
+
+      <div className="mt-2 text-xs leading-5 text-slate-500">
+        {descrizione}
+      </div>
     </div>
   );
 }
