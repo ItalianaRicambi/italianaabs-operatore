@@ -28,6 +28,13 @@ const AZIONI_CONSENTITE = new Set([
   "logistica_annulla_ritiro",
 ]);
 
+const STATI_COMMERCIALI_CORREGGIBILI = new Set([
+  "da_preventivare",
+  "preventivo_inviato",
+  "ordine_acquisito",
+  "fatturata",
+]);
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -62,6 +69,177 @@ async function chiamaRpc(nome: string, body: Record<string, unknown>) {
   }
 
   return response.json();
+}
+
+async function leggiPratica(praticaId: string) {
+  const { url, secretKey } = getSupabase();
+
+  const response = await fetch(
+    `${url}/rest/v1/pratiche?id=eq.${encodeURIComponent(praticaId)}&select=*`,
+    {
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+      },
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    const dettaglio = await response.text();
+    throw new Error(
+      `Lettura pratica non riuscita (${response.status}): ${dettaglio}`
+    );
+  }
+
+  const righe = (await response.json()) as Array<Record<string, unknown>>;
+
+  if (!righe.length) {
+    throw new Error("Pratica non trovata");
+  }
+
+  return righe[0];
+}
+
+async function aggiornaPratica(
+  praticaId: string,
+  modifiche: Record<string, unknown>
+) {
+  const { url, secretKey } = getSupabase();
+
+  const response = await fetch(
+    `${url}/rest/v1/pratiche?id=eq.${encodeURIComponent(praticaId)}&select=*`,
+    {
+      method: "PATCH",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify(modifiche),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    const dettaglio = await response.text();
+    throw new Error(
+      `Aggiornamento pratica non riuscito (${response.status}): ${dettaglio}`
+    );
+  }
+
+  const righe = (await response.json()) as Array<Record<string, unknown>>;
+
+  if (!righe.length) {
+    throw new Error("La pratica non è stata aggiornata");
+  }
+
+  return righe[0];
+}
+
+async function registraCorrezioneStato(
+  praticaId: string,
+  statoPrima: Record<string, unknown>,
+  statoDopo: Record<string, unknown>,
+  nota: string
+) {
+  const { url, secretKey } = getSupabase();
+
+  const response = await fetch(`${url}/rest/v1/azioni_operatore`, {
+    method: "POST",
+    headers: {
+      apikey: secretKey,
+      Authorization: `Bearer ${secretKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({
+      pratica_id: praticaId,
+      azione: "operatore_correzione_stato",
+      nota,
+      stato_prima: statoPrima,
+      stato_dopo: statoDopo,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const dettaglio = await response.text();
+    throw new Error(
+      `Registrazione storico non riuscita (${response.status}): ${dettaglio}`
+    );
+  }
+}
+
+export async function correggiStatoCommercialeOperatore(formData: FormData) {
+  const praticaId = String(formData.get("pratica_id") || "").trim();
+  const stato = String(formData.get("stato") || "").trim();
+  const notaOperatore = String(formData.get("nota") || "").trim();
+
+  if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
+    throw new Error("ID pratica non valido");
+  }
+
+  if (!STATI_COMMERCIALI_CORREGGIBILI.has(stato)) {
+    throw new Error("Stato commerciale non consentito");
+  }
+
+  const prima = await leggiPratica(praticaId);
+  const adesso = new Date().toISOString();
+
+  const modifiche: Record<string, unknown> = {
+    tipo_flusso: "commerciale",
+    fonte_classificazione: "operatore",
+    blocco_classificazione_operatore: true,
+    stato_assistenza: "non_applicabile",
+    stato_completezza: "completa_da_preventivare",
+    motivo_incompletezza: null,
+    nota_incompletezza: null,
+  };
+
+  let etichetta = "";
+
+  if (stato === "da_preventivare") {
+    modifiche.stato_commerciale = "da_preventivare";
+    modifiche.stato_fatturazione = "non_applicabile";
+    modifiche.preventivo_inviato_at = null;
+    modifiche.ordine_acquisito_at = null;
+    modifiche.data_fattura = null;
+    etichetta = "Da preventivare";
+  } else if (stato === "preventivo_inviato") {
+    modifiche.stato_commerciale = "preventivo_inviato";
+    modifiche.stato_fatturazione = "non_applicabile";
+    modifiche.preventivo_inviato_at = prima.preventivo_inviato_at || adesso;
+    modifiche.ordine_acquisito_at = null;
+    modifiche.data_fattura = null;
+    etichetta = "Preventivo inviato";
+  } else if (stato === "ordine_acquisito") {
+    modifiche.stato_commerciale = "ordine_acquisito";
+    modifiche.stato_fatturazione = "da_fatturare";
+    modifiche.preventivo_inviato_at = prima.preventivo_inviato_at || adesso;
+    modifiche.ordine_acquisito_at = prima.ordine_acquisito_at || adesso;
+    modifiche.data_fattura = null;
+    etichetta = "Ordine acquisito / da fatturare";
+  } else if (stato === "fatturata") {
+    modifiche.stato_commerciale = "ordine_acquisito";
+    modifiche.stato_fatturazione = "fatturato";
+    modifiche.preventivo_inviato_at = prima.preventivo_inviato_at || adesso;
+    modifiche.ordine_acquisito_at = prima.ordine_acquisito_at || adesso;
+    modifiche.data_fattura = prima.data_fattura || adesso;
+    etichetta = "Fatturata";
+  }
+
+  const dopo = await aggiornaPratica(praticaId, modifiche);
+
+  const nota = notaOperatore
+    ? `Correzione manuale stato: ${etichetta}. ${notaOperatore}`
+    : `Correzione manuale stato: ${etichetta}.`;
+
+  await registraCorrezioneStato(praticaId, prima, dopo, nota);
+
+  revalidatePath("/");
+  revalidatePath(`/pratica/${praticaId}`);
 }
 
 export async function applicaAzioneOperatore(formData: FormData) {
