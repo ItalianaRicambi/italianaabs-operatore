@@ -3,15 +3,29 @@
 import { revalidatePath } from "next/cache";
 
 const AZIONI_CONSENTITE = new Set([
+  // Assistenza già esistente
   "assistenza_in_gestione",
   "assistenza_attesa_cliente",
   "assistenza_attesa_rientro",
   "assistenza_risolta",
+
+  // Commerciale già esistente
   "commerciale_dati_mancanti",
   "commerciale_dati_verificati",
   "commerciale_preventivo_inviato",
   "commerciale_ordine_acquisito",
   "commerciale_fatturata",
+
+  // Nuove azioni operatore
+  "operatore_non_assistenza",
+  "commerciale_richiesta_verifica",
+  "commerciale_rifiuta_lavorazione",
+
+  // Logistica / ritiri
+  "logistica_ritiro_richiesto",
+  "logistica_ritiro_programmato",
+  "logistica_ritirato",
+  "logistica_annulla_ritiro",
 ]);
 
 function getSupabase() {
@@ -41,6 +55,7 @@ async function chiamaRpc(nome: string, body: Record<string, unknown>) {
 
   if (!response.ok) {
     const dettaglio = await response.text();
+
     throw new Error(
       `Operazione non riuscita (${response.status}): ${dettaglio}`
     );
@@ -62,7 +77,7 @@ export async function applicaAzioneOperatore(formData: FormData) {
     throw new Error("Azione non consentita");
   }
 
-  await chiamaRpc("applica_azione_operatore", {
+  await chiamaRpc("applica_azione_operatore_estesa", {
     p_pratica_id: praticaId,
     p_azione: azione,
     p_nota: nota || null,
@@ -123,4 +138,3 @@ export async function aggiungiCodiceOperatore(formData: FormData) {
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
 }
-
