@@ -52,6 +52,9 @@ type Pratica = {
   followup_previsto_at?: string | null;
   assistenza_aperta_at?: string | null;
   assistenza_chiusa_at?: string | null;
+  stato_logistica?: string | null;
+  ritiro_richiesto_at?: string | null;
+  ritiro_programmato_at?: string | null;
   ultimo_messaggio_cliente_at?: string | null;
   dati_raw?: Record<string, unknown> | null;
 };
@@ -248,6 +251,11 @@ function etichettaStato(value?: string | null) {
     attesa_rientro: "Attesa rientro",
     risolta: "Risolta",
     chiusa: "Chiusa",
+    richiesta_verifica: "Richiesta verifiche",
+    rifiutato: "Rifiutata",
+    ritiro_richiesto: "Ritiro richiesto",
+    ritiro_programmato: "Ritiro programmato",
+    ritirato: "Ritirato",
     urgente: "Urgente",
     alta: "Alta",
     normale: "Normale",
@@ -274,6 +282,13 @@ function etichettaAzione(azione: string) {
     commerciale_preventivo_inviato: "Preventivo segnato come inviato",
     commerciale_ordine_acquisito: "Ordine segnato come acquisito",
     commerciale_fatturata: "Pratica segnata come fatturata",
+    operatore_non_assistenza: "Riclassificata: non è assistenza",
+    commerciale_richiesta_verifica: "Messa in richiesta verifiche / attesa risposta",
+    commerciale_rifiuta_lavorazione: "Lavorazione rifiutata",
+    logistica_ritiro_richiesto: "Ritiro richiesto",
+    logistica_ritiro_programmato: "Ritiro programmato",
+    logistica_ritirato: "Componente segnato come ritirato",
+    logistica_annulla_ritiro: "Ritiro annullato",
     codice_confermato: "Codice identificativo confermato",
     codice_scartato: "Codice identificativo scartato",
     codice_aggiunto_operatore: "Codice corretto aggiunto dall’operatore",
@@ -852,6 +867,13 @@ export default async function PraticaPage({
                     )}
                     motivoDisabilitata="Stato attuale"
                   />
+
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="operatore_non_assistenza"
+                    label="Non è un’assistenza"
+                    className="bg-slate-800 text-white hover:bg-slate-900"
+                  />
                 </div>
               ) : (
                 <div>
@@ -886,6 +908,15 @@ export default async function PraticaPage({
                   </div>
 
                   <div className="grid gap-3">
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="commerciale_richiesta_verifica"
+                    label="Richiesta verifiche / attesa risposta"
+                    className="bg-yellow-100 text-yellow-900 hover:bg-yellow-200"
+                    disabilitata={pratica.stato_commerciale === "richiesta_verifica"}
+                    motivoDisabilitata="Stato attuale"
+                  />
+
                   <AzioneOperatore
                     praticaId={pratica.id}
                     azione="commerciale_dati_mancanti"
@@ -957,9 +988,100 @@ export default async function PraticaPage({
                         : "Bloccato: prima acquisisci l’ordine"
                     }
                   />
+
+                  <AzioneOperatore
+                    praticaId={pratica.id}
+                    azione="commerciale_rifiuta_lavorazione"
+                    label="Rifiuta lavorazione"
+                    className="bg-red-600 text-white hover:bg-red-700"
+                    disabilitata={pratica.stato_commerciale === "rifiutato"}
+                    motivoDisabilitata="Stato attuale"
+                  />
                   </div>
                 </div>
               )}
+            </Card>
+
+            <Card titolo="Logistica / ritiro">
+              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Stato logistica
+                </div>
+                <div className="mt-1 text-sm font-bold text-slate-900">
+                  {etichettaStato(pratica.stato_logistica || "non_applicabile")}
+                </div>
+
+                {pratica.ritiro_richiesto_at && (
+                  <div className="mt-2 text-xs text-slate-500">
+                    Richiesto: {formattaData(pratica.ritiro_richiesto_at)}
+                  </div>
+                )}
+
+                {pratica.ritiro_programmato_at && (
+                  <div className="mt-1 text-xs text-slate-500">
+                    Programmato: {formattaData(pratica.ritiro_programmato_at)}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-3">
+                <AzioneOperatore
+                  praticaId={pratica.id}
+                  azione="logistica_ritiro_richiesto"
+                  label="Ritiro richiesto"
+                  className="bg-blue-100 text-blue-900 hover:bg-blue-200"
+                  disabilitata={[
+                    "ritiro_richiesto",
+                    "ritiro_programmato",
+                    "ritirato",
+                  ].includes(pratica.stato_logistica || "")}
+                  motivoDisabilitata="Stato già avanzato"
+                />
+
+                <AzioneOperatore
+                  praticaId={pratica.id}
+                  azione="logistica_ritiro_programmato"
+                  label="Ritiro programmato"
+                  className="bg-amber-100 text-amber-900 hover:bg-amber-200"
+                  disabilitata={pratica.stato_logistica !== "ritiro_richiesto"}
+                  motivoDisabilitata={
+                    pratica.stato_logistica === "ritiro_programmato"
+                      ? "Stato attuale"
+                      : "Prima segna ritiro richiesto"
+                  }
+                />
+
+                <AzioneOperatore
+                  praticaId={pratica.id}
+                  azione="logistica_ritirato"
+                  label="Ritirato"
+                  className="bg-green-600 text-white hover:bg-green-700"
+                  disabilitata={
+                    pratica.stato_logistica === "ritirato" ||
+                    !["ritiro_richiesto", "ritiro_programmato"].includes(
+                      pratica.stato_logistica || ""
+                    )
+                  }
+                  motivoDisabilitata={
+                    pratica.stato_logistica === "ritirato"
+                      ? "Stato attuale"
+                      : "Prima richiedi o programma il ritiro"
+                  }
+                />
+
+                <AzioneOperatore
+                  praticaId={pratica.id}
+                  azione="logistica_annulla_ritiro"
+                  label="Annulla ritiro"
+                  className="bg-slate-200 text-slate-900 hover:bg-slate-300"
+                  disabilitata={
+                    !["ritiro_richiesto", "ritiro_programmato"].includes(
+                      pratica.stato_logistica || ""
+                    )
+                  }
+                  motivoDisabilitata="Nessun ritiro attivo"
+                />
+              </div>
             </Card>
 
             <Card titolo="Storico operatore">
@@ -996,6 +1118,7 @@ export default async function PraticaPage({
                 <Campo label="Completezza" value={etichettaStato(pratica.stato_completezza)} />
                 <Campo label="Stato commerciale" value={etichettaStato(pratica.stato_commerciale)} />
                 <Campo label="Fatturazione" value={etichettaStato(pratica.stato_fatturazione)} />
+                <Campo label="Logistica" value={etichettaStato(pratica.stato_logistica)} />
                 <Campo label="Follow-up" value={etichettaStato(pratica.stato_followup)} />
               </div>
             </Card>
@@ -1070,6 +1193,14 @@ export default async function PraticaPage({
                 <Campo
                   label="Ordine acquisito"
                   value={formattaData(pratica.ordine_acquisito_at)}
+                />
+                <Campo
+                  label="Ritiro richiesto"
+                  value={formattaData(pratica.ritiro_richiesto_at)}
+                />
+                <Campo
+                  label="Ritiro programmato"
+                  value={formattaData(pratica.ritiro_programmato_at)}
                 />
                 <Campo
                   label="Follow-up previsto"
