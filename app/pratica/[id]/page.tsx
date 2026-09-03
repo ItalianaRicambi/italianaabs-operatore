@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { aggiungiCodiceOperatore, applicaAzioneOperatore, verificaCodiceOperatore } from "./actions";
+import { aggiungiCodiceOperatore, applicaAzioneOperatore, correggiStatoCommercialeOperatore, verificaCodiceOperatore } from "./actions";
 
 type RawCode = {
   codice?: string;
@@ -292,6 +292,7 @@ function etichettaAzione(azione: string) {
     codice_confermato: "Codice identificativo confermato",
     codice_scartato: "Codice identificativo scartato",
     codice_aggiunto_operatore: "Codice corretto aggiunto dall’operatore",
+    operatore_correzione_stato: "Stato corretto manualmente dall’operatore",
   };
 
   return labels[azione] || etichettaStato(azione);
@@ -998,6 +999,62 @@ export default async function PraticaPage({
                     motivoDisabilitata="Stato attuale"
                   />
                   </div>
+
+                  <details className="mt-5 rounded-xl border border-slate-300 bg-slate-50 p-4">
+                    <summary className="cursor-pointer select-none text-sm font-bold text-slate-800">
+                      Correzione manuale stato operatore
+                    </summary>
+
+                    <p className="mt-3 text-xs leading-5 text-slate-600">
+                      Usa questa sezione quando la pratica è già più avanti di
+                      quanto risulta dalla classificazione automatica. Questi
+                      comandi bypassano i blocchi sui codici e rendono
+                      prevalente lo stato scelto dall’operatore.
+                    </p>
+
+                    <div className="mt-4 grid gap-3">
+                      <CorrezioneStatoOperatore
+                        praticaId={pratica.id}
+                        stato="da_preventivare"
+                        label="Imposta: Da preventivare"
+                        className="bg-orange-100 text-orange-900 hover:bg-orange-200"
+                        disabilitata={
+                          pratica.stato_commerciale === "da_preventivare" &&
+                          pratica.stato_fatturazione !== "fatturato"
+                        }
+                      />
+
+                      <CorrezioneStatoOperatore
+                        praticaId={pratica.id}
+                        stato="preventivo_inviato"
+                        label="Imposta: Preventivo inviato"
+                        className="bg-blue-600 text-white hover:bg-blue-700"
+                        disabilitata={
+                          pratica.stato_commerciale === "preventivo_inviato" &&
+                          pratica.stato_fatturazione !== "fatturato"
+                        }
+                      />
+
+                      <CorrezioneStatoOperatore
+                        praticaId={pratica.id}
+                        stato="ordine_acquisito"
+                        label="Imposta: Ordine acquisito / da fatturare"
+                        className="bg-red-100 text-red-900 hover:bg-red-200"
+                        disabilitata={
+                          pratica.stato_commerciale === "ordine_acquisito" &&
+                          pratica.stato_fatturazione === "da_fatturare"
+                        }
+                      />
+
+                      <CorrezioneStatoOperatore
+                        praticaId={pratica.id}
+                        stato="fatturata"
+                        label="Imposta: Fatturata"
+                        className="bg-green-600 text-white hover:bg-green-700"
+                        disabilitata={pratica.stato_fatturazione === "fatturato"}
+                      />
+                    </div>
+                  </details>
                 </div>
               )}
             </Card>
@@ -1288,6 +1345,39 @@ function VerificaCodiceButton({
         }`}
       >
         {disabilitato ? "Stato attuale" : label}
+      </button>
+    </form>
+  );
+}
+
+function CorrezioneStatoOperatore({
+  praticaId,
+  stato,
+  label,
+  className,
+  disabilitata = false,
+}: {
+  praticaId: string;
+  stato: "da_preventivare" | "preventivo_inviato" | "ordine_acquisito" | "fatturata";
+  label: string;
+  className: string;
+  disabilitata?: boolean;
+}) {
+  return (
+    <form action={correggiStatoCommercialeOperatore}>
+      <input type="hidden" name="pratica_id" value={praticaId} />
+      <input type="hidden" name="stato" value={stato} />
+
+      <button
+        type="submit"
+        disabled={disabilitata}
+        className={`w-full rounded-xl px-4 py-3 text-left text-sm font-bold transition ${
+          disabilitata
+            ? "cursor-not-allowed bg-slate-100 text-slate-400"
+            : className
+        }`}
+      >
+        {disabilitata ? `${label} · Stato attuale` : label}
       </button>
     </form>
   );
