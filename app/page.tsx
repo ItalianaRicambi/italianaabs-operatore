@@ -283,15 +283,54 @@ function labelFiltro(filtro: string) {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ filtro?: string | string[] }>;
+  searchParams: Promise<{
+    filtro?: string | string[];
+    cerca?: string | string[];
+  }>;
 }) {
   const { pratiche, errore } = await getPratiche();
   const params = await searchParams;
+
   const filtroAttivo = Array.isArray(params?.filtro)
     ? params.filtro[0]
     : params?.filtro || "tutte";
 
-  const praticheFiltrate = filtraPratiche(pratiche, filtroAttivo);
+  const cercaAttiva = (
+    Array.isArray(params?.cerca)
+      ? params.cerca[0]
+      : params?.cerca || ""
+  ).trim();
+
+  const praticheFiltratePerStato = filtraPratiche(pratiche, filtroAttivo);
+  const termineRicerca = cercaAttiva.toLowerCase();
+
+  const praticheFiltrate = termineRicerca
+    ? praticheFiltratePerStato.filter((pratica) =>
+        Object.values(pratica).some((valore) =>
+          String(valore ?? "").toLowerCase().includes(termineRicerca)
+        )
+      )
+    : praticheFiltratePerStato;
+
+  const hrefConFiltro = (filtro: string) => {
+    const query = new URLSearchParams();
+
+    if (filtro !== "tutte") {
+      query.set("filtro", filtro);
+    }
+
+    if (cercaAttiva) {
+      query.set("cerca", cercaAttiva);
+    }
+
+    const stringaQuery = query.toString();
+    return stringaQuery ? `/?${stringaQuery}` : "/";
+  };
+
+  const hrefAzzeraRicerca =
+    filtroAttivo === "tutte"
+      ? "/"
+      : `/?filtro=${encodeURIComponent(filtroAttivo)}`;
 
   const assistenzaAperta = contaAssistenzaAperta(pratiche);
   const assistenzaPrioritaria = contaAssistenzaPrioritaria(pratiche);
@@ -349,7 +388,7 @@ export default async function Home({
               valore={assistenzaAperta}
               descrizione="Richieste di assistenza ancora da gestire o concludere"
               className="border-purple-400"
-              href="/?filtro=assistenza_aperta"
+              href={hrefConFiltro("assistenza_aperta")}
               attiva={filtroAttivo === "assistenza_aperta"}
             />
             <DashboardFilterCard
@@ -357,7 +396,7 @@ export default async function Home({
               valore={assistenzaPrioritaria}
               descrizione="Richieste urgenti che richiedono intervento immediato"
               className="border-red-500"
-              href="/?filtro=assistenza_prioritaria"
+              href={hrefConFiltro("assistenza_prioritaria")}
               attiva={filtroAttivo === "assistenza_prioritaria"}
             />
           </div>
@@ -374,7 +413,7 @@ export default async function Home({
               valore={datiMancanti}
               descrizione="Pratiche ancora incomplete"
               className="border-slate-300"
-              href="/?filtro=dati_mancanti"
+              href={hrefConFiltro("dati_mancanti")}
               attiva={filtroAttivo === "dati_mancanti"}
             />
             <DashboardFilterCard
@@ -382,7 +421,7 @@ export default async function Home({
               valore={daVerificare}
               descrizione="Nuovi dati dopo intervento operatore"
               className="border-yellow-300"
-              href="/?filtro=da_verificare"
+              href={hrefConFiltro("da_verificare")}
               attiva={filtroAttivo === "da_verificare"}
             />
             <DashboardFilterCard
@@ -390,7 +429,7 @@ export default async function Home({
               valore={daPreventivare}
               descrizione="Dati completi, offerta da preparare"
               className="border-orange-300"
-              href="/?filtro=da_preventivare"
+              href={hrefConFiltro("da_preventivare")}
               attiva={filtroAttivo === "da_preventivare"}
             />
             <DashboardFilterCard
@@ -398,7 +437,7 @@ export default async function Home({
               valore={preventiviInviati}
               descrizione="Offerte inviate, in attesa di esito o follow-up"
               className="border-blue-400"
-              href="/?filtro=preventivi_inviati"
+              href={hrefConFiltro("preventivi_inviati")}
               attiva={filtroAttivo === "preventivi_inviati"}
             />
             <DashboardFilterCard
@@ -406,7 +445,7 @@ export default async function Home({
               valore={daFatturare}
               descrizione="Ordini acquisiti senza fattura"
               className="border-red-300"
-              href="/?filtro=da_fatturare"
+              href={hrefConFiltro("da_fatturare")}
               attiva={filtroAttivo === "da_fatturare"}
             />
             <DashboardFilterCard
@@ -414,51 +453,99 @@ export default async function Home({
               valore={fatturate}
               descrizione="Pratiche amministrativamente completate"
               className="border-green-300"
-              href="/?filtro=fatturate"
+              href={hrefConFiltro("fatturate")}
               attiva={filtroAttivo === "fatturate"}
             />
           </div>
         </section>
 
         <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-slate-950">Coda operativa</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Assistenza e pratiche commerciali ordinate automaticamente per priorità
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Filtro attivo:
-                </span>
+          <div className="border-b border-slate-200 px-6 py-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Coda operativa</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Assistenza e pratiche commerciali ordinate automaticamente per priorità
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Filtro attivo:
+                  </span>
 
-                <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                  {labelFiltro(filtroAttivo)}
-                </span>
+                  <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                    {labelFiltro(filtroAttivo)}
+                  </span>
 
-                {filtroAttivo !== "tutte" && (
-                  <Link
-                    href="/"
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-800"
-                  >
-                    Rimuovi filtro
-                  </Link>
-                )}
+                  {filtroAttivo !== "tutte" && (
+                    <Link
+                      href={hrefConFiltro("tutte")}
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                    >
+                      Rimuovi filtro
+                    </Link>
+                  )}
+                </div>
+              </div>
+
+              <div className="text-sm font-semibold text-slate-600">
+                {praticheFiltrate.length}{" "}
+                {praticheFiltrate.length === 1 ? "pratica" : "pratiche"}
               </div>
             </div>
 
-            <div className="text-sm font-semibold text-slate-600">
-              {praticheFiltrate.length} {praticheFiltrate.length === 1 ? "pratica" : "pratiche"}
-            </div>
+            <form method="GET" className="mt-5 flex flex-col gap-2 lg:flex-row">
+              {filtroAttivo !== "tutte" && (
+                <input type="hidden" name="filtro" value={filtroAttivo} />
+              )}
+
+              <input
+                type="search"
+                name="cerca"
+                defaultValue={cercaAttiva}
+                placeholder="Cerca pratica, cliente, telefono, targa, veicolo..."
+                autoComplete="off"
+                className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+
+              <button
+                type="submit"
+                className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
+              >
+                Cerca
+              </button>
+
+              {cercaAttiva && (
+                <Link
+                  href={hrefAzzeraRicerca}
+                  className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Azzera ricerca
+                </Link>
+              )}
+            </form>
+
+            {cercaAttiva && (
+              <div className="mt-2 text-sm text-slate-600">
+                Ricerca: <strong>{cercaAttiva}</strong> ·{" "}
+                <strong>{praticheFiltrate.length}</strong>{" "}
+                {praticheFiltrate.length === 1
+                  ? "pratica trovata"
+                  : "pratiche trovate"}
+              </div>
+            )}
           </div>
 
           {praticheFiltrate.length === 0 && !errore ? (
             <div className="px-6 py-16 text-center">
               <div className="text-lg font-semibold text-slate-800">
-                Nessuna pratica presente
+                {cercaAttiva
+                  ? "Nessuna pratica trovata"
+                  : "Nessuna pratica presente"}
               </div>
               <p className="mt-2 text-sm text-slate-500">
-                Il collegamento al database è attivo.
+                {cercaAttiva
+                  ? `Nessun risultato per “${cercaAttiva}”.`
+                  : "Il collegamento al database è attivo."}
               </p>
             </div>
           ) : (
