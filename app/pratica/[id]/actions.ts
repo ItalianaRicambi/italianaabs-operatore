@@ -316,3 +316,63 @@ export async function aggiungiCodiceOperatore(formData: FormData) {
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
 }
+
+
+// ============================================================
+// DTC / CODICI GUASTO - VERIFICA OPERATORE
+// ============================================================
+
+export async function verificaDtcOperatore(formData: FormData) {
+  const praticaId = String(formData.get("pratica_id") || "").trim();
+  const codice = String(formData.get("codice") || "").trim();
+  const esito = String(formData.get("esito") || "").trim();
+
+  if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
+    throw new Error("ID pratica non valido");
+  }
+
+  if (!codice) {
+    throw new Error("Codice DTC non valido");
+  }
+
+  if (!["confermato", "scartato"].includes(esito)) {
+    throw new Error("Esito DTC non consentito");
+  }
+
+  await chiamaRpc("verifica_dtc_operatore", {
+    p_pratica_id: praticaId,
+    p_codice: codice,
+    p_esito: esito,
+  });
+
+  revalidatePath("/");
+  revalidatePath(`/pratica/${praticaId}`);
+}
+
+
+// ============================================================
+// DTC / CODICI GUASTO - AGGIUNTA MANUALE OPERATORE
+// ============================================================
+
+export async function aggiungiDtcOperatore(formData: FormData) {
+  const praticaId = String(formData.get("pratica_id") || "").trim();
+  const codice = String(formData.get("codice") || "").trim();
+  const descrizione = String(formData.get("descrizione") || "").trim();
+
+  if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
+    throw new Error("ID pratica non valido");
+  }
+
+  if (!codice) {
+    throw new Error("Inserire il codice DTC corretto");
+  }
+
+  await chiamaRpc("aggiungi_dtc_operatore", {
+    p_pratica_id: praticaId,
+    p_codice: codice,
+    p_descrizione: descrizione || null,
+  });
+
+  revalidatePath("/");
+  revalidatePath(`/pratica/${praticaId}`);
+}
