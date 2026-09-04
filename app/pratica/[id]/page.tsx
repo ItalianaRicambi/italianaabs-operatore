@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   aggiungiCodiceOperatore,
   aggiungiDtcOperatore,
+  aggiornaDatiPraticaOperatore,
   applicaAzioneOperatore,
   correggiStatoCommercialeOperatore,
   verificaCodiceOperatore,
@@ -40,7 +41,9 @@ type Pratica = {
   marca_veicolo?: string | null;
   modello_veicolo?: string | null;
   tipo_componente?: string | null;
+  tipo_guasto?: string | null;
   descrizione_guasto?: string | null;
+  campi_bloccati_operatore?: string[] | null;
   stato_completezza?: string | null;
   stato_commerciale?: string | null;
   stato_fatturazione?: string | null;
@@ -572,20 +575,144 @@ export default async function PraticaPage({
         <div className="grid gap-6 xl:grid-cols-3">
           <section className="space-y-6 xl:col-span-2">
             <Card titolo="Cliente e veicolo">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Campo label="Cliente" value={pratica.nome_cliente} />
                 <Campo label="Telefono" value={pratica.telefono} />
-                <Campo label="Targa" value={pratica.targa} mono />
-                <Campo label="Marca" value={pratica.marca_veicolo} />
-                <Campo label="Modello" value={pratica.modello_veicolo} />
-                <Campo label="Componente" value={pratica.tipo_componente} />
+              </div>
+
+              <div className="mt-6 border-t border-slate-200 pt-5">
+                <div className="mb-4">
+                  <div className="text-sm font-bold text-slate-900">
+                    Dati pratica modificabili dall&apos;operatore
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Correggi o completa i dati ricevuti da Keplero. Con il
+                    salvataggio i valori presenti vengono confermati come dati
+                    dell&apos;operatore e protetti dagli aggiornamenti automatici.
+                  </p>
+                </div>
+
+                <form action={aggiornaDatiPraticaOperatore}>
+                  <input type="hidden" name="pratica_id" value={pratica.id} />
+
+                  <div className="grid gap-3 xl:grid-cols-[140px_1fr_1fr_160px]">
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Targa
+                      </label>
+                      <input
+                        type="text"
+                        name="targa"
+                        defaultValue={pratica.targa || ""}
+                        placeholder="Es. DE66571"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Marca
+                      </label>
+                      <input
+                        type="text"
+                        name="marca_veicolo"
+                        defaultValue={pratica.marca_veicolo || ""}
+                        placeholder="Es. BMW"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Modello
+                      </label>
+                      <input
+                        type="text"
+                        name="modello_veicolo"
+                        defaultValue={pratica.modello_veicolo || ""}
+                        placeholder="Es. R1200 GS"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Componente
+                      </label>
+                      <input
+                        type="text"
+                        name="tipo_componente"
+                        defaultValue={pratica.tipo_componente || ""}
+                        placeholder="Es. ABS"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid gap-3 xl:grid-cols-[220px_1fr_auto] xl:items-end">
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Tipo guasto
+                      </label>
+                      <select
+                        name="tipo_guasto"
+                        defaultValue={pratica.tipo_guasto || ""}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="">Seleziona...</option>
+                        <option value="idraulico_meccanico">
+                          Idraulico / meccanico
+                        </option>
+                        <option value="elettrico_elettronico">
+                          Elettrico / elettronico
+                        </option>
+                        <option value="non_definito">
+                          Non definito / da verificare
+                        </option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Descrizione guasto
+                      </label>
+                      <input
+                        type="text"
+                        name="descrizione_guasto"
+                        defaultValue={pratica.descrizione_guasto || ""}
+                        placeholder="Es. rimane frenata la ruota posteriore destra"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700"
+                    >
+                      Salva e conferma
+                    </button>
+                  </div>
+                </form>
               </div>
             </Card>
 
             <Card titolo="Problema / riepilogo operativo">
+              {pratica.tipo_guasto && (
+                <div className="mb-3">
+                  <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                    Tipo guasto:{" "}
+                    {pratica.tipo_guasto === "idraulico_meccanico"
+                      ? "Idraulico / meccanico"
+                      : pratica.tipo_guasto === "elettrico_elettronico"
+                      ? "Elettrico / elettronico"
+                      : "Non definito / da verificare"}
+                  </span>
+                </div>
+              )}
+
               <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">
-                {riepilogoOperativo ||
-                  pratica.descrizione_guasto ||
+                {pratica.descrizione_guasto ||
+                  riepilogoOperativo ||
                   "Nessuna descrizione disponibile."}
               </p>
 
