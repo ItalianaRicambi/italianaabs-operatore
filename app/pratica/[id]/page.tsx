@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { aggiungiCodiceOperatore, applicaAzioneOperatore, correggiStatoCommercialeOperatore, verificaCodiceOperatore } from "./actions";
+import {
+  aggiungiCodiceOperatore,
+  aggiungiDtcOperatore,
+  applicaAzioneOperatore,
+  correggiStatoCommercialeOperatore,
+  verificaCodiceOperatore,
+  verificaDtcOperatore,
+} from "./actions";
 
 type RawCode = {
   codice?: string;
@@ -103,6 +110,15 @@ type CodiceOperatore = {
   created_at: string;
 };
 
+type Dtc = {
+  id: string;
+  codice: string;
+  descrizione?: string | null;
+  fonte: string;
+  esito: string;
+  created_at: string;
+};
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -148,6 +164,7 @@ async function getPratica(id: string) {
     storicoOperatore,
     verificheCodici,
     codiciOperatore,
+    dtc,
   ] = await Promise.all([
     selectSupabase<Codice[]>(
       `codici_identificativi?pratica_id=eq.${encodeURIComponent(id)}&select=*`
@@ -170,6 +187,11 @@ async function getPratica(id: string) {
         id
       )}&select=id,tipo_codice,codice,codice_normalizzato,fonte,note,created_at&order=created_at.asc`
     ),
+    selectSupabase<Dtc[]>(
+      `dtc?pratica_id=eq.${encodeURIComponent(
+        id
+      )}&select=id,codice,descrizione,fonte,esito,created_at&order=created_at.asc`
+    ),
   ]);
 
   return {
@@ -179,6 +201,7 @@ async function getPratica(id: string) {
     storicoOperatore,
     verificheCodici,
     codiciOperatore,
+    dtc,
   };
 }
 
@@ -321,13 +344,13 @@ export default async function PraticaPage({
     storicoOperatore,
     verificheCodici,
     codiciOperatore,
+    dtc,
   } = await getPratica(id);
 
   const rawCodes = rawArray<RawCode>(
     pratica.dati_raw,
     "codici_identificativi_estratti"
   );
-  const rawDtc = rawArray<string>(pratica.dati_raw, "dtc_estratti");
   const rawAttachments = rawArray<RawAttachment>(
     pratica.dati_raw,
     "allegati_keplero"
@@ -454,6 +477,18 @@ export default async function PraticaPage({
     codiciVisualizzati.length > 0 &&
     codiciInAttesa === 0 &&
     codiciConfermati > 0;
+
+  const dtcConfermati = dtc.filter(
+    (item) => item.esito === "confermato"
+  ).length;
+
+  const dtcScartati = dtc.filter(
+    (item) => item.esito === "scartato"
+  ).length;
+
+  const dtcInAttesa = dtc.filter(
+    (item) => !["confermato", "scartato"].includes(item.esito)
+  ).length;
 
   const allegatiVisualizzati =
     allegati.length > 0
@@ -724,21 +759,152 @@ export default async function PraticaPage({
             </Card>
 
             <Card titolo="DTC / codici guasto">
-              {rawDtc.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {rawDtc.map((dtc) => (
-                    <span
-                      key={dtc}
-                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-mono text-sm font-bold text-red-800"
-                    >
-                      {dtc}
-                    </span>
-                  ))}
+              <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4">
+                <div className="text-sm font-bold text-red-900">
+                  Aggiungi DTC corretto
                 </div>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  Nessun DTC estratto dalla conversazione.
+                <p className="mt-1 text-xs leading-5 text-red-800">
+                  Se Keplero ha letto male un codice guasto, scartalo e inserisci
+                  qui quello corretto. Il nuovo DTC viene registrato come
+                  <strong> Operatore</strong> e confermato automaticamente.
                 </p>
+
+                <form
+                  action={aggiungiDtcOperatore}
+                  className="mt-4 grid gap-3 md:grid-cols-[180px_1fr_auto]"
+                >
+                  <input
+                    type="hidden"
+                    name="pratica_id"
+                    value={pratica.id}
+                  />
+
+                  <input
+                    type="text"
+                    name="codice"
+                    required
+                    maxLength={100}
+                    placeholder="Es. C0035-5A"
+                    className="rounded-lg border border-red-200 bg-white px-3 py-2 font-mono text-sm font-bold text-slate-900 outline-none focus:border-red-500"
+                  />
+
+                  <input
+                    type="text"
+                    name="descrizione"
+                    maxLength={500}
+                    placeholder="Descrizione del DTC (opzionale)"
+                    className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-500"
+                  />
+
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-700"
+                  >
+                    Aggiungi e conferma
+                  </button>
+                </form>
+              </div>
+
+              {dtc.length ? (
+                <>
+                  <div className="mb-5 flex flex-wrap gap-2 text-xs font-bold">
+                    <span className="rounded-full bg-green-100 px-3 py-1 text-green-800">
+                      Confermati: {dtcConfermati}
+                    </span>
+                    <span className="rounded-full bg-red-100 px-3 py-1 text-red-800">
+                      Scartati: {dtcScartati}
+                    </span>
+                    <span className="rounded-full bg-orange-100 px-3 py-1 text-orange-800">
+                      Da verificare: {dtcInAttesa}
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="py-3 pr-4">Codice</th>
+                          <th className="py-3 pr-4">Descrizione</th>
+                          <th className="py-3 pr-4">Fonte</th>
+                          <th className="py-3 pr-4">Esito</th>
+                          <th className="py-3">Azioni</th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+                        {dtc.map((item, index) => (
+                          <tr key={item.id || `${item.codice}-${index}`}>
+                            <td className="py-3 pr-4 align-top font-mono font-bold text-slate-950">
+                              {item.codice}
+                            </td>
+
+                            <td className="py-3 pr-4 align-top text-slate-700">
+                              {item.descrizione || "—"}
+                            </td>
+
+                            <td className="py-3 pr-4 align-top text-slate-600">
+                              {item.fonte === "operatore" ? (
+                                <span className="font-bold text-blue-700">
+                                  Operatore
+                                </span>
+                              ) : (
+                                etichettaStato(item.fonte)
+                              )}
+                            </td>
+
+                            <td className="py-3 pr-4 align-top">
+                              {item.esito === "confermato" ? (
+                                <span className="font-bold text-green-700">
+                                  ✓ Confermato
+                                </span>
+                              ) : item.esito === "scartato" ? (
+                                <span className="font-bold text-red-700">
+                                  ✕ Scartato
+                                </span>
+                              ) : (
+                                <span className="font-bold text-orange-700">
+                                  Da verificare
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 align-top">
+                              <div className="flex flex-wrap gap-2">
+                                <VerificaDtcButton
+                                  praticaId={pratica.id}
+                                  codice={item.codice}
+                                  esito="confermato"
+                                  label="✓ Conferma"
+                                  disabilitato={item.esito === "confermato"}
+                                  className="bg-green-100 text-green-800 hover:bg-green-200"
+                                />
+
+                                <VerificaDtcButton
+                                  praticaId={pratica.id}
+                                  codice={item.codice}
+                                  esito="scartato"
+                                  label="✕ Scarta"
+                                  disabilitato={item.esito === "scartato"}
+                                  className="bg-red-100 text-red-800 hover:bg-red-200"
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-bold text-slate-800">
+                    Nessun DTC presente.
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Nessun codice guasto è stato importato nella tabella DTC per
+                    questa pratica.
+                  </p>
+                </div>
               )}
             </Card>
 
@@ -1313,6 +1479,42 @@ function Campo({
 }
 
 
+
+function VerificaDtcButton({
+  praticaId,
+  codice,
+  esito,
+  label,
+  className,
+  disabilitato = false,
+}: {
+  praticaId: string;
+  codice: string;
+  esito: "confermato" | "scartato";
+  label: string;
+  className: string;
+  disabilitato?: boolean;
+}) {
+  return (
+    <form action={verificaDtcOperatore}>
+      <input type="hidden" name="pratica_id" value={praticaId} />
+      <input type="hidden" name="codice" value={codice} />
+      <input type="hidden" name="esito" value={esito} />
+
+      <button
+        type="submit"
+        disabled={disabilitato}
+        className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+          disabilitato
+            ? "cursor-not-allowed bg-slate-100 text-slate-400"
+            : className
+        }`}
+      >
+        {disabilitato ? "Stato attuale" : label}
+      </button>
+    </form>
+  );
+}
 
 function VerificaCodiceButton({
   praticaId,
