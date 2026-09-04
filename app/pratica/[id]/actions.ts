@@ -3,20 +3,20 @@
 import { revalidatePath } from "next/cache";
 
 const AZIONI_CONSENTITE = new Set([
-  // Assistenza già esistente
+  // Assistenza
   "assistenza_in_gestione",
   "assistenza_attesa_cliente",
   "assistenza_attesa_rientro",
   "assistenza_risolta",
 
-  // Commerciale già esistente
+  // Commerciale
   "commerciale_dati_mancanti",
   "commerciale_dati_verificati",
   "commerciale_preventivo_inviato",
   "commerciale_ordine_acquisito",
   "commerciale_fatturata",
 
-  // Nuove azioni operatore
+  // Azioni operatore
   "operatore_non_assistenza",
   "commerciale_richiesta_verifica",
   "commerciale_rifiuta_lavorazione",
@@ -35,6 +35,10 @@ const STATI_COMMERCIALI_CORREGGIBILI = new Set([
   "fatturata",
 ]);
 
+/* ============================================================
+   CONNESSIONE SUPABASE
+   ============================================================ */
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -46,7 +50,15 @@ function getSupabase() {
   return { url, secretKey };
 }
 
-async function chiamaRpc(nome: string, body: Record<string, unknown>) {
+/* ============================================================
+   CHIAMATA RPC
+   Gestisce anche RPC che restituiscono risposta vuota
+   ============================================================ */
+
+async function chiamaRpc(
+  nome: string,
+  body: Record<string, unknown>
+) {
   const { url, secretKey } = getSupabase();
 
   const response = await fetch(`${url}/rest/v1/rpc/${nome}`, {
@@ -60,22 +72,38 @@ async function chiamaRpc(nome: string, body: Record<string, unknown>) {
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    const dettaglio = await response.text();
+  const testo = await response.text();
 
+  if (!response.ok) {
     throw new Error(
-      `Operazione non riuscita (${response.status}): ${dettaglio}`
+      `Operazione non riuscita (${response.status}): ${testo}`
     );
   }
 
-  return response.json();
+  // Alcune RPC Supabase terminano correttamente
+  // senza restituire un body.
+  if (!testo.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(testo);
+  } catch {
+    return testo;
+  }
 }
+
+/* ============================================================
+   LETTURA PRATICA
+   ============================================================ */
 
 async function leggiPratica(praticaId: string) {
   const { url, secretKey } = getSupabase();
 
   const response = await fetch(
-    `${url}/rest/v1/pratiche?id=eq.${encodeURIComponent(praticaId)}&select=*`,
+    `${url}/rest/v1/pratiche?id=eq.${encodeURIComponent(
+      praticaId
+    )}&select=*`,
     {
       headers: {
         apikey: secretKey,
@@ -87,12 +115,14 @@ async function leggiPratica(praticaId: string) {
 
   if (!response.ok) {
     const dettaglio = await response.text();
+
     throw new Error(
       `Lettura pratica non riuscita (${response.status}): ${dettaglio}`
     );
   }
 
-  const righe = (await response.json()) as Array<Record<string, unknown>>;
+  const righe =
+    (await response.json()) as Array<Record<string, unknown>>;
 
   if (!righe.length) {
     throw new Error("Pratica non trovata");
@@ -101,6 +131,10 @@ async function leggiPratica(praticaId: string) {
   return righe[0];
 }
 
+/* ============================================================
+   AGGIORNAMENTO PRATICA
+   ============================================================ */
+
 async function aggiornaPratica(
   praticaId: string,
   modifiche: Record<string, unknown>
@@ -108,7 +142,9 @@ async function aggiornaPratica(
   const { url, secretKey } = getSupabase();
 
   const response = await fetch(
-    `${url}/rest/v1/pratiche?id=eq.${encodeURIComponent(praticaId)}&select=*`,
+    `${url}/rest/v1/pratiche?id=eq.${encodeURIComponent(
+      praticaId
+    )}&select=*`,
     {
       method: "PATCH",
       headers: {
@@ -124,12 +160,14 @@ async function aggiornaPratica(
 
   if (!response.ok) {
     const dettaglio = await response.text();
+
     throw new Error(
       `Aggiornamento pratica non riuscito (${response.status}): ${dettaglio}`
     );
   }
 
-  const righe = (await response.json()) as Array<Record<string, unknown>>;
+  const righe =
+    (await response.json()) as Array<Record<string, unknown>>;
 
   if (!righe.length) {
     throw new Error("La pratica non è stata aggiornata");
@@ -137,6 +175,14 @@ async function aggiornaPratica(
 
   return righe[0];
 }
+
+/* ============================================================
+   REGISTRAZIONE STORICO CORREZIONE MANUALE
+
+   IMPORTANTE:
+   un eventuale problema di permessi sullo storico
+   NON deve annullare un aggiornamento già riuscito.
+   ============================================================ */
 
 async function registraCorrezioneStato(
   praticaId: string,
@@ -146,36 +192,61 @@ async function registraCorrezioneStato(
 ) {
   const { url, secretKey } = getSupabase();
 
-  const response = await fetch(`${url}/rest/v1/azioni_operatore`, {
-    method: "POST",
-    headers: {
-      apikey: secretKey,
-      Authorization: `Bearer ${secretKey}`,
-      "Content-Type": "application/json",
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify({
-      pratica_id: praticaId,
-      azione: "operatore_correzione_stato",
-      nota,
-      stato_prima: statoPrima,
-      stato_dopo: statoDopo,
-    }),
-    cache: "no-store",
-  });
+  try {
+    const response = await fetch(
+      `${url}/rest/v1/azioni_operatore`,
+      {
+        method: "POST",
+        headers: {
+          apikey: secretKey,
+          Authorization: `Bearer ${secretKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({
+          pratica_id: praticaId,
+          azione: "operatore_correzione_stato",
+          nota,
+          stato_prima: statoPrima,
+          stato_dopo: statoDopo,
+        }),
+        cache: "no-store",
+      }
+    );
 
-  if (!response.ok) {
-    const dettaglio = await response.text();
-    throw new Error(
-      `Registrazione storico non riuscita (${response.status}): ${dettaglio}`
+    if (!response.ok) {
+      const dettaglio = await response.text();
+
+      console.error(
+        `Registrazione storico non riuscita (${response.status}): ${dettaglio}`
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Errore durante la registrazione dello storico:",
+      error
     );
   }
 }
 
-export async function correggiStatoCommercialeOperatore(formData: FormData) {
-  const praticaId = String(formData.get("pratica_id") || "").trim();
-  const stato = String(formData.get("stato") || "").trim();
-  const notaOperatore = String(formData.get("nota") || "").trim();
+/* ============================================================
+   CORREZIONE MANUALE STATO COMMERCIALE
+   ============================================================ */
+
+export async function correggiStatoCommercialeOperatore(
+  formData: FormData
+) {
+  const praticaId = String(
+    formData.get("pratica_id") || ""
+  ).trim();
+
+  const stato = String(
+    formData.get("stato") || ""
+  ).trim();
+
+  const notaOperatore = String(
+    formData.get("nota") || ""
+  ).trim();
 
   if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
     throw new Error("ID pratica non valido");
@@ -206,46 +277,92 @@ export async function correggiStatoCommercialeOperatore(formData: FormData) {
     modifiche.preventivo_inviato_at = null;
     modifiche.ordine_acquisito_at = null;
     modifiche.data_fattura = null;
+
     etichetta = "Da preventivare";
-  } else if (stato === "preventivo_inviato") {
+  }
+
+  if (stato === "preventivo_inviato") {
     modifiche.stato_commerciale = "preventivo_inviato";
     modifiche.stato_fatturazione = "non_applicabile";
-    modifiche.preventivo_inviato_at = prima.preventivo_inviato_at || adesso;
+
+    modifiche.preventivo_inviato_at =
+      prima.preventivo_inviato_at || adesso;
+
     modifiche.ordine_acquisito_at = null;
     modifiche.data_fattura = null;
+
     etichetta = "Preventivo inviato";
-  } else if (stato === "ordine_acquisito") {
+  }
+
+  if (stato === "ordine_acquisito") {
     modifiche.stato_commerciale = "ordine_acquisito";
     modifiche.stato_fatturazione = "da_fatturare";
-    modifiche.preventivo_inviato_at = prima.preventivo_inviato_at || adesso;
-    modifiche.ordine_acquisito_at = prima.ordine_acquisito_at || adesso;
+
+    modifiche.preventivo_inviato_at =
+      prima.preventivo_inviato_at || adesso;
+
+    modifiche.ordine_acquisito_at =
+      prima.ordine_acquisito_at || adesso;
+
     modifiche.data_fattura = null;
+
     etichetta = "Ordine acquisito / da fatturare";
-  } else if (stato === "fatturata") {
+  }
+
+  if (stato === "fatturata") {
     modifiche.stato_commerciale = "ordine_acquisito";
     modifiche.stato_fatturazione = "fatturato";
-    modifiche.preventivo_inviato_at = prima.preventivo_inviato_at || adesso;
-    modifiche.ordine_acquisito_at = prima.ordine_acquisito_at || adesso;
-    modifiche.data_fattura = prima.data_fattura || adesso;
+
+    modifiche.preventivo_inviato_at =
+      prima.preventivo_inviato_at || adesso;
+
+    modifiche.ordine_acquisito_at =
+      prima.ordine_acquisito_at || adesso;
+
+    modifiche.data_fattura =
+      prima.data_fattura || adesso;
+
     etichetta = "Fatturata";
   }
 
-  const dopo = await aggiornaPratica(praticaId, modifiche);
+  const dopo = await aggiornaPratica(
+    praticaId,
+    modifiche
+  );
 
   const nota = notaOperatore
     ? `Correzione manuale stato: ${etichetta}. ${notaOperatore}`
     : `Correzione manuale stato: ${etichetta}.`;
 
-  await registraCorrezioneStato(praticaId, prima, dopo, nota);
+  await registraCorrezioneStato(
+    praticaId,
+    prima,
+    dopo,
+    nota
+  );
 
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
 }
 
-export async function applicaAzioneOperatore(formData: FormData) {
-  const praticaId = String(formData.get("pratica_id") || "").trim();
-  const azione = String(formData.get("azione") || "").trim();
-  const nota = String(formData.get("nota") || "").trim();
+/* ============================================================
+   AZIONI OPERATORE
+   ============================================================ */
+
+export async function applicaAzioneOperatore(
+  formData: FormData
+) {
+  const praticaId = String(
+    formData.get("pratica_id") || ""
+  ).trim();
+
+  const azione = String(
+    formData.get("azione") || ""
+  ).trim();
+
+  const nota = String(
+    formData.get("nota") || ""
+  ).trim();
 
   if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
     throw new Error("ID pratica non valido");
@@ -255,20 +372,38 @@ export async function applicaAzioneOperatore(formData: FormData) {
     throw new Error("Azione non consentita");
   }
 
-  await chiamaRpc("applica_azione_operatore_estesa", {
-    p_pratica_id: praticaId,
-    p_azione: azione,
-    p_nota: nota || null,
-  });
+  await chiamaRpc(
+    "applica_azione_operatore_estesa",
+    {
+      p_pratica_id: praticaId,
+      p_azione: azione,
+      p_nota: nota || null,
+    }
+  );
 
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
 }
 
-export async function verificaCodiceOperatore(formData: FormData) {
-  const praticaId = String(formData.get("pratica_id") || "").trim();
-  const codice = String(formData.get("codice") || "").trim();
-  const esito = String(formData.get("esito") || "").trim();
+/* ============================================================
+   CODICI IDENTIFICATIVI
+   CONFERMA / SCARTA
+   ============================================================ */
+
+export async function verificaCodiceOperatore(
+  formData: FormData
+) {
+  const praticaId = String(
+    formData.get("pratica_id") || ""
+  ).trim();
+
+  const codice = String(
+    formData.get("codice") || ""
+  ).trim();
+
+  const esito = String(
+    formData.get("esito") || ""
+  ).trim();
 
   if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
     throw new Error("ID pratica non valido");
@@ -282,21 +417,42 @@ export async function verificaCodiceOperatore(formData: FormData) {
     throw new Error("Esito non consentito");
   }
 
-  await chiamaRpc("verifica_codice_operatore", {
-    p_pratica_id: praticaId,
-    p_codice: codice,
-    p_esito: esito,
-  });
+  await chiamaRpc(
+    "verifica_codice_operatore",
+    {
+      p_pratica_id: praticaId,
+      p_codice: codice,
+      p_esito: esito,
+    }
+  );
 
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
 }
 
-export async function aggiungiCodiceOperatore(formData: FormData) {
-  const praticaId = String(formData.get("pratica_id") || "").trim();
-  const codice = String(formData.get("codice") || "").trim();
-  const tipoCodice = String(formData.get("tipo_codice") || "Altro").trim();
-  const note = String(formData.get("note") || "").trim();
+/* ============================================================
+   CODICI IDENTIFICATIVI
+   AGGIUNTA CODICE CORRETTO OPERATORE
+   ============================================================ */
+
+export async function aggiungiCodiceOperatore(
+  formData: FormData
+) {
+  const praticaId = String(
+    formData.get("pratica_id") || ""
+  ).trim();
+
+  const codice = String(
+    formData.get("codice") || ""
+  ).trim();
+
+  const tipoCodice = String(
+    formData.get("tipo_codice") || "Altro"
+  ).trim();
+
+  const note = String(
+    formData.get("note") || ""
+  ).trim();
 
   if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
     throw new Error("ID pratica non valido");
@@ -306,73 +462,118 @@ export async function aggiungiCodiceOperatore(formData: FormData) {
     throw new Error("Inserire il codice corretto");
   }
 
-  await chiamaRpc("aggiungi_codice_operatore", {
-    p_pratica_id: praticaId,
-    p_codice: codice,
-    p_tipo_codice: tipoCodice || "Altro",
-    p_note: note || null,
-  });
+  await chiamaRpc(
+    "aggiungi_codice_operatore",
+    {
+      p_pratica_id: praticaId,
+      p_codice: codice,
+      p_tipo_codice: tipoCodice || "Altro",
+      p_note: note || null,
+    }
+  );
 
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
 }
 
+/* ============================================================
+   DTC / CODICI GUASTO
+   CONFERMA / SCARTA
 
-// ============================================================
-// DTC / CODICI GUASTO - VERIFICA OPERATORE
-// ============================================================
+   La modifica viene eseguita dalla RPC Supabase
+   verifica_dtc_operatore.
+   NON effettuiamo una seconda INSERT diretta nello storico,
+   evitando il 403 che abbiamo appena rilevato.
+   ============================================================ */
 
-export async function verificaDtcOperatore(formData: FormData) {
-  const praticaId = String(formData.get("pratica_id") || "").trim();
-  const codice = String(formData.get("codice") || "").trim();
-  const esito = String(formData.get("esito") || "").trim();
+export async function verificaDtcOperatore(
+  formData: FormData
+) {
+  const praticaId = String(
+    formData.get("pratica_id") || ""
+  ).trim();
+
+  const codice = String(
+    formData.get("codice") || ""
+  ).trim();
+
+  const esito = String(
+    formData.get("esito") || ""
+  ).trim();
 
   if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
     throw new Error("ID pratica non valido");
   }
 
   if (!codice) {
-    throw new Error("Codice DTC non valido");
+    throw new Error("DTC non valido");
   }
 
   if (!["confermato", "scartato"].includes(esito)) {
     throw new Error("Esito DTC non consentito");
   }
 
-  await chiamaRpc("verifica_dtc_operatore", {
-    p_pratica_id: praticaId,
-    p_codice: codice,
-    p_esito: esito,
-  });
+  await chiamaRpc(
+    "verifica_dtc_operatore",
+    {
+      p_pratica_id: praticaId,
+      p_codice: codice,
+      p_esito: esito,
+    }
+  );
 
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
 }
 
+/* ============================================================
+   DTC / CODICI GUASTO
+   AGGIUNTA DTC CORRETTO OPERATORE
+   ============================================================ */
 
-// ============================================================
-// DTC / CODICI GUASTO - AGGIUNTA MANUALE OPERATORE
-// ============================================================
+export async function aggiungiDtcOperatore(
+  formData: FormData
+) {
+  const praticaId = String(
+    formData.get("pratica_id") || ""
+  ).trim();
 
-export async function aggiungiDtcOperatore(formData: FormData) {
-  const praticaId = String(formData.get("pratica_id") || "").trim();
-  const codice = String(formData.get("codice") || "").trim();
-  const descrizione = String(formData.get("descrizione") || "").trim();
+  const codice = String(
+    formData.get("codice") || ""
+  ).trim();
+
+  const descrizione = String(
+    formData.get("descrizione") || ""
+  ).trim();
 
   if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
     throw new Error("ID pratica non valido");
   }
 
   if (!codice) {
-    throw new Error("Inserire il codice DTC corretto");
+    throw new Error("Inserire il DTC corretto");
   }
 
-  await chiamaRpc("aggiungi_dtc_operatore", {
-    p_pratica_id: praticaId,
-    p_codice: codice,
-    p_descrizione: descrizione || null,
-  });
+  await chiamaRpc(
+    "aggiungi_dtc_operatore",
+    {
+      p_pratica_id: praticaId,
+      p_codice: codice,
+      p_descrizione: descrizione || null,
+    }
+  );
 
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
 }
+
+/* ============================================================
+   ALIAS
+   Compatibilità nel caso page.tsx utilizzi DTC maiuscolo
+   ============================================================ */
+
+export const verificaDTCOperatore =
+  verificaDtcOperatore;
+
+export const aggiungiDTCOperatore =
+  aggiungiDtcOperatore;
