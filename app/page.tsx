@@ -11,6 +11,9 @@ type Pratica = {
   modello_veicolo: string | null;
   tipo_componente: string | null;
   stato_completezza: string;
+  fonte_completezza?: string | null;
+  stato_conferma_cliente?: "non_richiesta" | "in_attesa" | "confermato" | null;
+  conferma_cliente_at?: string | null;
   stato_commerciale: string;
   stato_fatturazione: string;
   stato_followup: string;
@@ -69,8 +72,67 @@ async function getPratiche(): Promise<{
       };
     }
 
+    const praticheBase = (await response.json()) as Pratica[];
+
+    // I campi di conferma cliente sono stati aggiunti a public.pratiche
+    // dopo la creazione della view v_coda_operatore.
+    // Li leggiamo separatamente e li uniamo per id, senza toccare la view.
+    const metaResponse = await fetch(
+      `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at`,
+      {
+        headers: {
+          apikey: secretKey,
+          Authorization: `Bearer ${secretKey}`,
+        },
+        cache: "no-store",
+      }
+    );
+
+    if (!metaResponse.ok) {
+      // La dashboard deve continuare a funzionare anche se i soli
+      // metadati di conferma cliente non fossero temporaneamente leggibili.
+      console.error(
+        "Metadati conferma cliente non disponibili:",
+        metaResponse.status,
+        await metaResponse.text()
+      );
+
+      return {
+        pratiche: praticheBase,
+        errore: null,
+      };
+    }
+
+    const metadati = (await metaResponse.json()) as Array<{
+      id: string;
+      fonte_completezza: string | null;
+      stato_conferma_cliente:
+        | "non_richiesta"
+        | "in_attesa"
+        | "confermato"
+        | null;
+      conferma_cliente_at: string | null;
+    }>;
+
+    const metadatiPerId = new Map(
+      metadati.map((riga) => [riga.id, riga])
+    );
+
+    const praticheComplete = praticheBase.map((pratica) => {
+      const meta = metadatiPerId.get(pratica.id);
+
+      return meta
+        ? {
+            ...pratica,
+            fonte_completezza: meta.fonte_completezza,
+            stato_conferma_cliente: meta.stato_conferma_cliente,
+            conferma_cliente_at: meta.conferma_cliente_at,
+          }
+        : pratica;
+    });
+
     return {
-      pratiche: (await response.json()) as Pratica[],
+      pratiche: praticheComplete,
       errore: null,
     };
   } catch (error) {
@@ -119,6 +181,31 @@ function formattaImporto(importo: number | null) {
     style: "currency",
     currency: "EUR",
   }).format(importo);
+}
+
+function statoConfermaClienteVisuale(
+  pratica: Pratica
+): "non_richiesta" | "in_attesa" | "confermato" {
+  if (pratica.stato_conferma_cliente === "confermato") {
+    return "confermato";
+  }
+
+  if (pratica.stato_conferma_cliente === "in_attesa") {
+    return "in_attesa";
+  }
+
+  // Finché non modifichiamo upsert_keplero_live, una pratica commerciale
+  // completata dall'AI viene mostrata come "in attesa" se non esiste
+  // ancora una conferma esplicita del cliente.
+  if (
+    pratica.tipo_flusso === "commerciale" &&
+    pratica.stato_completezza === "completa_da_preventivare" &&
+    pratica.fonte_completezza === "ai"
+  ) {
+    return "in_attesa";
+  }
+
+  return "non_richiesta";
 }
 
 function testoTipoAssistenza(tipo: string | null) {
@@ -636,13 +723,27 @@ export default async function Home({
                       </td>
 
                       <td className="px-4 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${badgeClass(
-                            pratica.coda
-                          )}`}
-                        >
-                          {pratica.coda}
-                        </span>
+                        <div className="flex flex-col items-start gap-2">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${badgeClass(
+                              pratica.coda
+                            )}`}
+                          >
+                            {pratica.coda}
+                          </span>
+
+                          {statoConfermaClienteVisuale(pratica) === "in_attesa" && (
+                            <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+                              Dati non confermati dal cliente
+                            </span>
+                          )}
+
+                          {statoConfermaClienteVisuale(pratica) === "confermato" && (
+                            <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-green-800">
+                              Dati confermati dal cliente
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="max-w-[320px] px-4 py-4 text-slate-700">
@@ -660,7 +761,18 @@ export default async function Home({
                             </div>
                           </div>
                         ) : (
-                          pratica.nota_incompletezza || "—"
+                          <div>
+                            <div>{pratica.nota_incompletezza || "—"}</div>
+
+                            {statoConfermaClienteVisuale(pratica) ===
+                              "confermato" &&
+                              pratica.conferma_cliente_at && (
+                                <div className="mt-1 text-xs font-semibold text-green-700">
+                                  Confermato dal cliente ·{" "}
+                                  {formattaData(pratica.conferma_cliente_at)}
+                                </div>
+                              )}
+                          </div>
                         )}
                       </td>
 
