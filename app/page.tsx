@@ -246,6 +246,19 @@ function formattaImporto(importo: number | null) {
 function statoConfermaClienteVisuale(
   pratica: Pratica
 ): "non_richiesta" | "in_attesa" | "confermato" {
+  // La conferma cliente è utile solo nelle fasi operative iniziali.
+  // Da preventivo inviato in avanti non deve più comparire come avviso,
+  // perché la pratica è già passata a una fase commerciale successiva.
+  const faseInizialeCommerciale =
+    pratica.tipo_flusso === "commerciale" &&
+    ["raccolta_dati", "richiesta_verifica", "da_preventivare"].includes(
+      pratica.stato_commerciale ?? ""
+    );
+
+  if (!faseInizialeCommerciale) {
+    return "non_richiesta";
+  }
+
   if (pratica.stato_conferma_cliente === "confermato") {
     return "confermato";
   }
@@ -258,7 +271,6 @@ function statoConfermaClienteVisuale(
   // completata dall'AI viene mostrata come "in attesa" se non esiste
   // ancora una conferma esplicita del cliente.
   if (
-    pratica.tipo_flusso === "commerciale" &&
     ["completa_da_preventivare", "dati_integrati_da_verificare"].includes(
       pratica.stato_completezza ?? ""
     ) &&
