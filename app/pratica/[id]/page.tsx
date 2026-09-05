@@ -45,6 +45,9 @@ type Pratica = {
   descrizione_guasto?: string | null;
   campi_bloccati_operatore?: string[] | null;
   stato_completezza?: string | null;
+  fonte_completezza?: string | null;
+  stato_conferma_cliente?: "non_richiesta" | "in_attesa" | "confermato" | null;
+  conferma_cliente_at?: string | null;
   stato_commerciale?: string | null;
   stato_fatturazione?: string | null;
   stato_followup?: string | null;
@@ -254,6 +257,19 @@ function titoloAssistenza(tipo?: string | null) {
   }
 }
 
+
+function etichettaConfermaCliente(value?: string | null) {
+  switch (value) {
+    case "in_attesa":
+      return "Dati non confermati dal cliente";
+    case "confermato":
+      return "Dati confermati dal cliente";
+    case "non_richiesta":
+      return "Conferma non richiesta";
+    default:
+      return "—";
+  }
+}
 
 function etichettaStato(value?: string | null) {
   if (!value) return "—";
@@ -493,6 +509,20 @@ export default async function PraticaPage({
     (item) => !["confermato", "scartato"].includes(item.esito)
   ).length;
 
+  const statoConfermaClienteVisuale:
+    | "non_richiesta"
+    | "in_attesa"
+    | "confermato" =
+    pratica.stato_conferma_cliente === "confermato"
+      ? "confermato"
+      : pratica.stato_conferma_cliente === "in_attesa"
+      ? "in_attesa"
+      : pratica.tipo_flusso === "commerciale" &&
+        pratica.stato_completezza === "completa_da_preventivare" &&
+        pratica.fonte_completezza === "ai"
+      ? "in_attesa"
+      : "non_richiesta";
+
   const allegatiVisualizzati =
     allegati.length > 0
       ? allegati
@@ -554,6 +584,21 @@ export default async function PraticaPage({
                   ? "ASSISTENZA"
                   : "COMMERCIALE"}
               </span>
+
+              {pratica.tipo_flusso === "commerciale" &&
+                statoConfermaClienteVisuale !== "non_richiesta" && (
+                  <span
+                    className={`rounded-full px-4 py-2 text-xs font-bold ${
+                      statoConfermaClienteVisuale === "confermato"
+                        ? "bg-green-100 text-green-800"
+                        : "bg-amber-100 text-amber-900"
+                    }`}
+                  >
+                    {statoConfermaClienteVisuale === "confermato"
+                      ? "DATI CONFERMATI DAL CLIENTE"
+                      : "DATI NON CONFERMATI DAL CLIENTE"}
+                  </span>
+                )}
 
               {pratica.tipo_flusso === "assistenza" && (
                 <span
@@ -1171,6 +1216,34 @@ export default async function PraticaPage({
                 </div>
               ) : (
                 <div>
+                  {statoConfermaClienteVisuale === "in_attesa" && (
+                    <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                      <div className="text-sm font-bold text-amber-950">
+                        Dati non confermati dal cliente
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-amber-900">
+                        Keplero ha raccolto dati sufficienti per la pratica, ma
+                        non abbiamo ancora una conferma esplicita del cliente.
+                        Lo stato commerciale non viene modificato da questo
+                        avviso.
+                      </p>
+                    </div>
+                  )}
+
+                  {statoConfermaClienteVisuale === "confermato" && (
+                    <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4">
+                      <div className="text-sm font-bold text-green-900">
+                        Dati confermati dal cliente
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-green-800">
+                        La conferma esplicita del cliente risulta registrata
+                        {pratica.conferma_cliente_at
+                          ? ` il ${formattaData(pratica.conferma_cliente_at)}`
+                          : ""}.
+                      </p>
+                    </div>
+                  )}
+
                   <div
                     className={`mb-4 rounded-xl border p-4 ${
                       codiciPronti
@@ -1466,6 +1539,16 @@ export default async function PraticaPage({
             <Card titolo="Stato pratica">
               <div className="space-y-4">
                 <Campo label="Completezza" value={etichettaStato(pratica.stato_completezza)} />
+                <Campo
+                  label="Conferma cliente"
+                  value={etichettaConfermaCliente(statoConfermaClienteVisuale)}
+                />
+                {pratica.conferma_cliente_at && (
+                  <Campo
+                    label="Confermata il"
+                    value={formattaData(pratica.conferma_cliente_at)}
+                  />
+                )}
                 <Campo label="Stato commerciale" value={etichettaStato(pratica.stato_commerciale)} />
                 <Campo label="Fatturazione" value={etichettaStato(pratica.stato_fatturazione)} />
                 <Campo label="Logistica" value={etichettaStato(pratica.stato_logistica)} />
@@ -1504,6 +1587,10 @@ export default async function PraticaPage({
 
             <Card titolo="Controllo operatore">
               <div className="space-y-4">
+                <Campo
+                  label="Fonte completezza"
+                  value={etichettaStato(pratica.fonte_completezza)}
+                />
                 <Campo
                   label="Classificazione"
                   value={etichettaStato(pratica.fonte_classificazione)}
