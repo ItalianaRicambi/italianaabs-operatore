@@ -217,6 +217,7 @@ function formattaData(data?: string | null) {
   return new Intl.DateTimeFormat("it-IT", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Europe/Rome",
   }).format(new Date(data));
 }
 
