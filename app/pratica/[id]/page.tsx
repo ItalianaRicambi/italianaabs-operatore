@@ -1287,8 +1287,18 @@ export default async function PraticaPage({
                     azione="commerciale_richiesta_verifica"
                     label="Richiesta verifiche / attesa risposta"
                     className="bg-yellow-100 text-yellow-900 hover:bg-yellow-200"
-                    disabilitata={pratica.stato_commerciale === "richiesta_verifica"}
-                    motivoDisabilitata="Stato attuale"
+                    disabilitata={
+                      pratica.stato_commerciale === "richiesta_verifica" ||
+                      ["preventivo_inviato", "ordine_acquisito", "rifiutato"].includes(
+                        pratica.stato_commerciale ?? ""
+                      ) ||
+                      pratica.stato_fatturazione === "fatturato"
+                    }
+                    motivoDisabilitata={
+                      pratica.stato_commerciale === "richiesta_verifica"
+                        ? "Stato attuale"
+                        : "Bloccato: pratica già avanzata"
+                    }
                   />
 
                   <AzioneOperatore
@@ -1296,8 +1306,18 @@ export default async function PraticaPage({
                     azione="commerciale_dati_mancanti"
                     label="Dati mancanti"
                     className="bg-slate-200 text-slate-900 hover:bg-slate-300"
-                    disabilitata={pratica.stato_completezza === "dati_mancanti"}
-                    motivoDisabilitata="Stato attuale"
+                    disabilitata={
+                      pratica.stato_completezza === "dati_mancanti" ||
+                      ["preventivo_inviato", "ordine_acquisito", "rifiutato"].includes(
+                        pratica.stato_commerciale ?? ""
+                      ) ||
+                      pratica.stato_fatturazione === "fatturato"
+                    }
+                    motivoDisabilitata={
+                      pratica.stato_completezza === "dati_mancanti"
+                        ? "Stato attuale"
+                        : "Bloccato: pratica già avanzata"
+                    }
                   />
 
                   <AzioneOperatore
@@ -1307,11 +1327,19 @@ export default async function PraticaPage({
                     className="bg-orange-100 text-orange-900 hover:bg-orange-200"
                     disabilitata={
                       pratica.stato_commerciale === "da_preventivare" ||
+                      ["preventivo_inviato", "ordine_acquisito", "rifiutato"].includes(
+                        pratica.stato_commerciale ?? ""
+                      ) ||
+                      pratica.stato_fatturazione === "fatturato" ||
                       !codiciPronti
                     }
                     motivoDisabilitata={
                       pratica.stato_commerciale === "da_preventivare"
                         ? "Stato attuale"
+                        : ["preventivo_inviato", "ordine_acquisito", "rifiutato"].includes(
+                            pratica.stato_commerciale ?? ""
+                          ) || pratica.stato_fatturazione === "fatturato"
+                        ? "Bloccato: pratica già avanzata"
                         : "Bloccato: verifica codici"
                     }
                   />
@@ -1323,11 +1351,20 @@ export default async function PraticaPage({
                     className="bg-blue-600 text-white hover:bg-blue-700"
                     disabilitata={
                       pratica.stato_commerciale === "preventivo_inviato" ||
+                      pratica.stato_commerciale === "ordine_acquisito" ||
+                      pratica.stato_commerciale === "rifiutato" ||
+                      pratica.stato_fatturazione === "fatturato" ||
                       !codiciPronti
                     }
                     motivoDisabilitata={
                       pratica.stato_commerciale === "preventivo_inviato"
                         ? "Stato attuale"
+                        : pratica.stato_commerciale === "ordine_acquisito"
+                        ? "Bloccato: ordine già acquisito"
+                        : pratica.stato_fatturazione === "fatturato"
+                        ? "Bloccato: pratica già fatturata"
+                        : pratica.stato_commerciale === "rifiutato"
+                        ? "Bloccato: lavorazione rifiutata"
                         : "Bloccato: verifica codici"
                     }
                   />
@@ -1338,10 +1375,13 @@ export default async function PraticaPage({
                     label="Ordine acquisito"
                     className="bg-red-100 text-red-900 hover:bg-red-200"
                     disabilitata={
-                      pratica.stato_commerciale !== "preventivo_inviato"
+                      pratica.stato_commerciale !== "preventivo_inviato" ||
+                      pratica.stato_fatturazione === "fatturato"
                     }
                     motivoDisabilitata={
-                      pratica.stato_commerciale === "ordine_acquisito"
+                      pratica.stato_fatturazione === "fatturato"
+                        ? "Bloccato: pratica già fatturata"
+                        : pratica.stato_commerciale === "ordine_acquisito"
                         ? "Completato"
                         : "Bloccato: prima invia il preventivo"
                     }
@@ -1368,8 +1408,18 @@ export default async function PraticaPage({
                     azione="commerciale_rifiuta_lavorazione"
                     label="Rifiuta lavorazione"
                     className="bg-red-600 text-white hover:bg-red-700"
-                    disabilitata={pratica.stato_commerciale === "rifiutato"}
-                    motivoDisabilitata="Stato attuale"
+                    disabilitata={
+                      pratica.stato_commerciale === "rifiutato" ||
+                      pratica.stato_commerciale === "ordine_acquisito" ||
+                      pratica.stato_fatturazione === "fatturato"
+                    }
+                    motivoDisabilitata={
+                      pratica.stato_commerciale === "rifiutato"
+                        ? "Stato attuale"
+                        : pratica.stato_fatturazione === "fatturato"
+                        ? "Bloccato: pratica già fatturata"
+                        : "Bloccato: ordine già acquisito"
+                    }
                   />
                   </div>
 
