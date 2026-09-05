@@ -199,7 +199,9 @@ function statoConfermaClienteVisuale(
   // ancora una conferma esplicita del cliente.
   if (
     pratica.tipo_flusso === "commerciale" &&
-    pratica.stato_completezza === "completa_da_preventivare" &&
+    ["completa_da_preventivare", "dati_integrati_da_verificare"].includes(
+      pratica.stato_completezza ?? ""
+    ) &&
     pratica.fonte_completezza === "ai"
   ) {
     return "in_attesa";
