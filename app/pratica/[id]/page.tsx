@@ -518,7 +518,9 @@ export default async function PraticaPage({
       : pratica.stato_conferma_cliente === "in_attesa"
       ? "in_attesa"
       : pratica.tipo_flusso === "commerciale" &&
-        pratica.stato_completezza === "completa_da_preventivare" &&
+        ["completa_da_preventivare", "dati_integrati_da_verificare"].includes(
+          pratica.stato_completezza ?? ""
+        ) &&
         pratica.fonte_completezza === "ai"
       ? "in_attesa"
       : "non_richiesta";
