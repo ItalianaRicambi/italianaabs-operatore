@@ -509,21 +509,26 @@ export default async function PraticaPage({
     (item) => !["confermato", "scartato"].includes(item.esito)
   ).length;
 
+  const faseInizialeConfermaCliente =
+    pratica.tipo_flusso === "commerciale" &&
+    ["raccolta_dati", "richiesta_verifica", "da_preventivare"].includes(
+      pratica.stato_commerciale ?? ""
+    );
+
   const statoConfermaClienteVisuale:
     | "non_richiesta"
     | "in_attesa"
-    | "confermato" =
-    pratica.stato_conferma_cliente === "confermato"
-      ? "confermato"
-      : pratica.stato_conferma_cliente === "in_attesa"
-      ? "in_attesa"
-      : pratica.tipo_flusso === "commerciale" &&
-        ["completa_da_preventivare", "dati_integrati_da_verificare"].includes(
-          pratica.stato_completezza ?? ""
-        ) &&
-        pratica.fonte_completezza === "ai"
-      ? "in_attesa"
-      : "non_richiesta";
+    | "confermato" = !faseInizialeConfermaCliente
+    ? "non_richiesta"
+    : pratica.stato_conferma_cliente === "confermato"
+    ? "confermato"
+    : pratica.stato_conferma_cliente === "in_attesa"
+    ? "in_attesa"
+    : ["completa_da_preventivare", "dati_integrati_da_verificare"].includes(
+        pratica.stato_completezza ?? ""
+      ) && pratica.fonte_completezza === "ai"
+    ? "in_attesa"
+    : "non_richiesta";
 
   const allegatiVisualizzati =
     allegati.length > 0
