@@ -14,6 +14,7 @@ type Pratica = {
   fonte_completezza?: string | null;
   stato_conferma_cliente?: "non_richiesta" | "in_attesa" | "confermato" | null;
   conferma_cliente_at?: string | null;
+  da_preventivare_at?: string | null;
   stato_commerciale: string;
   stato_fatturazione: string;
   stato_followup: string;
@@ -83,13 +84,21 @@ function correggiCodaOperativa(pratica: Pratica): Pratica {
   };
 }
 
+function timestampOrdineCoda(pratica: Pratica) {
+  if (pratica.coda === "DA PREVENTIVARE" && pratica.da_preventivare_at) {
+    return new Date(pratica.da_preventivare_at).getTime();
+  }
+
+  return new Date(pratica.created_at).getTime();
+}
+
 function ordinaCodaOperativa(pratiche: Pratica[]) {
   return [...pratiche].sort((a, b) => {
     if (a.priorita !== b.priorita) {
       return a.priorita - b.priorita;
     }
 
-    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    return timestampOrdineCoda(a) - timestampOrdineCoda(b);
   });
 }
 
@@ -132,7 +141,7 @@ async function getPratiche(): Promise<{
     // dopo la creazione della view v_coda_operatore.
     // Li leggiamo separatamente e li uniamo per id, senza toccare la view.
     const metaResponse = await fetch(
-      `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at`,
+      `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at`,
       {
         headers: {
           apikey: secretKey,
@@ -168,6 +177,7 @@ async function getPratiche(): Promise<{
         | "confermato"
         | null;
       conferma_cliente_at: string | null;
+      da_preventivare_at: string | null;
     }>;
 
     const metadatiPerId = new Map(
@@ -183,6 +193,7 @@ async function getPratiche(): Promise<{
             fonte_completezza: meta.fonte_completezza,
             stato_conferma_cliente: meta.stato_conferma_cliente,
             conferma_cliente_at: meta.conferma_cliente_at,
+            da_preventivare_at: meta.da_preventivare_at,
           }
         : pratica;
     });
@@ -241,6 +252,55 @@ function formattaImporto(importo: number | null) {
     style: "currency",
     currency: "EUR",
   }).format(importo);
+}
+
+function attesaDaPreventivare(pratica: Pratica) {
+  if (pratica.coda !== "DA PREVENTIVARE" || !pratica.da_preventivare_at) {
+    return null;
+  }
+
+  const inizio = new Date(pratica.da_preventivare_at).getTime();
+  if (!Number.isFinite(inizio)) return null;
+
+  const minuti = Math.max(0, Math.floor((Date.now() - inizio) / 60000));
+  const ore = Math.floor(minuti / 60);
+  const minutiResidui = minuti % 60;
+
+  const durata =
+    ore > 0
+      ? `${ore}h ${String(minutiResidui).padStart(2, "0")}m`
+      : `${minuti} min`;
+
+  if (minuti >= 60) {
+    return {
+      minuti,
+      durata,
+      livello: "urgente" as const,
+      label: `URGENTE · in attesa da ${durata}`,
+      badgeClass: "bg-red-100 text-red-800 ring-1 ring-red-200",
+      rowClass: "bg-red-50/70 hover:bg-red-100",
+    };
+  }
+
+  if (minuti >= 30) {
+    return {
+      minuti,
+      durata,
+      livello: "attenzione" as const,
+      label: `ATTENZIONE · in attesa da ${durata}`,
+      badgeClass: "bg-amber-100 text-amber-900 ring-1 ring-amber-200",
+      rowClass: "bg-amber-50/60 hover:bg-amber-100",
+    };
+  }
+
+  return {
+    minuti,
+    durata,
+    livello: "normale" as const,
+    label: `In attesa da ${durata}`,
+    badgeClass: "bg-green-100 text-green-800 ring-1 ring-green-200",
+    rowClass: "hover:bg-slate-50",
+  };
 }
 
 function statoConfermaClienteVisuale(
@@ -499,6 +559,10 @@ export default async function Home({
   const datiMancanti = conta(pratiche, "DATI MANCANTI");
   const daVerificare = conta(pratiche, "DATI INTEGRATI - DA VERIFICARE");
   const daPreventivare = conta(pratiche, "DA PREVENTIVARE");
+  const preventiviUrgenti = pratiche.filter((pratica) => {
+    const attesa = attesaDaPreventivare(pratica);
+    return attesa?.livello === "urgente";
+  }).length;
   const preventiviInviati = conta(pratiche, "PREVENTIVO INVIATO");
   const daFatturare = conta(pratiche, "ORDINE ACQUISITO - DA FATTURARE");
   const fatturate = conta(pratiche, "FATTURATA");
@@ -588,8 +652,14 @@ export default async function Home({
             <DashboardFilterCard
               titolo="Da preventivare"
               valore={daPreventivare}
-              descrizione="Dati completi, offerta da preparare"
-              className="border-orange-300"
+              descrizione={
+                preventiviUrgenti > 0
+                  ? `${preventiviUrgenti} ${
+                      preventiviUrgenti === 1 ? "pratica oltre 60 min" : "pratiche oltre 60 min"
+                    }`
+                  : "Dati completi, offerta da preparare"
+              }
+              className={preventiviUrgenti > 0 ? "border-red-500" : "border-orange-300"}
               href={hrefConFiltro("da_preventivare")}
               attiva={filtroAttivo === "da_preventivare"}
             />
@@ -733,11 +803,12 @@ export default async function Home({
                   {praticheFiltrate.map((pratica) => (
                     <tr
                       key={pratica.id}
-                      className={
+                      className={`transition ${
                         pratica.coda === "ASSISTENZA PRIORITARIA"
-                          ? "bg-red-50 transition hover:bg-red-100"
-                          : "transition hover:bg-slate-50"
-                      }
+                          ? "bg-red-50 hover:bg-red-100"
+                          : attesaDaPreventivare(pratica)?.rowClass ||
+                            "hover:bg-slate-50"
+                      }`}
                     >
                       <td className="px-4 py-4">
                         <span
@@ -806,6 +877,19 @@ export default async function Home({
                             {pratica.coda}
                           </span>
 
+                          {attesaDaPreventivare(pratica) && (
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                                attesaDaPreventivare(pratica)!.badgeClass
+                              }`}
+                              title={`Ingresso in Da preventivare: ${formattaData(
+                                pratica.da_preventivare_at || null
+                              )}`}
+                            >
+                              {attesaDaPreventivare(pratica)!.label}
+                            </span>
+                          )}
+
                           {statoConfermaClienteVisuale(pratica) === "in_attesa" && (
                             <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-900">
                               Dati non confermati dal cliente
@@ -837,6 +921,13 @@ export default async function Home({
                         ) : (
                           <div>
                             <div>{pratica.nota_incompletezza || "—"}</div>
+
+                            {pratica.coda === "DA PREVENTIVARE" &&
+                              pratica.da_preventivare_at && (
+                                <div className="mt-1 text-xs font-semibold text-slate-500">
+                                  Da preventivare dal {formattaData(pratica.da_preventivare_at)}
+                                </div>
+                              )}
 
                             {statoConfermaClienteVisuale(pratica) ===
                               "confermato" &&
