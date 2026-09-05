@@ -39,6 +39,60 @@ type Pratica = {
   assistenza_chiusa_at: string | null;
 };
 
+
+function correggiCodaOperativa(pratica: Pratica): Pratica {
+  // Le code assistenza sono già corrette nella view e restano intatte.
+  if (pratica.tipo_flusso === "assistenza") {
+    return pratica;
+  }
+
+  let coda = pratica.coda;
+  let priorita = pratica.priorita;
+
+  // Stato terminale: il rifiuto prevale su qualunque altro dato storico.
+  if (pratica.stato_commerciale === "rifiutato") {
+    coda = "RIFIUTATA";
+    priorita = 99;
+  } else if (pratica.stato_fatturazione === "fatturato") {
+    // Una pratica fatturata non deve competere con attività ancora da svolgere.
+    coda = "FATTURATA";
+    priorita = 10;
+  } else if (pratica.stato_fatturazione === "da_fatturare") {
+    // La fatturazione prevale sul vecchio stato commerciale (es. preventivo_inviato).
+    coda = "ORDINE ACQUISITO - DA FATTURARE";
+    priorita = 3;
+  } else if (pratica.stato_commerciale === "preventivo_inviato") {
+    coda = "PREVENTIVO INVIATO";
+    priorita = 9;
+  } else if (pratica.stato_completezza === "completa_da_preventivare") {
+    // Il preventivo è il primo lavoro commerciale da eseguire dopo le urgenze assolute.
+    coda = "DA PREVENTIVARE";
+    priorita = 2;
+  } else if (pratica.stato_completezza === "dati_integrati_da_verificare") {
+    coda = "DATI INTEGRATI - DA VERIFICARE";
+    priorita = 6;
+  } else if (pratica.stato_completezza === "dati_mancanti") {
+    coda = "DATI MANCANTI";
+    priorita = 8;
+  }
+
+  return {
+    ...pratica,
+    coda,
+    priorita,
+  };
+}
+
+function ordinaCodaOperativa(pratiche: Pratica[]) {
+  return [...pratiche].sort((a, b) => {
+    if (a.priorita !== b.priorita) {
+      return a.priorita - b.priorita;
+    }
+
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+}
+
 async function getPratiche(): Promise<{
   pratiche: Pratica[];
   errore: string | null;
@@ -98,7 +152,9 @@ async function getPratiche(): Promise<{
       );
 
       return {
-        pratiche: praticheBase,
+        pratiche: ordinaCodaOperativa(
+          praticheBase.map(correggiCodaOperativa)
+        ),
         errore: null,
       };
     }
@@ -131,8 +187,12 @@ async function getPratiche(): Promise<{
         : pratica;
     });
 
+    const praticheCorrette = ordinaCodaOperativa(
+      praticheComplete.map(correggiCodaOperativa)
+    );
+
     return {
-      pratiche: praticheComplete,
+      pratiche: praticheCorrette,
       errore: null,
     };
   } catch (error) {
