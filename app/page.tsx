@@ -15,6 +15,7 @@ type Pratica = {
   stato_conferma_cliente?: "non_richiesta" | "in_attesa" | "confermato" | null;
   conferma_cliente_at?: string | null;
   da_preventivare_at?: string | null;
+  da_verificare_at?: string | null;
   stato_commerciale: string;
   stato_fatturazione: string;
   stato_followup: string;
@@ -89,6 +90,13 @@ function timestampOrdineCoda(pratica: Pratica) {
     return new Date(pratica.da_preventivare_at).getTime();
   }
 
+  if (
+    pratica.coda === "DATI INTEGRATI - DA VERIFICARE" &&
+    pratica.da_verificare_at
+  ) {
+    return new Date(pratica.da_verificare_at).getTime();
+  }
+
   return new Date(pratica.created_at).getTime();
 }
 
@@ -141,7 +149,7 @@ async function getPratiche(): Promise<{
     // dopo la creazione della view v_coda_operatore.
     // Li leggiamo separatamente e li uniamo per id, senza toccare la view.
     const metaResponse = await fetch(
-      `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at`,
+      `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at,da_verificare_at`,
       {
         headers: {
           apikey: secretKey,
@@ -178,6 +186,7 @@ async function getPratiche(): Promise<{
         | null;
       conferma_cliente_at: string | null;
       da_preventivare_at: string | null;
+      da_verificare_at: string | null;
     }>;
 
     const metadatiPerId = new Map(
@@ -194,6 +203,7 @@ async function getPratiche(): Promise<{
             stato_conferma_cliente: meta.stato_conferma_cliente,
             conferma_cliente_at: meta.conferma_cliente_at,
             da_preventivare_at: meta.da_preventivare_at,
+            da_verificare_at: meta.da_verificare_at,
           }
         : pratica;
     });
@@ -298,6 +308,62 @@ function attesaDaPreventivare(pratica: Pratica) {
     durata,
     livello: "normale" as const,
     label: `In attesa da ${durata}`,
+    badgeClass: "bg-green-100 text-green-800 ring-1 ring-green-200",
+    rowClass: "hover:bg-slate-50",
+  };
+}
+
+function attesaDaVerificare(pratica: Pratica) {
+  if (
+    pratica.coda !== "DATI INTEGRATI - DA VERIFICARE" ||
+    !pratica.da_verificare_at
+  ) {
+    return null;
+  }
+
+  const inizio = new Date(pratica.da_verificare_at).getTime();
+  if (!Number.isFinite(inizio)) return null;
+
+  const minuti = Math.max(0, Math.floor((Date.now() - inizio) / 60000));
+  const oreTotali = Math.floor(minuti / 60);
+  const giorni = Math.floor(oreTotali / 24);
+  const oreResidue = oreTotali % 24;
+  const minutiResidui = minuti % 60;
+
+  const durata =
+    giorni > 0
+      ? `${giorni}g ${oreResidue}h`
+      : oreTotali > 0
+      ? `${oreTotali}h ${String(minutiResidui).padStart(2, "0")}m`
+      : `${minuti} min`;
+
+  if (minuti >= 24 * 60) {
+    return {
+      minuti,
+      durata,
+      livello: "urgente" as const,
+      label: `URGENTE · da verificare da ${durata}`,
+      badgeClass: "bg-red-100 text-red-800 ring-1 ring-red-200",
+      rowClass: "bg-red-50/70 hover:bg-red-100",
+    };
+  }
+
+  if (minuti >= 4 * 60) {
+    return {
+      minuti,
+      durata,
+      livello: "attenzione" as const,
+      label: `ATTENZIONE · da verificare da ${durata}`,
+      badgeClass: "bg-amber-100 text-amber-900 ring-1 ring-amber-200",
+      rowClass: "bg-amber-50/60 hover:bg-amber-100",
+    };
+  }
+
+  return {
+    minuti,
+    durata,
+    livello: "normale" as const,
+    label: `Da verificare da ${durata}`,
     badgeClass: "bg-green-100 text-green-800 ring-1 ring-green-200",
     rowClass: "hover:bg-slate-50",
   };
@@ -558,6 +624,14 @@ export default async function Home({
 
   const datiMancanti = conta(pratiche, "DATI MANCANTI");
   const daVerificare = conta(pratiche, "DATI INTEGRATI - DA VERIFICARE");
+  const verificheUrgenti = pratiche.filter((pratica) => {
+    const attesa = attesaDaVerificare(pratica);
+    return attesa?.livello === "urgente";
+  }).length;
+  const verificheAttenzione = pratiche.filter((pratica) => {
+    const attesa = attesaDaVerificare(pratica);
+    return attesa?.livello === "attenzione";
+  }).length;
   const daPreventivare = conta(pratiche, "DA PREVENTIVARE");
   const preventiviUrgenti = pratiche.filter((pratica) => {
     const attesa = attesaDaPreventivare(pratica);
@@ -644,8 +718,28 @@ export default async function Home({
             <DashboardFilterCard
               titolo="Da verificare"
               valore={daVerificare}
-              descrizione="Nuovi dati dopo intervento operatore"
-              className="border-yellow-300"
+              descrizione={
+                verificheUrgenti > 0
+                  ? `${verificheUrgenti} ${
+                      verificheUrgenti === 1
+                        ? "pratica oltre 24 ore"
+                        : "pratiche oltre 24 ore"
+                    }`
+                  : verificheAttenzione > 0
+                  ? `${verificheAttenzione} ${
+                      verificheAttenzione === 1
+                        ? "pratica oltre 4 ore"
+                        : "pratiche oltre 4 ore"
+                    }`
+                  : "Nuovi dati dopo intervento operatore"
+              }
+              className={
+                verificheUrgenti > 0
+                  ? "border-red-500"
+                  : verificheAttenzione > 0
+                  ? "border-amber-400"
+                  : "border-yellow-300"
+              }
               href={hrefConFiltro("da_verificare")}
               attiva={filtroAttivo === "da_verificare"}
             />
@@ -807,6 +901,7 @@ export default async function Home({
                         pratica.coda === "ASSISTENZA PRIORITARIA"
                           ? "bg-red-50 hover:bg-red-100"
                           : attesaDaPreventivare(pratica)?.rowClass ||
+                            attesaDaVerificare(pratica)?.rowClass ||
                             "hover:bg-slate-50"
                       }`}
                     >
@@ -890,6 +985,19 @@ export default async function Home({
                             </span>
                           )}
 
+                          {attesaDaVerificare(pratica) && (
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                                attesaDaVerificare(pratica)!.badgeClass
+                              }`}
+                              title={`Ingresso in Da verificare: ${formattaData(
+                                pratica.da_verificare_at || null
+                              )}`}
+                            >
+                              {attesaDaVerificare(pratica)!.label}
+                            </span>
+                          )}
+
                           {statoConfermaClienteVisuale(pratica) === "in_attesa" && (
                             <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-900">
                               Dati non confermati dal cliente
@@ -926,6 +1034,13 @@ export default async function Home({
                               pratica.da_preventivare_at && (
                                 <div className="mt-1 text-xs font-semibold text-slate-500">
                                   Da preventivare dal {formattaData(pratica.da_preventivare_at)}
+                                </div>
+                              )}
+
+                            {pratica.coda === "DATI INTEGRATI - DA VERIFICARE" &&
+                              pratica.da_verificare_at && (
+                                <div className="mt-1 text-xs font-semibold text-slate-500">
+                                  Da verificare dal {formattaData(pratica.da_verificare_at)}
                                 </div>
                               )}
 
