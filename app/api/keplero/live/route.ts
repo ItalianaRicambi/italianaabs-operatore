@@ -19,6 +19,66 @@ function bool(value: unknown) {
   return ["1", "true", "vero", "si", "sì", "yes", "completo"].includes(v);
 }
 
+function boolTriState(value: unknown): boolean | null {
+  if (value === null || value === undefined) return null;
+
+  if (typeof value === "boolean") return value;
+
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+
+  const v = testo(value).toLowerCase();
+
+  if (!v) return null;
+
+  if (
+    [
+      "1",
+      "true",
+      "vero",
+      "si",
+      "sì",
+      "yes",
+      "presente",
+      "presenti",
+      "accesa",
+      "accese",
+      "acceso",
+      "effettuata",
+      "effettuato",
+      "disponibile",
+    ].includes(v)
+  ) {
+    return true;
+  }
+
+  if (
+    [
+      "0",
+      "false",
+      "falso",
+      "no",
+      "none",
+      "nessuna",
+      "nessuno",
+      "assente",
+      "assenti",
+      "spenta",
+      "spente",
+      "spento",
+      "non effettuata",
+      "non effettuato",
+      "non disponibile",
+    ].includes(v)
+  ) {
+    return false;
+  }
+
+  return null;
+}
+
 function lista(value: unknown) {
   if (Array.isArray(value)) {
     return value.map(testo).filter(Boolean);
@@ -213,6 +273,37 @@ export async function POST(request: NextRequest) {
 
     /*
      * ============================================================
+     * SPIE / DIAGNOSI
+     * ============================================================
+     */
+
+    const spieAccese = boolTriState(
+      primo(
+        body,
+        "spie_accese",
+        "spie_cruscotto",
+        "warning_lights",
+        "dashboard_lights"
+      )
+    );
+
+    const diagnosiDichiarata = boolTriState(
+      primo(
+        body,
+        "diagnosi_presente",
+        "diagnosi_effettuata",
+        "diagnosi_disponibile",
+        "diagnosis_present"
+      )
+    );
+
+    const diagnosiPresente =
+      dtc.length > 0
+        ? true
+        : diagnosiDichiarata;
+
+    /*
+     * ============================================================
      * ALLEGATI
      * ============================================================
      */
@@ -319,7 +410,7 @@ export async function POST(request: NextRequest) {
      * ============================================================
      */
 
-    const datiCompleti = bool(
+    let datiCompleti = bool(
       primo(
         body,
         "dati_completi",
@@ -327,6 +418,53 @@ export async function POST(request: NextRequest) {
         "richiesta_completa"
       )
     );
+
+    const descrizioneGuasto =
+      testo(
+        primo(
+          body,
+          "descrizione_guasto",
+          "problema",
+          "riepilogo_operativo",
+          "richiesta"
+        )
+      ) || null;
+
+    let motivoIncompletezza =
+      testo(
+        primo(
+          body,
+          "motivo_incompletezza",
+          "dati_mancanti",
+          "nota_incompletezza"
+        )
+      ) || null;
+
+    if (tipoFlusso === "commerciale") {
+      if (spieAccese === true && dtc.length === 0) {
+        datiCompleti = false;
+
+        motivoIncompletezza =
+          motivoIncompletezza ||
+          "Spie accese: servono i codici guasto DTC rilevati in diagnosi.";
+      }
+
+      if (spieAccese === false && !descrizioneGuasto) {
+        datiCompleti = false;
+
+        motivoIncompletezza =
+          motivoIncompletezza ||
+          "Nessuna spia accesa: serve una descrizione chiara del comportamento o del guasto.";
+      }
+    }
+
+    const payloadNormalizzato = {
+      ...body,
+      spie_accese: spieAccese,
+      diagnosi_presente: diagnosiPresente,
+      dati_completi: datiCompleti,
+      motivo_incompletezza: motivoIncompletezza,
+    };
 
     const rpcBody = {
       p_external_key: key,
@@ -396,15 +534,7 @@ export async function POST(request: NextRequest) {
         ) || "ABS",
 
       p_descrizione_guasto:
-        testo(
-          primo(
-            body,
-            "descrizione_guasto",
-            "problema",
-            "riepilogo_operativo",
-            "richiesta"
-          )
-        ) || null,
+        descrizioneGuasto,
 
       p_ultimo_messaggio_cliente:
         testo(
@@ -429,14 +559,7 @@ export async function POST(request: NextRequest) {
         datiCompleti,
 
       p_motivo_incompletezza:
-        testo(
-          primo(
-            body,
-            "motivo_incompletezza",
-            "dati_mancanti",
-            "nota_incompletezza"
-          )
-        ) || null,
+        motivoIncompletezza,
 
       p_codici:
         codici,
@@ -448,7 +571,7 @@ export async function POST(request: NextRequest) {
         allegati,
 
       p_payload:
-        body,
+        payloadNormalizzato,
     };
 
     /*
@@ -510,6 +633,12 @@ export async function POST(request: NextRequest) {
 
           dati_completi:
             datiCompleti,
+
+          spie_accese:
+            spieAccese,
+
+          diagnosi_presente:
+            diagnosiPresente,
 
           numero_codici:
             codici.length,
