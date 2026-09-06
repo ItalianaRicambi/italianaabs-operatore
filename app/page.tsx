@@ -70,6 +70,11 @@ function correggiCodaOperativa(pratica: Pratica): Pratica {
   } else if (pratica.stato_commerciale === "preventivo_inviato") {
     coda = "PREVENTIVO INVIATO";
     priorita = 9;
+  } else if (pratica.stato_commerciale === "richiesta_verifica") {
+    // L'operatore ha chiesto verifiche al cliente: la pratica resta in attesa
+    // e NON deve competere con le vere pratiche "Da verificare".
+    coda = "RICHIESTE VERIFICHE - ATTESA CLIENTE";
+    priorita = 7;
   } else if (pratica.stato_completezza === "completa_da_preventivare") {
     // Il preventivo è il primo lavoro commerciale da eseguire dopo le urgenze assolute.
     coda = "DA PREVENTIVARE";
@@ -538,6 +543,8 @@ function badgeClass(coda: string) {
       return "bg-orange-100 text-orange-800";
     case "DATI INTEGRATI - DA VERIFICARE":
       return "bg-yellow-100 text-yellow-800";
+    case "RICHIESTE VERIFICHE - ATTESA CLIENTE":
+      return "bg-cyan-100 text-cyan-800";
     case "INCOMPLETA - OPERATORE":
       return "bg-rose-100 text-rose-800";
     case "DATI MANCANTI":
@@ -595,6 +602,12 @@ function filtraPratiche(pratiche: Pratica[], filtro: string) {
         (pratica) => pratica.coda === "DATI INTEGRATI - DA VERIFICARE"
       );
 
+    case "richieste_verifiche":
+      return pratiche.filter(
+        (pratica) =>
+          pratica.coda === "RICHIESTE VERIFICHE - ATTESA CLIENTE"
+      );
+
     case "da_preventivare":
       return pratiche.filter((pratica) => pratica.coda === "DA PREVENTIVARE");
 
@@ -624,6 +637,8 @@ function labelFiltro(filtro: string) {
       return "Dati mancanti";
     case "da_verificare":
       return "Da verificare";
+    case "richieste_verifiche":
+      return "Richieste verifiche / Attesa cliente";
     case "da_preventivare":
       return "Da preventivare";
     case "preventivi_inviati":
@@ -694,6 +709,10 @@ export default async function Home({
 
   const datiMancanti = conta(pratiche, "DATI MANCANTI");
   const daVerificare = conta(pratiche, "DATI INTEGRATI - DA VERIFICARE");
+  const richiesteVerifiche = conta(
+    pratiche,
+    "RICHIESTE VERIFICHE - ATTESA CLIENTE"
+  );
   const verificheUrgenti = pratiche.filter((pratica) => {
     const attesa = attesaDaVerificare(pratica);
     return attesa?.livello === "urgente";
@@ -776,7 +795,7 @@ export default async function Home({
             Commerciale / Amministrazione
           </h2>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
             <DashboardFilterCard
               titolo="Dati mancanti"
               valore={datiMancanti}
@@ -812,6 +831,14 @@ export default async function Home({
               }
               href={hrefConFiltro("da_verificare")}
               attiva={filtroAttivo === "da_verificare"}
+            />
+            <DashboardFilterCard
+              titolo="Richieste verifiche"
+              valore={richiesteVerifiche}
+              descrizione="Verifiche richieste al cliente, in attesa di risposta"
+              className="border-cyan-400"
+              href={hrefConFiltro("richieste_verifiche")}
+              attiva={filtroAttivo === "richieste_verifiche"}
             />
             <DashboardFilterCard
               titolo="Da preventivare"
@@ -1101,6 +1128,13 @@ export default async function Home({
                         ) : (
                           <div>
                             <div>{pratica.nota_incompletezza || "—"}</div>
+
+                            {pratica.coda ===
+                              "RICHIESTE VERIFICHE - ATTESA CLIENTE" && (
+                              <div className="mt-1 text-xs font-semibold text-cyan-700">
+                                Verifiche richieste al cliente · in attesa di risposta
+                              </div>
+                            )}
 
                             {pratica.coda === "DA PREVENTIVARE" &&
                               pratica.da_preventivare_at && (
