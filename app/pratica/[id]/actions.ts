@@ -251,6 +251,67 @@ export async function correggiStatoCommercialeOperatore(
 
   const adesso = new Date().toISOString();
 
+  const statoCommercialePrima = String(
+    prima.stato_commerciale || ""
+  );
+
+  const statoFatturazionePrima = String(
+    prima.stato_fatturazione || ""
+  );
+
+  const preventivoInviatoAtPrima =
+    typeof prima.preventivo_inviato_at === "string" &&
+    prima.preventivo_inviato_at
+      ? prima.preventivo_inviato_at
+      : null;
+
+  const ordineAcquisitoAtPrima =
+    typeof prima.ordine_acquisito_at === "string" &&
+    prima.ordine_acquisito_at
+      ? prima.ordine_acquisito_at
+      : null;
+
+  const dataFatturaPrima =
+    typeof prima.data_fattura === "string" &&
+    prima.data_fattura
+      ? prima.data_fattura
+      : null;
+
+  /*
+   * ============================================================
+   * PROTEZIONE CONTRO LE RETROCESSIONI COMMERCIALI
+   * ============================================================
+   *
+   * - una pratica fatturata non può tornare a stati precedenti;
+   * - un ordine già acquisito non può tornare a
+   *   "Da preventivare" o "Preventivo inviato".
+   *
+   * Le correzioni idempotenti sullo stesso stato restano possibili.
+   */
+
+  if (
+    statoFatturazionePrima === "fatturato" &&
+    stato !== "fatturata"
+  ) {
+    throw new Error(
+      "La pratica è già fatturata e non può essere riportata a uno stato commerciale precedente."
+    );
+  }
+
+  const ordineGiaAcquisito =
+    statoCommercialePrima === "ordine_acquisito" ||
+    ordineAcquisitoAtPrima !== null;
+
+  if (
+    ordineGiaAcquisito &&
+    (stato === "da_preventivare" ||
+      stato === "preventivo_inviato")
+  ) {
+    throw new Error(
+      "L'ordine è già acquisito e non può essere riportato a Da preventivare o Preventivo inviato."
+    );
+  }
+
   const modifiche: Record<string, unknown> = {
     tipo_flusso: "commerciale",
     fonte_classificazione: "operatore",
@@ -285,7 +346,7 @@ export async function correggiStatoCommercialeOperatore(
       "non_applicabile";
 
     modifiche.preventivo_inviato_at =
-      prima.preventivo_inviato_at || adesso;
+      preventivoInviatoAtPrima || adesso;
 
     modifiche.ordine_acquisito_at = null;
     modifiche.data_fattura = null;
@@ -294,6 +355,23 @@ export async function correggiStatoCommercialeOperatore(
   }
 
   if (stato === "ordine_acquisito") {
+    /*
+     * Se l'ordine esiste già, ne preserviamo il timestamp.
+     * Se manca il timestamp del preventivo, NON usiamo "adesso"
+     * (che potrebbe risultare successivo all'ordine): lo allineiamo
+     * al timestamp dell'ordine, mantenendo una sequenza coerente.
+     *
+     * Se invece stiamo acquisendo l'ordine per la prima volta,
+     * entrambi i timestamp mancanti vengono valorizzati nello
+     * stesso istante.
+     */
+    const ordineAcquisitoAt =
+      ordineAcquisitoAtPrima || adesso;
+
+    const preventivoInviatoAt =
+      preventivoInviatoAtPrima ||
+      ordineAcquisitoAt;
+
     modifiche.stato_commerciale =
       "ordine_acquisito";
 
@@ -301,10 +379,10 @@ export async function correggiStatoCommercialeOperatore(
       "da_fatturare";
 
     modifiche.preventivo_inviato_at =
-      prima.preventivo_inviato_at || adesso;
+      preventivoInviatoAt;
 
     modifiche.ordine_acquisito_at =
-      prima.ordine_acquisito_at || adesso;
+      ordineAcquisitoAt;
 
     modifiche.data_fattura = null;
 
@@ -313,6 +391,24 @@ export async function correggiStatoCommercialeOperatore(
   }
 
   if (stato === "fatturata") {
+    /*
+     * Anche qui preserviamo sempre i timestamp esistenti.
+     * Se manca un timestamp storico, lo ricostruiamo senza creare
+     * una sequenza impossibile:
+     *
+     * preventivo <= ordine <= fattura
+     */
+    const dataFattura =
+      dataFatturaPrima || adesso;
+
+    const ordineAcquisitoAt =
+      ordineAcquisitoAtPrima ||
+      dataFattura;
+
+    const preventivoInviatoAt =
+      preventivoInviatoAtPrima ||
+      ordineAcquisitoAt;
+
     modifiche.stato_commerciale =
       "ordine_acquisito";
 
@@ -320,13 +416,13 @@ export async function correggiStatoCommercialeOperatore(
       "fatturato";
 
     modifiche.preventivo_inviato_at =
-      prima.preventivo_inviato_at || adesso;
+      preventivoInviatoAt;
 
     modifiche.ordine_acquisito_at =
-      prima.ordine_acquisito_at || adesso;
+      ordineAcquisitoAt;
 
     modifiche.data_fattura =
-      prima.data_fattura || adesso;
+      dataFattura;
 
     etichetta = "Fatturata";
   }
