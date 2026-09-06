@@ -16,6 +16,8 @@ type Pratica = {
   conferma_cliente_at?: string | null;
   da_preventivare_at?: string | null;
   da_verificare_at?: string | null;
+  timer_preventivo_started_at?: string | null;
+  minuti_attesa_lavorativi?: number | null;
   minuti_lavorativi_preventivo?: number | null;
   minuti_lavorativi_verifica?: number | null;
   stato_commerciale: string;
@@ -128,7 +130,7 @@ async function getPratiche(): Promise<{
 
   try {
     const response = await fetch(
-      `${url}/rest/v1/v_coda_operatore?select=*&order=priorita.asc,created_at.asc`,
+      `${url}/rest/v1/v_coda_operatore_tempi?select=*&order=priorita.asc,created_at.asc`,
       {
         headers: {
           apikey: secretKey,
@@ -145,11 +147,27 @@ async function getPratiche(): Promise<{
       };
     }
 
-    const praticheBase = (await response.json()) as Pratica[];
+    const praticheBaseRaw = (await response.json()) as Pratica[];
 
-    // I campi di conferma cliente sono stati aggiunti a public.pratiche
-    // dopo la creazione della view v_coda_operatore.
-    // Li leggiamo separatamente e li uniamo per id, senza toccare la view.
+    // v_coda_operatore_tempi aggiunge il timer commerciale con i nomi
+    // minuti_attesa_lavorativi e timer_preventivo_started_at.
+    // Li normalizziamo sui campi già usati dalla dashboard, così tutti
+    // i semafori esistenti continuano a funzionare senza duplicare logica.
+    const praticheBase = praticheBaseRaw.map((pratica) => ({
+      ...pratica,
+      da_preventivare_at:
+        pratica.da_preventivare_at ??
+        pratica.timer_preventivo_started_at ??
+        null,
+      minuti_lavorativi_preventivo:
+        pratica.minuti_attesa_lavorativi ??
+        pratica.minuti_lavorativi_preventivo ??
+        null,
+    }));
+
+    // I campi di conferma cliente sono letti direttamente da public.pratiche
+    // e uniti per id. In questo modo la dashboard resta compatibile anche
+    // con campi aggiunti dopo la creazione delle view operative.
     const metaResponse = await fetch(
       `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at,da_verificare_at`,
       {
@@ -196,9 +214,9 @@ async function getPratiche(): Promise<{
     );
 
     // I semafori devono usare minuti LAVORATIVI, non tempo di calendario.
-    // La view usa la funzione centrale public.minuti_lavorativi_trascorsi(),
-    // quindi notti, pausa pranzo, weekend e chiusure aziendali non fanno
-    // avanzare il contatore.
+    // Il timer preventivo arriva già da v_coda_operatore_tempi.
+    // Manteniamo v_tempi_operativi_dashboard per il timer "Da verificare"
+    // e come fallback compatibile per il preventivo.
     const tempiResponse = await fetch(
       `${url}/rest/v1/v_tempi_operativi_dashboard?select=id,minuti_lavorativi_preventivo,minuti_lavorativi_verifica`,
       {
@@ -250,14 +268,14 @@ async function getPratiche(): Promise<{
               da_verificare_at: meta.da_verificare_at,
             }
           : {}),
-        ...(tempi
-          ? {
-              minuti_lavorativi_preventivo:
-                tempi.minuti_lavorativi_preventivo,
-              minuti_lavorativi_verifica:
-                tempi.minuti_lavorativi_verifica,
-            }
-          : {}),
+        minuti_lavorativi_preventivo:
+          pratica.minuti_lavorativi_preventivo ??
+          tempi?.minuti_lavorativi_preventivo ??
+          null,
+        minuti_lavorativi_verifica:
+          tempi?.minuti_lavorativi_verifica ??
+          pratica.minuti_lavorativi_verifica ??
+          null,
       };
     });
 
