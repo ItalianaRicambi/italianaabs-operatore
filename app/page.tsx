@@ -134,6 +134,7 @@ async function getPratiche(): Promise<{
       {
         headers: {
           apikey: secretKey,
+          Authorization: `Bearer ${secretKey}`,
         },
         cache: "no-store",
       }
