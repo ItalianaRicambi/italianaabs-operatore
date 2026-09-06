@@ -16,6 +16,8 @@ type Pratica = {
   conferma_cliente_at?: string | null;
   da_preventivare_at?: string | null;
   da_verificare_at?: string | null;
+  minuti_lavorativi_preventivo?: number | null;
+  minuti_lavorativi_verifica?: number | null;
   stato_commerciale: string;
   stato_fatturazione: string;
   stato_followup: string;
@@ -193,19 +195,70 @@ async function getPratiche(): Promise<{
       metadati.map((riga) => [riga.id, riga])
     );
 
+    // I semafori devono usare minuti LAVORATIVI, non tempo di calendario.
+    // La view usa la funzione centrale public.minuti_lavorativi_trascorsi(),
+    // quindi notti, pausa pranzo, weekend e chiusure aziendali non fanno
+    // avanzare il contatore.
+    const tempiResponse = await fetch(
+      `${url}/rest/v1/v_tempi_operativi_dashboard?select=id,minuti_lavorativi_preventivo,minuti_lavorativi_verifica`,
+      {
+        headers: {
+          apikey: secretKey,
+          Authorization: `Bearer ${secretKey}`,
+        },
+        cache: "no-store",
+      }
+    );
+
+    let tempiPerId = new Map<
+      string,
+      {
+        id: string;
+        minuti_lavorativi_preventivo: number | null;
+        minuti_lavorativi_verifica: number | null;
+      }
+    >();
+
+    if (!tempiResponse.ok) {
+      console.error(
+        "Tempi lavorativi dashboard non disponibili:",
+        tempiResponse.status,
+        await tempiResponse.text()
+      );
+    } else {
+      const tempi = (await tempiResponse.json()) as Array<{
+        id: string;
+        minuti_lavorativi_preventivo: number | null;
+        minuti_lavorativi_verifica: number | null;
+      }>;
+
+      tempiPerId = new Map(tempi.map((riga) => [riga.id, riga]));
+    }
+
     const praticheComplete = praticheBase.map((pratica) => {
       const meta = metadatiPerId.get(pratica.id);
+      const tempi = tempiPerId.get(pratica.id);
 
-      return meta
-        ? {
-            ...pratica,
-            fonte_completezza: meta.fonte_completezza,
-            stato_conferma_cliente: meta.stato_conferma_cliente,
-            conferma_cliente_at: meta.conferma_cliente_at,
-            da_preventivare_at: meta.da_preventivare_at,
-            da_verificare_at: meta.da_verificare_at,
-          }
-        : pratica;
+      return {
+        ...pratica,
+        ...(meta
+          ? {
+              fonte_completezza: meta.fonte_completezza,
+              stato_conferma_cliente: meta.stato_conferma_cliente,
+              conferma_cliente_at: meta.conferma_cliente_at,
+              da_preventivare_at: meta.da_preventivare_at,
+              da_verificare_at: meta.da_verificare_at,
+            }
+          : {}),
+        ...(tempi
+          ? {
+              minuti_lavorativi_preventivo:
+                tempi.minuti_lavorativi_preventivo,
+              minuti_lavorativi_verifica:
+                tempi.minuti_lavorativi_verifica,
+            }
+          : {}),
+      };
     });
 
     const praticheCorrette = ordinaCodaOperativa(
@@ -266,14 +319,16 @@ function formattaImporto(importo: number | null) {
 }
 
 function attesaDaPreventivare(pratica: Pratica) {
-  if (pratica.coda !== "DA PREVENTIVARE" || !pratica.da_preventivare_at) {
+  if (
+    pratica.coda !== "DA PREVENTIVARE" ||
+    pratica.minuti_lavorativi_preventivo === null ||
+    pratica.minuti_lavorativi_preventivo === undefined ||
+    !Number.isFinite(pratica.minuti_lavorativi_preventivo)
+  ) {
     return null;
   }
 
-  const inizio = new Date(pratica.da_preventivare_at).getTime();
-  if (!Number.isFinite(inizio)) return null;
-
-  const minuti = Math.max(0, Math.floor((Date.now() - inizio) / 60000));
+  const minuti = Math.max(0, Math.floor(pratica.minuti_lavorativi_preventivo));
   const ore = Math.floor(minuti / 60);
   const minutiResidui = minuti % 60;
 
@@ -287,7 +342,7 @@ function attesaDaPreventivare(pratica: Pratica) {
       minuti,
       durata,
       livello: "urgente" as const,
-      label: `URGENTE · in attesa da ${durata}`,
+      label: `URGENTE · ${durata} lavorativi`,
       badgeClass: "bg-red-100 text-red-800 ring-1 ring-red-200",
       rowClass: "bg-red-50/70 hover:bg-red-100",
     };
@@ -298,7 +353,7 @@ function attesaDaPreventivare(pratica: Pratica) {
       minuti,
       durata,
       livello: "attenzione" as const,
-      label: `ATTENZIONE · in attesa da ${durata}`,
+      label: `ATTENZIONE · ${durata} lavorativi`,
       badgeClass: "bg-amber-100 text-amber-900 ring-1 ring-amber-200",
       rowClass: "bg-amber-50/60 hover:bg-amber-100",
     };
@@ -308,7 +363,7 @@ function attesaDaPreventivare(pratica: Pratica) {
     minuti,
     durata,
     livello: "normale" as const,
-    label: `In attesa da ${durata}`,
+    label: `${durata} lavorativi`,
     badgeClass: "bg-green-100 text-green-800 ring-1 ring-green-200",
     rowClass: "hover:bg-slate-50",
   };
@@ -317,24 +372,19 @@ function attesaDaPreventivare(pratica: Pratica) {
 function attesaDaVerificare(pratica: Pratica) {
   if (
     pratica.coda !== "DATI INTEGRATI - DA VERIFICARE" ||
-    !pratica.da_verificare_at
+    pratica.minuti_lavorativi_verifica === null ||
+    pratica.minuti_lavorativi_verifica === undefined ||
+    !Number.isFinite(pratica.minuti_lavorativi_verifica)
   ) {
     return null;
   }
 
-  const inizio = new Date(pratica.da_verificare_at).getTime();
-  if (!Number.isFinite(inizio)) return null;
-
-  const minuti = Math.max(0, Math.floor((Date.now() - inizio) / 60000));
+  const minuti = Math.max(0, Math.floor(pratica.minuti_lavorativi_verifica));
   const oreTotali = Math.floor(minuti / 60);
-  const giorni = Math.floor(oreTotali / 24);
-  const oreResidue = oreTotali % 24;
   const minutiResidui = minuti % 60;
 
   const durata =
-    giorni > 0
-      ? `${giorni}g ${oreResidue}h`
-      : oreTotali > 0
+    oreTotali > 0
       ? `${oreTotali}h ${String(minutiResidui).padStart(2, "0")}m`
       : `${minuti} min`;
 
@@ -343,7 +393,7 @@ function attesaDaVerificare(pratica: Pratica) {
       minuti,
       durata,
       livello: "urgente" as const,
-      label: `URGENTE · da verificare da ${durata}`,
+      label: `URGENTE · ${durata} lavorative`,
       badgeClass: "bg-red-100 text-red-800 ring-1 ring-red-200",
       rowClass: "bg-red-50/70 hover:bg-red-100",
     };
@@ -354,7 +404,7 @@ function attesaDaVerificare(pratica: Pratica) {
       minuti,
       durata,
       livello: "attenzione" as const,
-      label: `ATTENZIONE · da verificare da ${durata}`,
+      label: `ATTENZIONE · ${durata} lavorative`,
       badgeClass: "bg-amber-100 text-amber-900 ring-1 ring-amber-200",
       rowClass: "bg-amber-50/60 hover:bg-amber-100",
     };
@@ -364,7 +414,7 @@ function attesaDaVerificare(pratica: Pratica) {
     minuti,
     durata,
     livello: "normale" as const,
-    label: `Da verificare da ${durata}`,
+    label: `${durata} lavorative`,
     badgeClass: "bg-green-100 text-green-800 ring-1 ring-green-200",
     rowClass: "hover:bg-slate-50",
   };
@@ -723,14 +773,14 @@ export default async function Home({
                 verificheUrgenti > 0
                   ? `${verificheUrgenti} ${
                       verificheUrgenti === 1
-                        ? "pratica oltre 24 ore"
-                        : "pratiche oltre 24 ore"
+                        ? "pratica oltre 24 ore lavorative"
+                        : "pratiche oltre 24 ore lavorative"
                     }`
                   : verificheAttenzione > 0
                   ? `${verificheAttenzione} ${
                       verificheAttenzione === 1
-                        ? "pratica oltre 4 ore"
-                        : "pratiche oltre 4 ore"
+                        ? "pratica oltre 4 ore lavorative"
+                        : "pratiche oltre 4 ore lavorative"
                     }`
                   : "Nuovi dati dopo intervento operatore"
               }
@@ -750,7 +800,9 @@ export default async function Home({
               descrizione={
                 preventiviUrgenti > 0
                   ? `${preventiviUrgenti} ${
-                      preventiviUrgenti === 1 ? "pratica oltre 60 min" : "pratiche oltre 60 min"
+                      preventiviUrgenti === 1
+                        ? "pratica oltre 60 min lavorativi"
+                        : "pratiche oltre 60 min lavorativi"
                     }`
                   : "Dati completi, offerta da preparare"
               }
