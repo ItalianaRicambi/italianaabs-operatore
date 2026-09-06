@@ -128,41 +128,86 @@ function primo(body: Body, ...keys: string[]) {
   return null;
 }
 
+function normalizzaTelefono(value: unknown) {
+  return testo(value).replace(/[^0-9]/g, "");
+}
+
+function hashBreve(value: string) {
+  return createHash("sha256")
+    .update(value)
+    .digest("hex")
+    .slice(0, 32);
+}
+
 function externalKey(body: Body, conversationId: string) {
-  if (uuidValido(conversationId)) {
-    return `conversation:${conversationId}`;
+  /*
+   * PRIORITA 1: identificatore reale della conversazione.
+   *
+   * Non imponiamo che sia per forza un UUID per costruire external_key:
+   * se Keplero in futuro invia un ID stabile non-UUID, lo possiamo comunque
+   * usare per riconoscere la stessa conversazione.
+   */
+  if (conversationId) {
+    if (uuidValido(conversationId)) {
+      return `conversation:${conversationId}`;
+    }
+
+    return `conversation:${hashBreve(conversationId)}`;
   }
 
   const channel =
-    testo(primo(body, "channel", "canale")) || "keplero";
+    testo(primo(body, "channel", "canale"))
+      .toLowerCase() || "keplero";
 
-  const telefono =
-    testo(primo(body, "telefono", "phone", "whatsapp"));
-
-  const targa =
-    normalizzaTarga(primo(body, "targa", "plate"));
-
-  const nome =
-    testo(primo(body, "nome_cliente", "cliente", "nome"));
-
-  // Fallback stabile nella stessa giornata.
-  // Se Keplero espone il conversation_id, verrà usato quello.
   const giorno = new Date().toISOString().slice(0, 10);
 
-  const base = [
-    channel,
-    telefono,
-    targa,
-    nome,
-    giorno,
-  ].join("|");
+  /*
+   * PRIORITA 2: telefono/WhatsApp.
+   *
+   * Nel canale WhatsApp reale è il dato più stabile:
+   * NON deve cambiare quando arrivano targa, nome cliente, DTC,
+   * codici identificativi o altre informazioni successive.
+   */
+  const telefono = normalizzaTelefono(
+    primo(body, "telefono", "phone", "whatsapp")
+  );
 
-  const hash = createHash("sha256")
-    .update(base)
-    .digest("hex")
-    .slice(0, 32);
+  if (telefono) {
+    return `fallback:${hashBreve(
+      [channel, "telefono", telefono, giorno].join("|")
+    )}`;
+  }
 
-  return `fallback:${hash}`;
+  /*
+   * PRIORITA 3: targa.
+   *
+   * Serve soprattutto per il simulatore Keplero, dove il telefono
+   * può non essere disponibile. La targa è normalizzata e il nome
+   * cliente NON entra più nella chiave: quindi l'arrivo successivo
+   * del nome dell'officina non crea una nuova pratica.
+   */
+  const targa = normalizzaTarga(
+    primo(body, "targa", "plate")
+  );
+
+  if (targa) {
+    return `fallback:${hashBreve(
+      [channel, "targa", targa, giorno].join("|")
+    )}`;
+  }
+
+  /*
+   * ULTIMO FALLBACK.
+   *
+   * Senza conversation_id, telefono o targa non esiste nel payload
+   * un identificatore realmente stabile della conversazione.
+   * Manteniamo quindi una chiave anonima giornaliera solo come
+   * ultima protezione, evitando di usare nome/descrizione/DTC:
+   * sono dati mutabili e farebbero cambiare external_key.
+   */
+  return `fallback:${hashBreve(
+    [channel, "anonimo", giorno].join("|")
+  )}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -213,15 +258,25 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as Body;
 
-    const conversationId = testo(
-      primo(
-        body,
-        "conversation_id",
-        "keplero_conversation_id",
-        "session_id",
-        "conversationId"
-      )
-    );
+    const conversationId =
+      testo(
+        primo(
+          body,
+          "conversation_id",
+          "keplero_conversation_id",
+          "session_id",
+          "conversationId",
+          "chat_id",
+          "chatId",
+          "thread_id",
+          "threadId"
+        )
+      ) ||
+      testo(
+        request.headers.get("x-keplero-conversation-id") ||
+        request.headers.get("x-conversation-id") ||
+        request.headers.get("x-session-id")
+      );
 
     const targa = normalizzaTarga(
       primo(body, "targa", "plate")
