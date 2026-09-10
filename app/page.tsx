@@ -446,38 +446,23 @@ function attesaDaVerificare(pratica: Pratica) {
 
 function statoConfermaClienteVisuale(
   pratica: Pratica
-): "non_richiesta" | "in_attesa" | "confermato" {
-  // La conferma cliente è utile solo nelle fasi operative iniziali.
-  // Da preventivo inviato in avanti non deve più comparire come avviso,
-  // perché la pratica è già passata a una fase commerciale successiva.
+): "non_richiesta" | "confermato" {
+  // FIX_CONFERMA_RIEPILOGO_UI_20260911: modifica soltanto la presentazione.
+  // Il nuovo flusso non richiede la conferma del riepilogo per procedere.
+  // Un vecchio "in_attesa" o la completezza AI non generano piu un avviso.
+  // I valori registrati nel database e le azioni operatore restano invariati.
+  // Manteniamo le conferme gia registrate nelle stesse fasi di prima.
   const faseInizialeCommerciale =
     pratica.tipo_flusso === "commerciale" &&
     ["raccolta_dati", "richiesta_verifica", "da_preventivare"].includes(
       pratica.stato_commerciale ?? ""
     );
 
-  if (!faseInizialeCommerciale) {
-    return "non_richiesta";
-  }
-
-  if (pratica.stato_conferma_cliente === "confermato") {
-    return "confermato";
-  }
-
-  if (pratica.stato_conferma_cliente === "in_attesa") {
-    return "in_attesa";
-  }
-
-  // Finché non modifichiamo upsert_keplero_live, una pratica commerciale
-  // completata dall'AI viene mostrata come "in attesa" se non esiste
-  // ancora una conferma esplicita del cliente.
   if (
-    ["completa_da_preventivare", "dati_integrati_da_verificare"].includes(
-      pratica.stato_completezza ?? ""
-    ) &&
-    pratica.fonte_completezza === "ai"
+    faseInizialeCommerciale &&
+    pratica.stato_conferma_cliente === "confermato"
   ) {
-    return "in_attesa";
+    return "confermato";
   }
 
   return "non_richiesta";
@@ -1094,12 +1079,6 @@ export default async function Home({
                               )}`}
                             >
                               {attesaDaVerificare(pratica)!.label}
-                            </span>
-                          )}
-
-                          {statoConfermaClienteVisuale(pratica) === "in_attesa" && (
-                            <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-900">
-                              Dati non confermati dal cliente
                             </span>
                           )}
 
