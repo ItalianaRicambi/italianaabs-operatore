@@ -261,12 +261,10 @@ function titoloAssistenza(tipo?: string | null) {
 
 function etichettaConfermaCliente(value?: string | null) {
   switch (value) {
-    case "in_attesa":
-      return "Dati non confermati dal cliente";
     case "confermato":
       return "Dati confermati dal cliente";
     case "non_richiesta":
-      return "Conferma non richiesta";
+      return "Conferma del riepilogo non richiesta";
     default:
       return "—";
   }
@@ -516,20 +514,15 @@ export default async function PraticaPage({
       pratica.stato_commerciale ?? ""
     );
 
-  const statoConfermaClienteVisuale:
-    | "non_richiesta"
-    | "in_attesa"
-    | "confermato" = !faseInizialeConfermaCliente
-    ? "non_richiesta"
-    : pratica.stato_conferma_cliente === "confermato"
-    ? "confermato"
-    : pratica.stato_conferma_cliente === "in_attesa"
-    ? "in_attesa"
-    : ["completa_da_preventivare", "dati_integrati_da_verificare"].includes(
-        pratica.stato_completezza ?? ""
-      ) && pratica.fonte_completezza === "ai"
-    ? "in_attesa"
-    : "non_richiesta";
+  // FIX_CONFERMA_RIEPILOGO_UI_20260911: modifica soltanto la presentazione.
+  // Il riepilogo non richiede conferma; il vecchio stato "in_attesa" resta
+  // nel database ma non genera un avviso operativo. Le conferme registrate
+  // restano visibili nelle stesse fasi di prima. Codici e azioni sono separati.
+  const statoConfermaClienteVisuale: "non_richiesta" | "confermato" =
+    faseInizialeConfermaCliente &&
+    pratica.stato_conferma_cliente === "confermato"
+      ? "confermato"
+      : "non_richiesta";
 
   const allegatiVisualizzati =
     allegati.length > 0
@@ -594,17 +587,9 @@ export default async function PraticaPage({
               </span>
 
               {pratica.tipo_flusso === "commerciale" &&
-                statoConfermaClienteVisuale !== "non_richiesta" && (
-                  <span
-                    className={`rounded-full px-4 py-2 text-xs font-bold ${
-                      statoConfermaClienteVisuale === "confermato"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-amber-100 text-amber-900"
-                    }`}
-                  >
-                    {statoConfermaClienteVisuale === "confermato"
-                      ? "DATI CONFERMATI DAL CLIENTE"
-                      : "DATI NON CONFERMATI DAL CLIENTE"}
+                statoConfermaClienteVisuale === "confermato" && (
+                  <span className="rounded-full px-4 py-2 text-xs font-bold bg-green-100 text-green-800">
+                    DATI CONFERMATI DAL CLIENTE
                   </span>
                 )}
 
@@ -1224,20 +1209,6 @@ export default async function PraticaPage({
                 </div>
               ) : (
                 <div>
-                  {statoConfermaClienteVisuale === "in_attesa" && (
-                    <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
-                      <div className="text-sm font-bold text-amber-950">
-                        Dati non confermati dal cliente
-                      </div>
-                      <p className="mt-1 text-xs leading-5 text-amber-900">
-                        Keplero ha raccolto dati sufficienti per la pratica, ma
-                        non abbiamo ancora una conferma esplicita del cliente.
-                        Lo stato commerciale non viene modificato da questo
-                        avviso.
-                      </p>
-                    </div>
-                  )}
-
                   {statoConfermaClienteVisuale === "confermato" && (
                     <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4">
                       <div className="text-sm font-bold text-green-900">
