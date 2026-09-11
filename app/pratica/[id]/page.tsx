@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { NavigazionePratica } from "../../components/NavigazionePratiche";
 import { notFound } from "next/navigation";
 import {
   aggiungiCodiceOperatore,
@@ -351,10 +351,17 @@ function rawString(raw: Record<string, unknown> | null | undefined, key: string)
 
 export default async function PraticaPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{
+    nav?: string | string[];
+    filtro?: string | string[];
+    cerca?: string | string[];
+  }>;
 }) {
   const { id } = await params;
+  const navigazione = (await searchParams) || {};
   const {
     pratica,
     codici,
@@ -548,14 +555,13 @@ export default async function PraticaPage({
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-[1500px] px-6 py-8">
-        <div className="mb-6">
-          <Link
-            href="/"
-            className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-          >
-            ← Torna alla dashboard
-          </Link>
-        </div>
+        <NavigazionePratica
+          key={`alto-${pratica.id}`}
+          praticaId={pratica.id}
+          nav={navigazione.nav}
+          filtro={navigazione.filtro}
+          cerca={navigazione.cerca}
+        />
 
         <header className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -1676,6 +1682,14 @@ export default async function PraticaPage({
             </Card>
           </aside>
         </div>
+        <NavigazionePratica
+          key={`basso-${pratica.id}`}
+          praticaId={pratica.id}
+          nav={navigazione.nav}
+          filtro={navigazione.filtro}
+          cerca={navigazione.cerca}
+          posizione="basso"
+        />
       </div>
     </main>
   );
