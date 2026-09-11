@@ -1,4 +1,9 @@
 import Link from "next/link";
+import { randomUUID } from "node:crypto";
+import {
+  ApriPraticaConContesto,
+  ContestoNavigazioneElenco,
+} from "./components/NavigazionePratiche";
 
 type Pratica = {
   id: string;
@@ -669,6 +674,14 @@ export default async function Home({
       )
     : praticheFiltratePerStato;
 
+  // NAVIGAZIONE_PRATICHE_V1_20260911: sequenza esatta DOPO filtro e ricerca.
+  // Il componente riceve id/codice e filtro/ricerca, non payload o credenziali.
+  const chiaveNavigazione = randomUUID();
+  const vociNavigazione = praticheFiltrate.map((pratica) => ({
+    id: pratica.id,
+    codice: pratica.codice_pratica,
+  }));
+
   const hrefConFiltro = (filtro: string) => {
     const query = new URLSearchParams();
 
@@ -716,6 +729,13 @@ export default async function Home({
   const fatturate = conta(pratiche, "FATTURATA");
 
   return (
+    <ContestoNavigazioneElenco
+      chiave={chiaveNavigazione}
+      filtro={filtroAttivo}
+      etichetta={labelFiltro(filtroAttivo)}
+      cerca={cercaAttiva}
+      voci={vociNavigazione}
+    >
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-[1750px] px-6 py-8">
         <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -981,6 +1001,7 @@ export default async function Home({
                   {praticheFiltrate.map((pratica) => (
                     <tr
                       key={pratica.id}
+                      id={`pratica-${pratica.id}`}
                       className={`transition ${
                         pratica.coda === "ASSISTENZA PRIORITARIA"
                           ? "bg-red-50 hover:bg-red-100"
@@ -1000,15 +1021,15 @@ export default async function Home({
                       </td>
 
                       <td className="px-4 py-4 font-semibold text-slate-950">
-                        <Link
-                          href={`/pratica/${pratica.id}`}
+                        <ApriPraticaConContesto
+                          praticaId={pratica.id}
                           className="inline-flex flex-col rounded-lg px-2 py-1 -mx-2 -my-1 transition hover:bg-blue-50 hover:text-blue-700"
                         >
                           <span>{pratica.codice_pratica}</span>
                           <span className="mt-1 text-[10px] font-bold uppercase tracking-wide text-blue-600">
                             Apri pratica
                           </span>
-                        </Link>
+                        </ApriPraticaConContesto>
                       </td>
 
                       <td className="px-4 py-4">
@@ -1180,6 +1201,7 @@ export default async function Home({
         </footer>
       </div>
     </main>
+    </ContestoNavigazioneElenco>
   );
 }
 
