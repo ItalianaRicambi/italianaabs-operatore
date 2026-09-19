@@ -4,6 +4,11 @@ import {
   ApriPraticaConContesto,
   ContestoNavigazioneElenco,
 } from "./components/NavigazionePratiche";
+import {
+  AccessoOperatore,
+  BarraOperatore,
+} from "./components/IdentitaOperatore";
+import { getOperatoreAttivo } from "./operatore";
 
 type Pratica = {
   id: string;
@@ -650,6 +655,12 @@ export default async function Home({
     cerca?: string | string[];
   }>;
 }) {
+  const operatoreAttivo = await getOperatoreAttivo();
+
+  if (!operatoreAttivo) {
+    return <AccessoOperatore />;
+  }
+
   const { pratiche, errore } = await getPratiche();
   const params = await searchParams;
 
@@ -737,6 +748,8 @@ export default async function Home({
       voci={vociNavigazione}
     >
     <main className="min-h-screen bg-slate-50">
+      <BarraOperatore operatore={operatoreAttivo} />
+
       <div className="mx-auto max-w-[1750px] px-6 py-8">
         <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
