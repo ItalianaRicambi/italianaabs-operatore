@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { richiediOperatoreAttivo } from "../../operatore";
 
 const AZIONI_CONSENTITE = new Set([
   // Assistenza
@@ -62,6 +63,7 @@ async function chiamaRpc(
   body: Record<string, unknown>
 ) {
   const { url, secretKey } = getSupabase();
+  const operatore = await richiediOperatoreAttivo();
 
   const response = await fetch(`${url}/rest/v1/rpc/${nome}`, {
     method: "POST",
@@ -69,6 +71,7 @@ async function chiamaRpc(
       apikey: secretKey,
       Authorization: `Bearer ${secretKey}`,
       "Content-Type": "application/json",
+      "X-Operatore": operatore,
     },
     body: JSON.stringify(body),
     cache: "no-store",
@@ -139,6 +142,7 @@ async function aggiornaPratica(
   modifiche: Record<string, unknown>
 ) {
   const { url, secretKey } = getSupabase();
+  const operatore = await richiediOperatoreAttivo();
 
   const response = await fetch(
     `${url}/rest/v1/pratiche?id=eq.${encodeURIComponent(
@@ -150,6 +154,7 @@ async function aggiornaPratica(
         apikey: secretKey,
         Authorization: `Bearer ${secretKey}`,
         "Content-Type": "application/json",
+        "X-Operatore": operatore,
         Prefer: "return=representation",
       },
       body: JSON.stringify(modifiche),
@@ -187,6 +192,7 @@ async function registraCorrezioneStato(
   nota: string
 ) {
   const { url, secretKey } = getSupabase();
+  const operatore = await richiediOperatoreAttivo();
 
   const response = await fetch(
     `${url}/rest/v1/azioni_operatore`,
@@ -196,6 +202,7 @@ async function registraCorrezioneStato(
         apikey: secretKey,
         Authorization: `Bearer ${secretKey}`,
         "Content-Type": "application/json",
+        "X-Operatore": operatore,
         Prefer: "return=minimal",
       },
       body: JSON.stringify({
@@ -216,6 +223,105 @@ async function registraCorrezioneStato(
       `Registrazione storico non riuscita (${response.status}): ${dettaglio}`
     );
   }
+}
+
+async function registraEventoOperatore(
+  praticaId: string,
+  azione: string,
+  nota: string
+) {
+  const { url, secretKey } = getSupabase();
+  const operatore = await richiediOperatoreAttivo();
+
+  const response = await fetch(
+    `${url}/rest/v1/azioni_operatore`,
+    {
+      method: "POST",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+        "X-Operatore": operatore,
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        pratica_id: praticaId,
+        azione,
+        nota,
+        stato_prima: {},
+        stato_dopo: {},
+      }),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    const dettaglio = await response.text();
+    console.error(
+      `Registrazione evento operatore non riuscita (${response.status}): ${dettaglio}`
+    );
+  }
+}
+
+/* ============================================================
+   NOTE INTERNE OPERATORE
+   ============================================================ */
+
+export async function registraNotaInternaOperatore(
+  formData: FormData
+) {
+  const praticaId = String(
+    formData.get("pratica_id") || ""
+  ).trim();
+
+  const testo = String(
+    formData.get("testo") || ""
+  ).trim();
+
+  if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
+    throw new Error("ID pratica non valido");
+  }
+
+  if (!testo) {
+    throw new Error("Inserire il testo della nota");
+  }
+
+  if (testo.length > 3000) {
+    throw new Error("La nota non può superare 3000 caratteri");
+  }
+
+  const operatore = await richiediOperatoreAttivo();
+  const { url, secretKey } = getSupabase();
+
+  const response = await fetch(
+    `${url}/rest/v1/annotazioni_operatore`,
+    {
+      method: "POST",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+        "X-Operatore": operatore,
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        pratica_id: praticaId,
+        autore: operatore,
+        testo,
+      }),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    const dettaglio = await response.text();
+
+    throw new Error(
+      `Salvataggio nota non riuscito (${response.status}): ${dettaglio}`
+    );
+  }
+
+  revalidatePath(`/pratica/${praticaId}`);
 }
 
 /* ============================================================
@@ -618,6 +724,12 @@ export async function verificaDtcOperatore(
     }
   );
 
+  await registraEventoOperatore(
+    praticaId,
+    esito === "confermato" ? "dtc_confermato" : "dtc_scartato",
+    `DTC ${codice}: ${esito}.`
+  );
+
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
 }
@@ -654,6 +766,14 @@ export async function aggiungiDtcOperatore(
       p_codice: codice,
       p_descrizione: descrizione || null,
     }
+  );
+
+  await registraEventoOperatore(
+    praticaId,
+    "dtc_aggiunto_operatore",
+    descrizione
+      ? `DTC ${codice} aggiunto. ${descrizione}`
+      : `DTC ${codice} aggiunto.`
   );
 
   revalidatePath("/");
