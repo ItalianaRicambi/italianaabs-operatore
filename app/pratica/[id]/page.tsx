@@ -1,4 +1,9 @@
 import { NavigazionePratica } from "../../components/NavigazionePratiche";
+import {
+  AccessoOperatore,
+  BarraOperatore,
+} from "../../components/IdentitaOperatore";
+import { getOperatoreAttivo } from "../../operatore";
 import { notFound } from "next/navigation";
 import {
   aggiungiCodiceOperatore,
@@ -6,6 +11,7 @@ import {
   aggiornaDatiPraticaOperatore,
   applicaAzioneOperatore,
   correggiStatoCommercialeOperatore,
+  registraNotaInternaOperatore,
   verificaCodiceOperatore,
   verificaDtcOperatore,
 } from "./actions";
@@ -95,6 +101,14 @@ type AzioneStorico = {
   id: number;
   azione: string;
   nota?: string | null;
+  operatore?: string | null;
+  created_at: string;
+};
+
+type AnnotazioneOperatore = {
+  id: string;
+  autore: string;
+  testo: string;
   created_at: string;
 };
 
@@ -171,6 +185,7 @@ async function getPratica(id: string) {
     verificheCodici,
     codiciOperatore,
     dtc,
+    annotazioniOperatore,
   ] = await Promise.all([
     selectSupabase<Codice[]>(
       `codici_identificativi?pratica_id=eq.${encodeURIComponent(id)}&select=*`
@@ -181,7 +196,7 @@ async function getPratica(id: string) {
     selectSupabase<AzioneStorico[]>(
       `azioni_operatore?pratica_id=eq.${encodeURIComponent(
         id
-      )}&select=id,azione,nota,created_at&order=created_at.desc`
+      )}&select=id,azione,nota,operatore,created_at&order=created_at.desc`
     ),
     selectSupabase<VerificaCodice[]>(
       `verifiche_codici_operatore?pratica_id=eq.${encodeURIComponent(
@@ -198,6 +213,11 @@ async function getPratica(id: string) {
         id
       )}&select=id,codice,descrizione,fonte,esito,created_at&order=created_at.asc`
     ),
+    selectSupabase<AnnotazioneOperatore[]>(
+      `annotazioni_operatore?pratica_id=eq.${encodeURIComponent(
+        id
+      )}&select=id,autore,testo,created_at&order=created_at.desc`
+    ),
   ]);
 
   return {
@@ -208,6 +228,7 @@ async function getPratica(id: string) {
     verificheCodici,
     codiciOperatore,
     dtc,
+    annotazioniOperatore,
   };
 }
 
@@ -334,6 +355,9 @@ function etichettaAzione(azione: string) {
     codice_scartato: "Codice identificativo scartato",
     codice_aggiunto_operatore: "Codice corretto aggiunto dall’operatore",
     operatore_correzione_stato: "Stato corretto manualmente dall’operatore",
+    dtc_confermato: "Codice DTC confermato",
+    dtc_scartato: "Codice DTC scartato",
+    dtc_aggiunto_operatore: "Codice DTC aggiunto dall’operatore",
   };
 
   return labels[azione] || etichettaStato(azione);
@@ -362,6 +386,12 @@ export default async function PraticaPage({
 }) {
   const { id } = await params;
   const navigazione = (await searchParams) || {};
+  const operatoreAttivo = await getOperatoreAttivo();
+
+  if (!operatoreAttivo) {
+    return <AccessoOperatore />;
+  }
+
   const {
     pratica,
     codici,
@@ -370,7 +400,11 @@ export default async function PraticaPage({
     verificheCodici,
     codiciOperatore,
     dtc,
+    annotazioniOperatore,
   } = await getPratica(id);
+
+  const noteInterne = annotazioniOperatore;
+  const azioniStorico = storicoOperatore;
 
   const rawCodes = rawArray<RawCode>(
     pratica.dati_raw,
@@ -554,6 +588,8 @@ export default async function PraticaPage({
 
   return (
     <main className="min-h-screen bg-slate-50">
+      <BarraOperatore operatore={operatoreAttivo} />
+
       <div className="mx-auto max-w-[1500px] px-6 py-8">
         <NavigazionePratica
           key={`alto-${pratica.id}`}
@@ -1564,16 +1600,79 @@ export default async function PraticaPage({
               </div>
             </Card>
 
+            <Card titolo="Note interne operatore">
+              <form action={registraNotaInternaOperatore} className="space-y-3">
+                <input type="hidden" name="pratica_id" value={pratica.id} />
+
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+                  La nota sarà registrata come <strong>{operatoreAttivo}</strong>.
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="testo-nota-operatore"
+                    className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500"
+                  >
+                    Nota
+                  </label>
+                  <textarea
+                    id="testo-nota-operatore"
+                    name="testo"
+                    required
+                    maxLength={3000}
+                    rows={4}
+                    placeholder="Scrivi una nota interna sulla pratica…"
+                    className="w-full resize-y rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-700"
+                >
+                  Salva nota interna
+                </button>
+              </form>
+
+              {noteInterne.length ? (
+                <div className="mt-5 space-y-3 border-t border-slate-200 pt-5">
+                  {noteInterne.map((nota) => (
+                      <div
+                        key={nota.id}
+                        className="rounded-xl border border-amber-200 bg-amber-50 p-4"
+                      >
+                        <div className="text-sm font-bold text-amber-950">
+                          {nota.autore}
+                        </div>
+                        <div className="mt-1 text-xs text-amber-700">
+                          {formattaData(nota.created_at)}
+                        </div>
+                        <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">
+                          {nota.testo}
+                        </div>
+                      </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">
+                  Nessuna nota interna registrata.
+                </p>
+              )}
+            </Card>
+
             <Card titolo="Storico operatore">
-              {storicoOperatore.length ? (
+              {azioniStorico.length ? (
                 <div className="space-y-3">
-                  {storicoOperatore.map((evento) => (
+                  {azioniStorico.map((evento) => (
                     <div
                       key={evento.id}
                       className="rounded-xl border border-slate-200 bg-slate-50 p-4"
                     >
                       <div className="text-sm font-bold text-slate-900">
                         {etichettaAzione(evento.azione)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-blue-700">
+                        {evento.operatore || "Operatore non registrato"}
                       </div>
                       <div className="mt-1 text-xs text-slate-500">
                         {formattaData(evento.created_at)}
