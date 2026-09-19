@@ -997,8 +997,7 @@ export default async function PraticaPage({
                           <th className="py-3 pr-4">Codice</th>
                           <th className="py-3 pr-4">Descrizione</th>
                           <th className="py-3 pr-4">Fonte</th>
-                          <th className="py-3 pr-4">Esito</th>
-                          <th className="py-3">Azioni</th>
+                          <th className="py-3 pr-4">Esito</th>                          <th className="py-3">Azioni</th>
                         </tr>
                       </thead>
 
@@ -1420,8 +1419,16 @@ export default async function PraticaPage({
                         label="Imposta: Da preventivare"
                         className="bg-orange-100 text-orange-900 hover:bg-orange-200"
                         disabilitata={
-                          pratica.stato_commerciale === "da_preventivare" &&
-                          pratica.stato_fatturazione !== "fatturato"
+                          pratica.stato_commerciale === "da_preventivare" ||
+                          pratica.stato_commerciale === "ordine_acquisito" ||
+                          pratica.stato_fatturazione === "fatturato"
+                        }
+                        motivoDisabilitata={
+                          pratica.stato_fatturazione === "fatturato"
+                            ? "Bloccato: pratica già fatturata"
+                            : pratica.stato_commerciale === "ordine_acquisito"
+                            ? "Bloccato: ordine già acquisito"
+                            : "Stato attuale"
                         }
                       />
 
@@ -1431,8 +1438,16 @@ export default async function PraticaPage({
                         label="Imposta: Preventivo inviato"
                         className="bg-blue-600 text-white hover:bg-blue-700"
                         disabilitata={
-                          pratica.stato_commerciale === "preventivo_inviato" &&
-                          pratica.stato_fatturazione !== "fatturato"
+                          pratica.stato_commerciale === "preventivo_inviato" ||
+                          pratica.stato_commerciale === "ordine_acquisito" ||
+                          pratica.stato_fatturazione === "fatturato"
+                        }
+                        motivoDisabilitata={
+                          pratica.stato_fatturazione === "fatturato"
+                            ? "Bloccato: pratica già fatturata"
+                            : pratica.stato_commerciale === "ordine_acquisito"
+                            ? "Bloccato: ordine già acquisito"
+                            : "Stato attuale"
                         }
                       />
 
@@ -1442,8 +1457,14 @@ export default async function PraticaPage({
                         label="Imposta: Ordine acquisito / da fatturare"
                         className="bg-red-100 text-red-900 hover:bg-red-200"
                         disabilitata={
-                          pratica.stato_commerciale === "ordine_acquisito" &&
-                          pratica.stato_fatturazione === "da_fatturare"
+                          pratica.stato_fatturazione === "fatturato" ||
+                          (pratica.stato_commerciale === "ordine_acquisito" &&
+                            pratica.stato_fatturazione === "da_fatturare")
+                        }
+                        motivoDisabilitata={
+                          pratica.stato_fatturazione === "fatturato"
+                            ? "Bloccato: pratica già fatturata"
+                            : "Stato attuale"
                         }
                       />
 
@@ -1453,6 +1474,7 @@ export default async function PraticaPage({
                         label="Imposta: Fatturata"
                         className="bg-green-600 text-white hover:bg-green-700"
                         disabilitata={pratica.stato_fatturazione === "fatturato"}
+                        motivoDisabilitata="Stato attuale"
                       />
                     </div>
                   </details>
@@ -1815,12 +1837,14 @@ function CorrezioneStatoOperatore({
   label,
   className,
   disabilitata = false,
+  motivoDisabilitata = "Stato attuale",
 }: {
   praticaId: string;
   stato: "da_preventivare" | "preventivo_inviato" | "ordine_acquisito" | "fatturata";
   label: string;
   className: string;
   disabilitata?: boolean;
+  motivoDisabilitata?: string;
 }) {
   return (
     <form action={correggiStatoCommercialeOperatore}>
@@ -1836,7 +1860,7 @@ function CorrezioneStatoOperatore({
             : className
         }`}
       >
-        {disabilitata ? `${label} · Stato attuale` : label}
+        {disabilitata ? `${label} · ${motivoDisabilitata}` : label}
       </button>
     </form>
   );
