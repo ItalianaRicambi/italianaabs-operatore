@@ -10,8 +10,11 @@ import {
   aggiungiDtcOperatore,
   aggiornaDatiPraticaOperatore,
   applicaAzioneOperatore,
+  collegaClientePraticaOperatore,
   correggiStatoCommercialeOperatore,
+  creaECollegaClientePraticaOperatore,
   registraNotaInternaOperatore,
+  rivalutaClientePraticaOperatore,
   verificaCodiceOperatore,
   verificaDtcOperatore,
 } from "./actions";
@@ -42,6 +45,7 @@ type Pratica = {
   keplero_conversation_id?: string | null;
   created_at: string;
   telefono?: string | null;
+  email_cliente?: string | null;
   nome_cliente?: string | null;
   targa?: string | null;
   marca_veicolo?: string | null;
@@ -75,7 +79,40 @@ type Pratica = {
   ritiro_richiesto_at?: string | null;
   ritiro_programmato_at?: string | null;
   ultimo_messaggio_cliente_at?: string | null;
+  cliente_id?: string | null;
+  fonte_collegamento_cliente?: string | null;
+  cliente_collegato_at?: string | null;
+  stato_amministrativo?: string | null;
+  stato_amministrativo_at?: string | null;
+  nota_amministrativa?: string | null;
   dati_raw?: Record<string, unknown> | null;
+};
+
+type Cliente = {
+  id: string;
+  denominazione: string;
+  indirizzo_fatturazione?: string | null;
+  comune?: string | null;
+  cap?: string | null;
+  provincia?: string | null;
+  paese?: string | null;
+  email?: string | null;
+  telefono?: string | null;
+  partita_iva?: string | null;
+  codice_fiscale?: string | null;
+  pec?: string | null;
+  codice_sdi?: string | null;
+  dati_fiscali_completi: boolean;
+  campi_amministrativi_mancanti: string[];
+  da_verificare: boolean;
+  possibile_duplicato: boolean;
+};
+
+type CandidatoCliente = {
+  pratica_id: string;
+  cliente_id: string;
+  punteggio: number;
+  segnali: string[];
 };
 
 type Codice = {
@@ -169,7 +206,28 @@ async function selectSupabase<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function getPratica(id: string) {
+async function rpcSupabase<T>(nome: string, body: Record<string, unknown>): Promise<T> {
+  const { url, secretKey } = getSupabase();
+  const response = await fetch(`${url}/rest/v1/rpc/${nome}`, {
+    method: "POST",
+    headers: {
+      apikey: secretKey,
+      Authorization: `Bearer ${secretKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const dettaglio = await response.text();
+    throw new Error(`Supabase ${response.status}: ${dettaglio}`);
+  }
+
+  return (await response.json()) as T;
+}
+
+async function getPratica(id: string, ricercaCliente: string) {
   const pratiche = await selectSupabase<Pratica[]>(
     `pratiche?id=eq.${encodeURIComponent(id)}&select=*`
   );
@@ -186,6 +244,8 @@ async function getPratica(id: string) {
     codiciOperatore,
     dtc,
     annotazioniOperatore,
+    candidatiClienteRaw,
+    risultatiRicercaCliente,
   ] = await Promise.all([
     selectSupabase<Codice[]>(
       `codici_identificativi?pratica_id=eq.${encodeURIComponent(id)}&select=*`
@@ -218,7 +278,36 @@ async function getPratica(id: string) {
         id
       )}&select=id,autore,testo,created_at&order=created_at.desc`
     ),
+    selectSupabase<CandidatoCliente[]>(
+      `pratiche_clienti_candidati?pratica_id=eq.${encodeURIComponent(
+        id
+      )}&select=pratica_id,cliente_id,punteggio,segnali&order=punteggio.desc`
+    ),
+    ricercaCliente.length >= 3
+      ? rpcSupabase<Cliente[]>("cerca_clienti_amministrativi", {
+          p_query: ricercaCliente,
+        })
+      : Promise.resolve([] as Cliente[]),
   ]);
+
+  const clienteIds = Array.from(
+    new Set(
+      [pratiche[0].cliente_id, ...candidatiClienteRaw.map((riga) => riga.cliente_id)].filter(
+        (value): value is string => Boolean(value)
+      )
+    )
+  );
+
+  const clienti = clienteIds.length
+    ? await selectSupabase<Cliente[]>(
+        `clienti?id=in.(${clienteIds.join(",")})&select=id,denominazione,indirizzo_fatturazione,comune,cap,provincia,paese,email,telefono,partita_iva,codice_fiscale,pec,codice_sdi,dati_fiscali_completi,campi_amministrativi_mancanti,da_verificare,possibile_duplicato`
+      )
+    : [];
+  const clientiPerId = new Map(clienti.map((cliente) => [cliente.id, cliente]));
+  const candidatiCliente = candidatiClienteRaw.flatMap((candidato) => {
+    const cliente = clientiPerId.get(candidato.cliente_id);
+    return cliente ? [{ ...candidato, cliente }] : [];
+  });
 
   return {
     pratica: pratiche[0],
@@ -229,6 +318,11 @@ async function getPratica(id: string) {
     codiciOperatore,
     dtc,
     annotazioniOperatore,
+    clienteCollegato: pratiche[0].cliente_id
+      ? clientiPerId.get(pratiche[0].cliente_id) || null
+      : null,
+    candidatiCliente,
+    risultatiRicercaCliente,
   };
 }
 
@@ -305,6 +399,10 @@ function etichettaStato(value?: string | null) {
     non_applicabile: "Non applicabile",
     da_fatturare: "Da fatturare",
     fatturato: "Fatturata",
+    cliente_riconosciuto: "Cliente riconosciuto",
+    corrispondenza_ambigua: "Corrispondenza da verificare",
+    pronto_fatturazione: "Pronto per la fatturazione",
+    completato: "Completato",
     non_previsto: "Non previsto",
     previsto: "Previsto",
     da_verificare: "Da verificare",
@@ -360,6 +458,9 @@ function etichettaAzione(azione: string) {
     dtc_confermato: "Codice DTC confermato",
     dtc_scartato: "Codice DTC scartato",
     dtc_aggiunto_operatore: "Codice DTC aggiunto dall’operatore",
+    cliente_abbinamento_ricalcolato: "Abbinamento cliente ricalcolato",
+    cliente_collegato_operatore: "Cliente fiscale collegato",
+    cliente_creato_collegato_operatore: "Nuova anagrafica fiscale creata",
   };
 
   return labels[azione] || etichettaStato(azione);
@@ -384,10 +485,14 @@ export default async function PraticaPage({
     nav?: string | string[];
     filtro?: string | string[];
     cerca?: string | string[];
+    cliente?: string | string[];
   }>;
 }) {
   const { id } = await params;
   const navigazione = (await searchParams) || {};
+  const ricercaCliente = Array.isArray(navigazione.cliente)
+    ? navigazione.cliente[0] || ""
+    : navigazione.cliente || "";
   const operatoreAttivo = await getOperatoreAttivo();
 
   if (!operatoreAttivo) {
@@ -403,7 +508,10 @@ export default async function PraticaPage({
     codiciOperatore,
     dtc,
     annotazioniOperatore,
-  } = await getPratica(id);
+    clienteCollegato,
+    candidatiCliente,
+    risultatiRicercaCliente,
+  } = await getPratica(id, ricercaCliente.trim());
 
   const noteInterne = annotazioniOperatore;
   const azioniStorico = storicoOperatore;
@@ -1698,6 +1806,151 @@ export default async function PraticaPage({
               )}
             </Card>
 
+            {(pratica.stato_fatturazione === "da_fatturare" ||
+              clienteCollegato) && (
+              <Card titolo="Cliente fiscale">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Stato amministrativo
+                  </div>
+                  <div className="mt-1 text-sm font-bold text-slate-950">
+                    {etichettaStato(pratica.stato_amministrativo)}
+                  </div>
+                  {pratica.nota_amministrativa && (
+                    <p className="mt-2 text-sm leading-6 text-slate-700">
+                      {pratica.nota_amministrativa}
+                    </p>
+                  )}
+                </div>
+
+                {clienteCollegato ? (
+                  <div className="mt-4">
+                    <SchedaCliente cliente={clienteCollegato} />
+                    <div className="mt-2 text-xs text-slate-500">
+                      Collegamento {pratica.fonte_collegamento_cliente === "automatico"
+                        ? "automatico"
+                        : "confermato dall’operatore"}
+                      {pratica.cliente_collegato_at
+                        ? ` · ${formattaData(pratica.cliente_collegato_at)}`
+                        : ""}
+                    </div>
+                  </div>
+                ) : candidatiCliente.length > 0 ? (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-sm leading-6 text-amber-900">
+                      Seleziona l’anagrafica corretta. I record simili non vengono
+                      mai uniti automaticamente.
+                    </p>
+                    {candidatiCliente.map(({ cliente, segnali }) => (
+                      <SchedaCliente
+                        key={cliente.id}
+                        cliente={cliente}
+                        praticaId={pratica.id}
+                        segnali={segnali}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+
+                <form method="get" className="mt-5 border-t border-slate-200 pt-4">
+                  {typeof navigazione.nav === "string" && (
+                    <input type="hidden" name="nav" value={navigazione.nav} />
+                  )}
+                  {typeof navigazione.filtro === "string" && (
+                    <input type="hidden" name="filtro" value={navigazione.filtro} />
+                  )}
+                  {typeof navigazione.cerca === "string" && (
+                    <input type="hidden" name="cerca" value={navigazione.cerca} />
+                  )}
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Cerca un’altra anagrafica
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="search"
+                      name="cliente"
+                      minLength={3}
+                      defaultValue={ricercaCliente}
+                      placeholder="Nome, e-mail, telefono, P. IVA o CF"
+                      className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                    />
+                    <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-700">
+                      Cerca
+                    </button>
+                  </div>
+                </form>
+
+                {ricercaCliente.trim().length > 0 && ricercaCliente.trim().length < 3 && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    Inserisci almeno 3 caratteri.
+                  </p>
+                )}
+
+                {ricercaCliente.trim().length >= 3 && (
+                  <div className="mt-4 space-y-3">
+                    {risultatiRicercaCliente.length ? (
+                      risultatiRicercaCliente.map((cliente) => (
+                        <SchedaCliente
+                          key={cliente.id}
+                          cliente={cliente}
+                          praticaId={pratica.id}
+                        />
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        Nessuna anagrafica trovata.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {!clienteCollegato && (
+                  <details className="mt-5 border-t border-slate-200 pt-4">
+                    <summary className="cursor-pointer text-sm font-bold text-blue-700">
+                      Crea una nuova anagrafica fiscale
+                    </summary>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      Usalo solo dopo la ricerca: partita IVA e codice fiscale già
+                      presenti vengono bloccati per evitare duplicati.
+                    </p>
+                    <form action={creaECollegaClientePraticaOperatore} className="mt-4 grid gap-3">
+                      <input type="hidden" name="pratica_id" value={pratica.id} />
+                      <input name="denominazione" required maxLength={240} defaultValue={pratica.nome_cliente || ""} placeholder="Denominazione *" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                      <input name="indirizzo_fatturazione" required maxLength={300} placeholder="Indirizzo di fatturazione *" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                      <div className="grid grid-cols-[1fr_90px] gap-3">
+                        <input name="comune" required maxLength={160} placeholder="Comune *" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                        <input name="cap" required maxLength={20} placeholder="CAP *" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                      </div>
+                      <div className="grid grid-cols-[1fr_90px] gap-3">
+                        <input name="provincia" maxLength={10} placeholder="Provincia" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                        <input name="paese" maxLength={2} defaultValue="IT" placeholder="Paese" className="rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase" />
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <input name="partita_iva" maxLength={40} placeholder="Partita IVA" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                        <input name="codice_fiscale" maxLength={40} placeholder="Codice fiscale" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                      </div>
+                      <input name="email" type="email" maxLength={320} defaultValue={pratica.email_cliente || ""} placeholder="E-mail" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                      <input name="telefono" maxLength={80} defaultValue={pratica.telefono || ""} placeholder="Telefono" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <input name="pec" type="email" maxLength={320} placeholder="PEC" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                        <input name="codice_sdi" maxLength={20} placeholder="Codice SDI" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                      </div>
+                      <button className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700">
+                        Crea e collega cliente
+                      </button>
+                    </form>
+                  </details>
+                )}
+
+                <form action={rivalutaClientePraticaOperatore} className="mt-4">
+                  <input type="hidden" name="pratica_id" value={pratica.id} />
+                  <button className="text-xs font-bold text-slate-500 underline hover:text-slate-900">
+                    Ricalcola abbinamento automatico
+                  </button>
+                </form>
+              </Card>
+            )}
+
             <Card titolo="Stato pratica">
               <div className="space-y-4">
                 <Campo label="Completezza" value={etichettaStato(pratica.stato_completezza)} />
@@ -1858,6 +2111,75 @@ function Campo({
       >
         {leggibile(value)}
       </div>
+    </div>
+  );
+}
+
+function SchedaCliente({
+  cliente,
+  praticaId,
+  segnali = [],
+}: {
+  cliente: Cliente;
+  praticaId?: string;
+  segnali?: string[];
+}) {
+  const identificativo = cliente.partita_iva
+    ? `P. IVA ${cliente.partita_iva}`
+    : cliente.codice_fiscale
+      ? `CF ${cliente.codice_fiscale}`
+      : "Identificativo fiscale mancante";
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-bold text-slate-950">{cliente.denominazione}</div>
+          <div className="mt-1 text-xs text-slate-500">{identificativo}</div>
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${
+            cliente.dati_fiscali_completi
+              ? "bg-green-100 text-green-800"
+              : "bg-amber-100 text-amber-800"
+          }`}
+        >
+          {cliente.dati_fiscali_completi ? "COMPLETO" : "DA COMPLETARE"}
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-1 text-xs leading-5 text-slate-600">
+        {(cliente.indirizzo_fatturazione || cliente.comune) && (
+          <div>
+            {[cliente.indirizzo_fatturazione, cliente.cap, cliente.comune, cliente.provincia]
+              .filter(Boolean)
+              .join(", ")}
+          </div>
+        )}
+        {cliente.email && <div>{cliente.email}</div>}
+        {cliente.telefono && <div>{cliente.telefono}</div>}
+        {segnali.length > 0 && <div>Corrispondenza: {segnali.join(" + ")}</div>}
+        {cliente.campi_amministrativi_mancanti.length > 0 && (
+          <div className="font-semibold text-amber-800">
+            Mancano: {cliente.campi_amministrativi_mancanti.join(", ")}
+          </div>
+        )}
+        {(cliente.da_verificare || cliente.possibile_duplicato) && (
+          <div className="font-semibold text-red-700">
+            Anagrafica segnalata per verifica: controllare prima del collegamento.
+          </div>
+        )}
+      </div>
+
+      {praticaId && (
+        <form action={collegaClientePraticaOperatore} className="mt-3">
+          <input type="hidden" name="pratica_id" value={praticaId} />
+          <input type="hidden" name="cliente_id" value={cliente.id} />
+          <button className="w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">
+            Collega questa anagrafica
+          </button>
+        </form>
+      )}
     </div>
   );
 }

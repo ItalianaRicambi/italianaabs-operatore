@@ -263,6 +263,123 @@ async function registraEventoOperatore(
   }
 }
 
+function valoreModulo(
+  formData: FormData,
+  nome: string,
+  massimo: number
+) {
+  const valore = String(formData.get(nome) || "").trim();
+
+  if (valore.length > massimo) {
+    throw new Error(`${nome.replace(/_/g, " ")} supera ${massimo} caratteri`);
+  }
+
+  return valore;
+}
+
+function verificaPraticaId(praticaId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(praticaId)) {
+    throw new Error("ID pratica non valido");
+  }
+}
+
+/* ============================================================
+   COLLEGAMENTO PRATICA / CLIENTE FISCALE
+   ============================================================ */
+
+export async function rivalutaClientePraticaOperatore(formData: FormData) {
+  const praticaId = valoreModulo(formData, "pratica_id", 36);
+  verificaPraticaId(praticaId);
+
+  await chiamaRpc("valuta_collegamento_cliente", {
+    p_pratica_id: praticaId,
+  });
+
+  await registraEventoOperatore(
+    praticaId,
+    "cliente_abbinamento_ricalcolato",
+    "Abbinamento con l’anagrafica fiscale ricalcolato dall’operatore."
+  );
+
+  revalidatePath("/");
+  revalidatePath(`/pratica/${praticaId}`);
+}
+
+export async function collegaClientePraticaOperatore(formData: FormData) {
+  const praticaId = valoreModulo(formData, "pratica_id", 36);
+  const clienteId = valoreModulo(formData, "cliente_id", 36);
+  verificaPraticaId(praticaId);
+
+  if (!/^[0-9a-f-]{36}$/i.test(clienteId)) {
+    throw new Error("ID cliente non valido");
+  }
+
+  await chiamaRpc("collega_cliente_pratica", {
+    p_pratica_id: praticaId,
+    p_cliente_id: clienteId,
+  });
+
+  await registraEventoOperatore(
+    praticaId,
+    "cliente_collegato_operatore",
+    "Anagrafica fiscale collegata e confermata dall’operatore."
+  );
+
+  revalidatePath("/");
+  revalidatePath(`/pratica/${praticaId}`);
+}
+
+export async function creaECollegaClientePraticaOperatore(formData: FormData) {
+  const praticaId = valoreModulo(formData, "pratica_id", 36);
+  const denominazione = valoreModulo(formData, "denominazione", 240);
+  const indirizzo = valoreModulo(formData, "indirizzo_fatturazione", 300);
+  const comune = valoreModulo(formData, "comune", 160);
+  const cap = valoreModulo(formData, "cap", 20);
+  const provincia = valoreModulo(formData, "provincia", 10);
+  const paese = valoreModulo(formData, "paese", 2).toUpperCase();
+  const partitaIva = valoreModulo(formData, "partita_iva", 40);
+  const codiceFiscale = valoreModulo(formData, "codice_fiscale", 40);
+  const email = valoreModulo(formData, "email", 320);
+  const telefono = valoreModulo(formData, "telefono", 80);
+  const pec = valoreModulo(formData, "pec", 320);
+  const codiceSdi = valoreModulo(formData, "codice_sdi", 20);
+
+  verificaPraticaId(praticaId);
+
+  if (!denominazione || !indirizzo || !comune || !cap) {
+    throw new Error("Denominazione, indirizzo, CAP e comune sono obbligatori");
+  }
+
+  if (!partitaIva && !codiceFiscale) {
+    throw new Error("Inserire almeno la partita IVA o il codice fiscale");
+  }
+
+  await chiamaRpc("crea_e_collega_cliente_pratica", {
+    p_pratica_id: praticaId,
+    p_denominazione: denominazione,
+    p_indirizzo_fatturazione: indirizzo,
+    p_comune: comune,
+    p_cap: cap,
+    p_provincia: provincia || null,
+    p_paese: paese || "IT",
+    p_partita_iva: partitaIva || null,
+    p_codice_fiscale: codiceFiscale || null,
+    p_email: email || null,
+    p_telefono: telefono || null,
+    p_pec: pec || null,
+    p_codice_sdi: codiceSdi || null,
+  });
+
+  await registraEventoOperatore(
+    praticaId,
+    "cliente_creato_collegato_operatore",
+    "Nuova anagrafica fiscale creata e collegata dall’operatore."
+  );
+
+  revalidatePath("/");
+  revalidatePath(`/pratica/${praticaId}`);
+}
+
 /* ============================================================
    NOTE INTERNE OPERATORE
    ============================================================ */
