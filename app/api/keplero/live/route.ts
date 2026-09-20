@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
+import { riconosciConfermaOrdine } from "./riconoscimentoOrdine";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -521,6 +523,9 @@ export async function POST(request: NextRequest) {
       motivo_incompletezza: motivoIncompletezza,
     };
 
+    const riconoscimentoOrdine =
+      riconosciConfermaOrdine(payloadNormalizzato);
+
     const rpcBody = {
       p_external_key: key,
 
@@ -733,6 +738,70 @@ export async function POST(request: NextRequest) {
       // conserviamo semplicemente il contenuto originale.
     }
 
+    let avanzamentoOrdine: unknown = {
+      aggiornato: false,
+      motivo: "nessuna_conferma_esplicita",
+    };
+
+    if (riconoscimentoOrdine.confermato) {
+      const risultato = data as Record<string, unknown> | null;
+      const praticaId =
+        risultato && typeof risultato.pratica_id === "string"
+          ? risultato.pratica_id
+          : "";
+
+      if (!uuidValido(praticaId)) {
+        throw new Error(
+          "Supabase non ha restituito un ID pratica valido per la conferma ordine"
+        );
+      }
+
+      const confermaResponse = await fetch(
+        `${url}/rest/v1/rpc/conferma_ordine_da_keplero`,
+        {
+          method: "POST",
+          headers: {
+            apikey: secretKey,
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            p_pratica_id: praticaId,
+            p_external_key: key,
+            p_messaggio_cliente:
+              riconoscimentoOrdine.messaggio || null,
+          }),
+          cache: "no-store",
+        }
+      );
+
+      const confermaRaw = await confermaResponse.text();
+
+      if (!confermaResponse.ok) {
+        console.error("ERRORE CONFERMA ORDINE KEPLERO", {
+          supabase_status: confermaResponse.status,
+          supabase_response: confermaRaw,
+          pratica_id: praticaId,
+          external_key: key,
+        });
+
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Conferma ordine Supabase ${confermaResponse.status}`,
+            detail: confermaRaw,
+          },
+          { status: 500 }
+        );
+      }
+
+      try {
+        avanzamentoOrdine = JSON.parse(confermaRaw);
+      } catch {
+        avanzamentoOrdine = confermaRaw;
+      }
+    }
+
     /*
      * ============================================================
      * RISPOSTA POSITIVA A KEPLERO
@@ -747,6 +816,12 @@ export async function POST(request: NextRequest) {
 
       result:
         data,
+
+      riconoscimento_ordine: {
+        confermato: riconoscimentoOrdine.confermato,
+        fonte: riconoscimentoOrdine.fonte,
+        avanzamento: avanzamentoOrdine,
+      },
 
       external_key:
         key,
