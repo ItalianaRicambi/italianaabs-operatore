@@ -355,6 +355,8 @@ function etichettaAzione(azione: string) {
     codice_scartato: "Codice identificativo scartato",
     codice_aggiunto_operatore: "Codice corretto aggiunto dall’operatore",
     operatore_correzione_stato: "Stato corretto manualmente dall’operatore",
+    keplero_ordine_acquisito: "Ordine confermato dal cliente tramite Keplero",
+    preventivo_emesso_automatico: "Preventivo inviato riconosciuto automaticamente",
     dtc_confermato: "Codice DTC confermato",
     dtc_scartato: "Codice DTC scartato",
     dtc_aggiunto_operatore: "Codice DTC aggiunto dall’operatore",
@@ -1672,7 +1674,11 @@ export default async function PraticaPage({
                         {etichettaAzione(evento.azione)}
                       </div>
                       <div className="mt-1 text-xs font-semibold text-blue-700">
-                        {evento.operatore || "Operatore non registrato"}
+                        {evento.azione === "keplero_ordine_acquisito"
+                          ? "Keplero"
+                          : evento.azione === "preventivo_emesso_automatico"
+                            ? "Sistema preventivi"
+                            : evento.operatore || "Operatore non registrato"}
                       </div>
                       <div className="mt-1 text-xs text-slate-500">
                         {formattaData(evento.created_at)}
