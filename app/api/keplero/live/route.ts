@@ -742,6 +742,12 @@ export async function POST(request: NextRequest) {
       aggiornato: false,
       motivo: "nessuna_conferma_esplicita",
     };
+    let richiestaDatiAmministrativi: unknown = {
+      necessaria: false,
+      stato: "non_necessaria",
+      campi: [],
+      messaggio: null,
+    };
 
     if (riconoscimentoOrdine.confermato) {
       const risultato = data as Record<string, unknown> | null;
@@ -800,6 +806,46 @@ export async function POST(request: NextRequest) {
       } catch {
         avanzamentoOrdine = confermaRaw;
       }
+
+      const richiestaResponse = await fetch(
+        `${url}/rest/v1/rpc/prepara_richiesta_dati_amministrativi`,
+        {
+          method: "POST",
+          headers: {
+            apikey: secretKey,
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ p_pratica_id: praticaId }),
+          cache: "no-store",
+        }
+      );
+
+      const richiestaRaw = await richiestaResponse.text();
+
+      if (!richiestaResponse.ok) {
+        console.error("ERRORE PREPARAZIONE DATI AMMINISTRATIVI", {
+          supabase_status: richiestaResponse.status,
+          supabase_response: richiestaRaw,
+          pratica_id: praticaId,
+          external_key: key,
+        });
+
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Richiesta dati Supabase ${richiestaResponse.status}`,
+            detail: richiestaRaw,
+          },
+          { status: 500 }
+        );
+      }
+
+      try {
+        richiestaDatiAmministrativi = JSON.parse(richiestaRaw);
+      } catch {
+        richiestaDatiAmministrativi = richiestaRaw;
+      }
     }
 
     /*
@@ -822,6 +868,9 @@ export async function POST(request: NextRequest) {
         fonte: riconoscimentoOrdine.fonte,
         avanzamento: avanzamentoOrdine,
       },
+
+      richiesta_dati_amministrativi:
+        richiestaDatiAmministrativi,
 
       external_key:
         key,

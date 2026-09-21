@@ -15,6 +15,7 @@ import {
   creaECollegaClientePraticaOperatore,
   registraNotaInternaOperatore,
   rivalutaClientePraticaOperatore,
+  segnaRichiestaAmministrativaInviataOperatore,
   verificaCodiceOperatore,
   verificaDtcOperatore,
 } from "./actions";
@@ -85,6 +86,12 @@ type Pratica = {
   stato_amministrativo?: string | null;
   stato_amministrativo_at?: string | null;
   nota_amministrativa?: string | null;
+  stato_richiesta_amministrativa?: string | null;
+  campi_richiesta_amministrativa?: string[] | null;
+  messaggio_richiesta_amministrativa?: string | null;
+  richiesta_amministrativa_preparata_at?: string | null;
+  richiesta_amministrativa_inviata_at?: string | null;
+  richiesta_amministrativa_completata_at?: string | null;
   dati_raw?: Record<string, unknown> | null;
 };
 
@@ -461,6 +468,7 @@ function etichettaAzione(azione: string) {
     cliente_abbinamento_ricalcolato: "Abbinamento cliente ricalcolato",
     cliente_collegato_operatore: "Cliente fiscale collegato",
     cliente_creato_collegato_operatore: "Nuova anagrafica fiscale creata",
+    richiesta_dati_amministrativi_inviata: "Richiesta dati amministrativi inviata",
   };
 
   return labels[azione] || etichettaStato(azione);
@@ -1822,6 +1830,54 @@ export default async function PraticaPage({
                     </p>
                   )}
                 </div>
+
+                {pratica.stato_richiesta_amministrativa === "da_inviare" &&
+                  pratica.messaggio_richiesta_amministrativa && (
+                    <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                      <div className="text-xs font-bold uppercase tracking-wide text-amber-800">
+                        Richiesta dati pronta da inviare
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">
+                        {pratica.messaggio_richiesta_amministrativa}
+                      </p>
+                      {pratica.campi_richiesta_amministrativa?.length ? (
+                        <p className="mt-2 text-xs text-amber-800">
+                          Contiene solo {pratica.campi_richiesta_amministrativa.length}{" "}
+                          {pratica.campi_richiesta_amministrativa.length === 1
+                            ? "dato mancante"
+                            : "dati mancanti"}.
+                        </p>
+                      ) : null}
+                      <form
+                        action={segnaRichiestaAmministrativaInviataOperatore}
+                        className="mt-3"
+                      >
+                        <input type="hidden" name="pratica_id" value={pratica.id} />
+                        <button className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700">
+                          Segna come inviata
+                        </button>
+                      </form>
+                    </div>
+                  )}
+
+                {pratica.stato_richiesta_amministrativa === "inviata" && (
+                  <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                    <div className="text-xs font-bold uppercase tracking-wide text-blue-800">
+                      Richiesta dati inviata
+                    </div>
+                    <p className="mt-1 text-sm text-slate-700">
+                      In attesa della risposta del cliente
+                      {pratica.richiesta_amministrativa_inviata_at
+                        ? ` · ${formattaData(pratica.richiesta_amministrativa_inviata_at)}`
+                        : ""}
+                    </p>
+                    {pratica.messaggio_richiesta_amministrativa && (
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                        {pratica.messaggio_richiesta_amministrativa}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {clienteCollegato ? (
                   <div className="mt-4">

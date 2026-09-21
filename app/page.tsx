@@ -53,6 +53,16 @@ type Pratica = {
     | null;
   stato_amministrativo_at?: string | null;
   nota_amministrativa?: string | null;
+  stato_richiesta_amministrativa?:
+    | "non_necessaria"
+    | "da_inviare"
+    | "inviata"
+    | "completata"
+    | "annullata"
+    | null;
+  campi_richiesta_amministrativa?: string[] | null;
+  richiesta_amministrativa_preparata_at?: string | null;
+  richiesta_amministrativa_inviata_at?: string | null;
   coda: string;
   priorita: number;
   tipo_flusso: string;
@@ -196,7 +206,7 @@ async function getPratiche(): Promise<{
     // e uniti per id. In questo modo la dashboard resta compatibile anche
     // con campi aggiunti dopo la creazione delle view operative.
     const metaResponse = await fetch(
-      `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at,da_verificare_at,cliente_id,stato_amministrativo,stato_amministrativo_at,nota_amministrativa`,
+      `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at,da_verificare_at,cliente_id,stato_amministrativo,stato_amministrativo_at,nota_amministrativa,stato_richiesta_amministrativa,campi_richiesta_amministrativa,richiesta_amministrativa_preparata_at,richiesta_amministrativa_inviata_at`,
       {
         headers: {
           apikey: secretKey,
@@ -238,6 +248,10 @@ async function getPratiche(): Promise<{
       stato_amministrativo: Pratica["stato_amministrativo"];
       stato_amministrativo_at: string | null;
       nota_amministrativa: string | null;
+      stato_richiesta_amministrativa: Pratica["stato_richiesta_amministrativa"];
+      campi_richiesta_amministrativa: string[] | null;
+      richiesta_amministrativa_preparata_at: string | null;
+      richiesta_amministrativa_inviata_at: string | null;
     }>;
 
     const metadatiPerId = new Map(
@@ -301,6 +315,14 @@ async function getPratiche(): Promise<{
               stato_amministrativo: meta.stato_amministrativo,
               stato_amministrativo_at: meta.stato_amministrativo_at,
               nota_amministrativa: meta.nota_amministrativa,
+              stato_richiesta_amministrativa:
+                meta.stato_richiesta_amministrativa,
+              campi_richiesta_amministrativa:
+                meta.campi_richiesta_amministrativa,
+              richiesta_amministrativa_preparata_at:
+                meta.richiesta_amministrativa_preparata_at,
+              richiesta_amministrativa_inviata_at:
+                meta.richiesta_amministrativa_inviata_at,
             }
           : {}),
         minuti_lavorativi_preventivo:
@@ -342,6 +364,12 @@ function contaAmministrazione(pratiche: Pratica[], stato: string) {
     (pratica) =>
       pratica.stato_fatturazione === "da_fatturare" &&
       pratica.stato_amministrativo === stato
+  ).length;
+}
+
+function contaRichiesteAmministrative(pratiche: Pratica[], stato: string) {
+  return pratiche.filter(
+    (pratica) => pratica.stato_richiesta_amministrativa === stato
   ).length;
 }
 
@@ -672,6 +700,16 @@ function filtraPratiche(pratiche: Pratica[], filtro: string) {
           pratica.stato_amministrativo === "pronto_fatturazione"
       );
 
+    case "admin_richieste_da_inviare":
+      return pratiche.filter(
+        (pratica) => pratica.stato_richiesta_amministrativa === "da_inviare"
+      );
+
+    case "admin_attesa_dati_cliente":
+      return pratiche.filter(
+        (pratica) => pratica.stato_richiesta_amministrativa === "inviata"
+      );
+
     default:
       return pratiche;
   }
@@ -705,6 +743,10 @@ function labelFiltro(filtro: string) {
       return "Corrispondenza ambigua";
     case "admin_pronto_fatturazione":
       return "Dati completi / pronto per fatturazione";
+    case "admin_richieste_da_inviare":
+      return "Richieste dati da inviare";
+    case "admin_attesa_dati_cliente":
+      return "In attesa dei dati cliente";
     default:
       return "Tutte le pratiche";
   }
@@ -816,6 +858,14 @@ export default async function Home({
   const prontiFatturazione = contaAmministrazione(
     pratiche,
     "pronto_fatturazione"
+  );
+  const richiesteAmministrativeDaInviare = contaRichiesteAmministrative(
+    pratiche,
+    "da_inviare"
+  );
+  const richiesteAmministrativeInviate = contaRichiesteAmministrative(
+    pratiche,
+    "inviata"
   );
 
   return (
@@ -985,7 +1035,23 @@ export default async function Home({
             Coda amministrativa
           </h2>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <DashboardFilterCard
+              titolo="Richieste dati da inviare"
+              valore={richiesteAmministrativeDaInviare}
+              descrizione="Messaggio mirato già pronto per il cliente"
+              className="border-amber-500"
+              href={hrefConFiltro("admin_richieste_da_inviare")}
+              attiva={filtroAttivo === "admin_richieste_da_inviare"}
+            />
+            <DashboardFilterCard
+              titolo="In attesa dati cliente"
+              valore={richiesteAmministrativeInviate}
+              descrizione="Richiesta inviata, risposta amministrativa attesa"
+              className="border-cyan-500"
+              href={hrefConFiltro("admin_attesa_dati_cliente")}
+              attiva={filtroAttivo === "admin_attesa_dati_cliente"}
+            />
             <DashboardFilterCard
               titolo="Cliente riconosciuto"
               valore={clientiRiconosciuti}
@@ -1256,6 +1322,18 @@ export default async function Home({
                                   : "Amministrazione da verificare"}
                               </span>
                             )}
+
+                          {pratica.stato_richiesta_amministrativa === "da_inviare" && (
+                            <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+                              Richiesta dati pronta
+                            </span>
+                          )}
+
+                          {pratica.stato_richiesta_amministrativa === "inviata" && (
+                            <span className="inline-flex rounded-full bg-cyan-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-900">
+                              In attesa dati cliente
+                            </span>
+                          )}
                         </div>
                       </td>
 

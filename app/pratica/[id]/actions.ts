@@ -380,6 +380,26 @@ export async function creaECollegaClientePraticaOperatore(formData: FormData) {
   revalidatePath(`/pratica/${praticaId}`);
 }
 
+export async function segnaRichiestaAmministrativaInviataOperatore(
+  formData: FormData
+) {
+  const praticaId = valoreModulo(formData, "pratica_id", 36);
+  verificaPraticaId(praticaId);
+
+  await chiamaRpc("segna_richiesta_dati_amministrativi_inviata", {
+    p_pratica_id: praticaId,
+  });
+
+  await registraEventoOperatore(
+    praticaId,
+    "richiesta_dati_amministrativi_inviata",
+    "L’operatore ha confermato l’invio al cliente della richiesta dei dati amministrativi mancanti."
+  );
+
+  revalidatePath("/");
+  revalidatePath(`/pratica/${praticaId}`);
+}
+
 /* ============================================================
    NOTE INTERNE OPERATORE
    ============================================================ */
