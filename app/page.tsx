@@ -381,11 +381,21 @@ function contaRichiesteAmministrative(pratiche: Pratica[], stato: string) {
   ).length;
 }
 
+function contaAssistenzaDaEvadere(pratiche: Pratica[]) {
+  return pratiche.filter(
+    (pratica) =>
+      pratica.tipo_flusso === "assistenza" &&
+      ["nuova", "da_verificare"].includes(pratica.stato_assistenza)
+  ).length;
+}
+
 function contaAssistenzaAperta(pratiche: Pratica[]) {
   return pratiche.filter(
     (pratica) =>
       pratica.tipo_flusso === "assistenza" &&
-      !["risolta", "chiusa"].includes(pratica.stato_assistenza)
+      ["in_gestione", "attesa_cliente", "attesa_rientro"].includes(
+        pratica.stato_assistenza
+      )
   ).length;
 }
 
@@ -637,11 +647,20 @@ function prioritaClass(pratica: Pratica) {
 
 function filtraPratiche(pratiche: Pratica[], filtro: string) {
   switch (filtro) {
+    case "assistenza_da_evadere":
+      return pratiche.filter(
+        (pratica) =>
+          pratica.tipo_flusso === "assistenza" &&
+          ["nuova", "da_verificare"].includes(pratica.stato_assistenza)
+      );
+
     case "assistenza_aperta":
       return pratiche.filter(
         (pratica) =>
           pratica.tipo_flusso === "assistenza" &&
-          !["risolta", "chiusa"].includes(pratica.stato_assistenza)
+          ["in_gestione", "attesa_cliente", "attesa_rientro"].includes(
+            pratica.stato_assistenza
+          )
       );
 
     case "assistenza_prioritaria":
@@ -725,6 +744,8 @@ function filtraPratiche(pratiche: Pratica[], filtro: string) {
 
 function labelFiltro(filtro: string) {
   switch (filtro) {
+    case "assistenza_da_evadere":
+      return "Assistenze da evadere";
     case "assistenza_aperta":
       return "Assistenza aperta";
     case "assistenza_prioritaria":
@@ -826,6 +847,7 @@ export default async function Home({
       ? "/"
       : `/?filtro=${encodeURIComponent(filtroAttivo)}`;
 
+  const assistenzaDaEvadere = contaAssistenzaDaEvadere(pratiche);
   const assistenzaAperta = contaAssistenzaAperta(pratiche);
   const assistenzaPrioritaria = contaAssistenzaPrioritaria(pratiche);
 
@@ -925,11 +947,19 @@ export default async function Home({
             Assistenza / Post-vendita
           </h2>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <DashboardFilterCard
+              titolo="Assistenze da evadere"
+              valore={assistenzaDaEvadere}
+              descrizione="Nuove richieste non ancora prese in carico"
+              className="border-violet-500"
+              href={hrefConFiltro("assistenza_da_evadere")}
+              attiva={filtroAttivo === "assistenza_da_evadere"}
+            />
             <DashboardFilterCard
               titolo="Assistenza aperta"
               valore={assistenzaAperta}
-              descrizione="Richieste di assistenza ancora da gestire o concludere"
+              descrizione="Pratiche già in gestione o in attesa"
               className="border-purple-400"
               href={hrefConFiltro("assistenza_aperta")}
               attiva={filtroAttivo === "assistenza_aperta"}
