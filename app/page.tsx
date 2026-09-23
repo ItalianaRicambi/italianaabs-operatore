@@ -86,9 +86,12 @@ function correggiCodaOperativa(pratica: Pratica): Pratica {
   let coda = pratica.coda;
   let priorita = pratica.priorita;
 
-  // Stato terminale: il rifiuto prevale su qualunque altro dato storico.
+  // Gli stati terminali prevalgono su qualunque dato storico di completezza.
   if (pratica.stato_commerciale === "rifiutato") {
     coda = "RIFIUTATA";
+    priorita = 99;
+  } else if (pratica.stato_commerciale === "chiuso") {
+    coda = "CHIUSA";
     priorita = 99;
   } else if (pratica.stato_fatturazione === "fatturato") {
     // Una pratica fatturata non deve competere con attività ancora da svolgere.
@@ -106,8 +109,13 @@ function correggiCodaOperativa(pratica: Pratica): Pratica {
     // e NON deve competere con le vere pratiche "Da verificare".
     coda = "RICHIESTE VERIFICHE - ATTESA CLIENTE";
     priorita = 7;
-  } else if (pratica.stato_completezza === "completa_da_preventivare") {
-    // Il preventivo è il primo lavoro commerciale da eseguire dopo le urgenze assolute.
+  } else if (
+    ["nuova", "raccolta_dati", "da_preventivare"].includes(
+      pratica.stato_commerciale
+    ) &&
+    pratica.stato_completezza === "completa_da_preventivare"
+  ) {
+    // Solo una pratica commerciale ancora aperta può entrare nella coda preventivi.
     coda = "DA PREVENTIVARE";
     priorita = 2;
   } else if (pratica.stato_completezza === "dati_integrati_da_verificare") {
