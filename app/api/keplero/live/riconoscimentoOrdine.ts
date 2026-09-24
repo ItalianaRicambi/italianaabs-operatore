@@ -2,7 +2,11 @@ type PayloadKeplero = Record<string, unknown>;
 
 export type RiconoscimentoOrdine = {
   confermato: boolean;
-  fonte: "campo_esplicito" | "messaggio_esplicito" | "nessuna";
+  fonte:
+    | "campo_esplicito"
+    | "messaggio_esplicito"
+    | "riepilogo_esplicito"
+    | "nessuna";
   messaggio: string;
 };
 
@@ -46,6 +50,17 @@ function normalizzaFrase(value: string) {
     .trim();
 }
 
+function contieneNegazioneODubbio(frase: string) {
+  return [
+    /\?/,
+    /\bnon\b.{0,25}\b(accett|conferm|approv|proced)/,
+    /\b(non va bene|rifiuto|rifiutiamo|troppo caro)\b/,
+    /\b(ci penso|dobbiamo pensarci|devo valutare|dobbiamo valutare)\b/,
+    /\b(vi faccio sapere|le faccio sapere|forse|eventualmente)\b/,
+    /\bse\s+(accetto|confermo|procedo|procediamo)\b/,
+  ].some((regola) => regola.test(frase));
+}
+
 export function riconosciConfermaOrdine(
   payload: PayloadKeplero
 ): RiconoscimentoOrdine {
@@ -54,16 +69,15 @@ export function riconosciConfermaOrdine(
       payload.messaggio_cliente ??
       payload.messaggio
   );
+  const riepilogo = testo(
+    payload.riepilogo_operativo ??
+      payload.descrizione_guasto ??
+      payload.richiesta
+  );
 
   const frase = normalizzaFrase(messaggio);
-  const dubbiaONegativa = [
-    /\?/,
-    /\bnon\b.{0,25}\b(accett|conferm|approv|proced)/,
-    /\b(non va bene|rifiuto|rifiutiamo|troppo caro)\b/,
-    /\b(ci penso|dobbiamo pensarci|devo valutare|dobbiamo valutare)\b/,
-    /\b(vi faccio sapere|le faccio sapere|forse|eventualmente)\b/,
-    /\bse\s+(accetto|confermo|procedo|procediamo)\b/,
-  ].some((regola) => regola.test(frase));
+  const fraseRiepilogo = normalizzaFrase(riepilogo);
+  const dubbiaONegativa = contieneNegazioneODubbio(frase);
 
   if (dubbiaONegativa) {
     return { confermato: false, fonte: "nessuna", messaggio };
@@ -97,9 +111,25 @@ export function riconosciConfermaOrdine(
     /\bho\s+(effettuato|eseguito|fatto)\s+il\s+pagamento\b/,
   ].some((regola) => regola.test(frase));
 
+  if (confermaEsplicita) {
+    return {
+      confermato: true,
+      fonte: "messaggio_esplicito",
+      messaggio,
+    };
+  }
+
+  const confermaNelRiepilogo =
+    Boolean(fraseRiepilogo) &&
+    !contieneNegazioneODubbio(fraseRiepilogo) &&
+    [
+      /\b(accettat[oa]|confermat[oa]|approvat[oa])\b.{0,55}\b(lavorazione|riparazione|preventivo|offerta|ordine)\b/,
+      /\b(lavorazione|riparazione|preventivo|offerta|ordine)\b.{0,55}\b(accettat[oa]|confermat[oa]|approvat[oa])\b/,
+    ].some((regola) => regola.test(fraseRiepilogo));
+
   return {
-    confermato: confermaEsplicita,
-    fonte: confermaEsplicita ? "messaggio_esplicito" : "nessuna",
-    messaggio,
+    confermato: confermaNelRiepilogo,
+    fonte: confermaNelRiepilogo ? "riepilogo_esplicito" : "nessuna",
+    messaggio: confermaNelRiepilogo ? riepilogo : messaggio,
   };
 }
