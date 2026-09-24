@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { riconosciConfermaOrdine } from "./riconoscimentoOrdine";
+import { riconosciNuovaPratica } from "./riconoscimentoNuovaPratica";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -459,7 +460,7 @@ export async function POST(request: NextRequest) {
      * ============================================================
      */
 
-    const key = externalKey(body, conversationId);
+    const baseKey = externalKey(body, conversationId);
 
     /*
      * ============================================================
@@ -515,13 +516,115 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const riconoscimentoNuovaPratica =
+      riconosciNuovaPratica(body);
+
     const payloadNormalizzato = {
       ...body,
       spie_accese: spieAccese,
       diagnosi_presente: diagnosiPresente,
       dati_completi: datiCompleti,
       motivo_incompletezza: motivoIncompletezza,
+      nuova_pratica_richiesta:
+        riconoscimentoNuovaPratica.richiesta,
+      nuova_pratica_fonte:
+        riconoscimentoNuovaPratica.fonte,
+      nuova_pratica_evidenza:
+        riconoscimentoNuovaPratica.evidenza || null,
     };
+
+    const instradamentoResponse = await fetch(
+      `${url}/rest/v1/rpc/prepara_instradamento_keplero`,
+      {
+        method: "POST",
+        headers: {
+          apikey: secretKey,
+          Authorization: `Bearer ${secretKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          p_external_key: baseKey,
+          p_conversation_id:
+            uuidValido(conversationId)
+              ? conversationId
+              : null,
+          p_telefono:
+            testo(
+              primo(
+                body,
+                "telefono",
+                "phone",
+                "whatsapp"
+              )
+            ) || null,
+          p_targa: targa || null,
+          p_marca_veicolo:
+            testo(
+              primo(
+                body,
+                "marca_veicolo",
+                "marca"
+              )
+            ) || null,
+          p_modello_veicolo:
+            testo(
+              primo(
+                body,
+                "modello_veicolo",
+                "modello"
+              )
+            ) || null,
+          p_payload: payloadNormalizzato,
+        }),
+        cache: "no-store",
+      }
+    );
+
+    const instradamentoRaw =
+      await instradamentoResponse.text();
+
+    if (!instradamentoResponse.ok) {
+      console.error("ERRORE INSTRADAMENTO KEPLERO", {
+        supabase_status: instradamentoResponse.status,
+        supabase_response: instradamentoRaw,
+        external_key: baseKey,
+      });
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `Instradamento Supabase ${instradamentoResponse.status}`,
+          detail: instradamentoRaw,
+        },
+        { status: 500 }
+      );
+    }
+
+    const instradamento = JSON.parse(
+      instradamentoRaw
+    ) as Record<string, unknown>;
+
+    if (instradamento.richiedi_targa === true) {
+      return NextResponse.json({
+        ok: true,
+        message:
+          "Nuova vettura riconosciuta: prima di creare la pratica serve la targa.",
+        action_required: "richiedi_targa",
+        risposta_suggerita:
+          "Grazie. Per aprire la nuova pratica mi serve anche la targa del veicolo.",
+        result: instradamento,
+        external_key: baseKey,
+      });
+    }
+
+    const key =
+      typeof instradamento.external_key === "string" &&
+      instradamento.external_key
+        ? instradamento.external_key
+        : baseKey;
+
+    const usaConversationId =
+      instradamento.usa_conversation_id === true;
 
     const riconoscimentoOrdine =
       riconosciConfermaOrdine(payloadNormalizzato);
@@ -530,7 +633,7 @@ export async function POST(request: NextRequest) {
       p_external_key: key,
 
       p_conversation_id:
-        uuidValido(conversationId)
+        usaConversationId && uuidValido(conversationId)
           ? conversationId
           : null,
 
@@ -738,6 +841,57 @@ export async function POST(request: NextRequest) {
       // conserviamo semplicemente il contenuto originale.
     }
 
+    if (instradamento.nuova_pratica === true) {
+      const risultato = data as Record<string, unknown> | null;
+      const nuovaPraticaId =
+        risultato && typeof risultato.pratica_id === "string"
+          ? risultato.pratica_id
+          : "";
+
+      if (!uuidValido(nuovaPraticaId)) {
+        throw new Error(
+          "Supabase non ha restituito un ID valido per la nuova pratica"
+        );
+      }
+
+      const attivazioneResponse = await fetch(
+        `${url}/rest/v1/rpc/attiva_pratica_conversazione_keplero`,
+        {
+          method: "POST",
+          headers: {
+            apikey: secretKey,
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            p_external_key: baseKey,
+            p_pratica_id: nuovaPraticaId,
+          }),
+          cache: "no-store",
+        }
+      );
+
+      const attivazioneRaw = await attivazioneResponse.text();
+
+      if (!attivazioneResponse.ok) {
+        console.error("ERRORE ATTIVAZIONE NUOVA PRATICA", {
+          supabase_status: attivazioneResponse.status,
+          supabase_response: attivazioneRaw,
+          pratica_id: nuovaPraticaId,
+          external_key: baseKey,
+        });
+
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Attivazione nuova pratica Supabase ${attivazioneResponse.status}`,
+            detail: attivazioneRaw,
+          },
+          { status: 500 }
+        );
+      }
+    }
+
     let avanzamentoOrdine: unknown = {
       aggiornato: false,
       motivo: "nessuna_conferma_esplicita",
@@ -867,6 +1021,15 @@ export async function POST(request: NextRequest) {
         confermato: riconoscimentoOrdine.confermato,
         fonte: riconoscimentoOrdine.fonte,
         avanzamento: avanzamentoOrdine,
+      },
+
+      riconoscimento_nuova_pratica: {
+        richiesta:
+          riconoscimentoNuovaPratica.richiesta,
+        fonte:
+          riconoscimentoNuovaPratica.fonte,
+        nuova_pratica_creata:
+          instradamento.nuova_pratica === true,
       },
 
       richiesta_dati_amministrativi:
