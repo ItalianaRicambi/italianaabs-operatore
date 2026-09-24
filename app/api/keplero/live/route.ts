@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
+import {
+  estraiCodiciIdentificativi,
+  normalizzaAllegati,
+  normalizzaCodice,
+  statoLetturaImmagini,
+} from "./normalizzazioneMedia";
 import { riconosciConfermaOrdine } from "./riconoscimentoOrdine";
 import { riconosciNuovaPratica } from "./riconoscimentoNuovaPratica";
 
@@ -99,12 +105,6 @@ function lista(value: unknown) {
 
 function normalizzaTarga(value: unknown) {
   return testo(value)
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
-}
-
-function normalizzaCodice(value: string) {
-  return value
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
 }
@@ -293,13 +293,18 @@ export async function POST(request: NextRequest) {
      * ============================================================
      */
 
-    const codiciOriginali = lista(
+    const dtc = lista(
       primo(
         body,
-        "codici_identificativi",
-        "codici",
-        "device_codes"
+        "dtc",
+        "codici_guasto",
+        "error_codes"
       )
+    );
+
+    const codiciOriginali = estraiCodiciIdentificativi(
+      body,
+      [targa, ...dtc]
     );
 
     const codici = codiciOriginali
@@ -313,21 +318,6 @@ export async function POST(request: NextRequest) {
         fonte: "keplero_live",
         verificato: false,
       }));
-
-    /*
-     * ============================================================
-     * DTC
-     * ============================================================
-     */
-
-    const dtc = lista(
-      primo(
-        body,
-        "dtc",
-        "codici_guasto",
-        "error_codes"
-      )
-    );
 
     /*
      * ============================================================
@@ -366,14 +356,16 @@ export async function POST(request: NextRequest) {
      * ============================================================
      */
 
-    const allegati = lista(
+    const allegatiNormalizzati = normalizzaAllegati(
       primo(
         body,
         "allegati",
         "attachments",
         "attachment_urls"
       )
-    ).map((url) => ({
+    );
+
+    const allegati = allegatiNormalizzati.urls.map((url) => ({
       url,
       nome: "Allegato Keplero",
       tipo: "Allegato",
@@ -514,7 +506,25 @@ export async function POST(request: NextRequest) {
           motivoIncompletezza ||
           "Nessuna spia accesa: serve una descrizione chiara del comportamento o del guasto.";
       }
+
+      if (
+        codici.length === 0 &&
+        (allegati.length > 0 ||
+          allegatiNormalizzati.descrizioni.length > 0)
+      ) {
+        datiCompleti = false;
+
+        motivoIncompletezza =
+          motivoIncompletezza ||
+          "Le immagini sono state ricevute, ma Keplero non ha trasmesso alcun codice identificativo verificabile.";
+      }
     }
+
+    const statoImmagini = statoLetturaImmagini(
+      codici.length,
+      allegati.length,
+      allegatiNormalizzati.descrizioni.length
+    );
 
     const riconoscimentoNuovaPratica =
       riconosciNuovaPratica(body);
@@ -811,6 +821,9 @@ export async function POST(request: NextRequest) {
 
           numero_allegati:
             allegati.length,
+
+          allegati_descritti_ma_non_trasmessi:
+            allegatiNormalizzati.descrizioni.length,
         }
       );
 
@@ -839,6 +852,68 @@ export async function POST(request: NextRequest) {
     } catch {
       // Se Supabase restituisce testo anziché JSON,
       // conserviamo semplicemente il contenuto originale.
+    }
+
+    let sincronizzazioneCodici: unknown = {
+      ok: true,
+      codici_inseriti: 0,
+    };
+
+    if (codici.length > 0) {
+      const risultato = data as Record<string, unknown> | null;
+      const praticaId =
+        risultato && typeof risultato.pratica_id === "string"
+          ? risultato.pratica_id
+          : "";
+
+      if (!uuidValido(praticaId)) {
+        throw new Error(
+          "Supabase non ha restituito un ID pratica valido per salvare i codici"
+        );
+      }
+
+      const codiciResponse = await fetch(
+        `${url}/rest/v1/rpc/sincronizza_codici_keplero`,
+        {
+          method: "POST",
+          headers: {
+            apikey: secretKey,
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            p_pratica_id: praticaId,
+            p_codici: codici,
+          }),
+          cache: "no-store",
+        }
+      );
+
+      const codiciRaw = await codiciResponse.text();
+
+      if (!codiciResponse.ok) {
+        console.error("ERRORE SINCRONIZZAZIONE CODICI KEPLERO", {
+          supabase_status: codiciResponse.status,
+          supabase_response: codiciRaw,
+          pratica_id: praticaId,
+          numero_codici: codici.length,
+        });
+
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Sincronizzazione codici Supabase ${codiciResponse.status}`,
+            detail: codiciRaw,
+          },
+          { status: 500 }
+        );
+      }
+
+      try {
+        sincronizzazioneCodici = JSON.parse(codiciRaw);
+      } catch {
+        sincronizzazioneCodici = codiciRaw;
+      }
     }
 
     if (instradamento.nuova_pratica === true) {
@@ -1041,8 +1116,31 @@ export async function POST(request: NextRequest) {
       codici_accettati:
         codici.length,
 
+      sincronizzazione_codici:
+        sincronizzazioneCodici,
+
       codici_esclusi_perche_targa:
         codiciOriginali.length - codici.length,
+
+      lettura_immagini: {
+        stato: statoImmagini,
+        file_ricevuti: allegati.length,
+        descrizioni_senza_file:
+          allegatiNormalizzati.descrizioni.length,
+      },
+
+      action_required:
+        statoImmagini === "file_non_trasmessi_da_keplero"
+          ? "riprova_lettura_immagini_o_inoltra_a_operatore"
+          : statoImmagini === "file_ricevuti_senza_codici"
+            ? "verifica_immagini_operatore"
+            : null,
+
+      risposta_suggerita:
+        statoImmagini === "file_non_trasmessi_da_keplero" ||
+        statoImmagini === "file_ricevuti_senza_codici"
+          ? "Grazie, ho ricevuto le immagini. Le inoltro a un operatore per la verifica dei codici, senza chiederle di inviarle nuovamente."
+          : null,
     });
   } catch (error) {
     /*
