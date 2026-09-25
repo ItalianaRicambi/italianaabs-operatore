@@ -522,6 +522,7 @@ export default async function PraticaPage({
   } = await getPratica(id, ricercaCliente.trim());
 
   const noteInterne = annotazioniOperatore;
+  const ultimaNotaOperatore = noteInterne[0] || null;
   const azioniStorico = storicoOperatore;
 
   const rawCodes = rawArray<RawCode>(
@@ -769,6 +770,33 @@ export default async function PraticaPage({
             </div>
           </div>
         </header>
+
+        {ultimaNotaOperatore && (
+          <section
+            aria-label="Ultima annotazione operatore"
+            className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-6 py-5 shadow-sm"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-800">
+                  Ultima annotazione operatore
+                </p>
+                <p className="mt-2 whitespace-pre-wrap text-base font-semibold leading-7 text-slate-900">
+                  {ultimaNotaOperatore.testo}
+                </p>
+              </div>
+
+              <div className="shrink-0 text-sm sm:text-right">
+                <div className="font-bold text-amber-950">
+                  {ultimaNotaOperatore.autore}
+                </div>
+                <div className="mt-1 text-xs text-amber-700">
+                  {formattaData(ultimaNotaOperatore.created_at)}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         <div className="grid gap-6 xl:grid-cols-3">
           <section className="space-y-6 xl:col-span-2">
