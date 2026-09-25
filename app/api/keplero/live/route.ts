@@ -162,14 +162,14 @@ function externalKey(body: Body, conversationId: string) {
     testo(primo(body, "channel", "canale"))
       .toLowerCase() || "keplero";
 
-  const giorno = new Date().toISOString().slice(0, 10);
-
   /*
    * PRIORITA 2: telefono/WhatsApp.
    *
    * Nel canale WhatsApp reale è il dato più stabile:
    * NON deve cambiare quando arrivano targa, nome cliente, DTC,
-   * codici identificativi o altre informazioni successive.
+   * codici identificativi, il giorno o altre informazioni successive.
+   * La separazione fra vetture è gestita dall'instradamento dedicato,
+   * non creando una conversazione nuova ogni giorno.
    */
   const telefono = normalizzaTelefono(
     primo(body, "telefono", "phone", "whatsapp")
@@ -177,7 +177,7 @@ function externalKey(body: Body, conversationId: string) {
 
   if (telefono) {
     return `fallback:${hashBreve(
-      [channel, "telefono", telefono, giorno].join("|")
+      [channel, "telefono", telefono].join("|")
     )}`;
   }
 
@@ -192,6 +192,8 @@ function externalKey(body: Body, conversationId: string) {
   const targa = normalizzaTarga(
     primo(body, "targa", "plate")
   );
+
+  const giorno = new Date().toISOString().slice(0, 10);
 
   if (targa) {
     return `fallback:${hashBreve(
@@ -480,6 +482,21 @@ export async function POST(request: NextRequest) {
         )
       ) || null;
 
+    const riconoscimentoOrdine =
+      riconosciConfermaOrdine({
+        ...body,
+        descrizione_guasto: descrizioneGuasto,
+      });
+
+    /*
+     * Una conferma esplicita di ordine/preventivo appartiene sempre al
+     * flusso commerciale, anche se Keplero la etichetta come assistenza
+     * perche cita una pratica o un ordine esistente.
+     */
+    if (riconoscimentoOrdine.confermato) {
+      tipoFlusso = "commerciale";
+    }
+
     let motivoIncompletezza =
       testo(
         primo(
@@ -541,6 +558,10 @@ export async function POST(request: NextRequest) {
         riconoscimentoNuovaPratica.fonte,
       nuova_pratica_evidenza:
         riconoscimentoNuovaPratica.evidenza || null,
+      ordine_confermato_rilevato:
+        riconoscimentoOrdine.confermato,
+      ordine_confermato_fonte:
+        riconoscimentoOrdine.fonte,
     };
 
     const instradamentoResponse = await fetch(
@@ -635,9 +656,6 @@ export async function POST(request: NextRequest) {
 
     const usaConversationId =
       instradamento.usa_conversation_id === true;
-
-    const riconoscimentoOrdine =
-      riconosciConfermaOrdine(payloadNormalizzato);
 
     const rpcBody = {
       p_external_key: key,

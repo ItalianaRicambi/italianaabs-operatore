@@ -125,6 +125,7 @@ export function riconosciConfermaOrdine(
     [
       /\b(accettat[oa]|confermat[oa]|approvat[oa])\b.{0,55}\b(lavorazione|riparazione|preventivo|offerta|ordine)\b/,
       /\b(lavorazione|riparazione|preventivo|offerta|ordine)\b.{0,55}\b(accettat[oa]|confermat[oa]|approvat[oa])\b/,
+      /\bconferma\s+(?:dell[' ]|l[' ])?ordine\b/,
     ].some((regola) => regola.test(fraseRiepilogo));
 
   return {

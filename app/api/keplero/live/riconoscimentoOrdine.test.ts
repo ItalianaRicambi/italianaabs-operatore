@@ -81,6 +81,17 @@ test("mantiene la conferma presente nel riepilogo quando l'ultimo messaggio comp
   assert.match(risultato.messaggio, /Accettata la lavorazione/);
 });
 
+test("mantiene la conferma ordine nel riepilogo quando l'ultimo messaggio contiene una correzione della targa", () => {
+  const risultato = riconosciConfermaOrdine({
+    ultimo_messaggio_cliente: "Immagine ricevuta con targa CW578CX.",
+    descrizione_guasto:
+      "Conferma dell'ordine per gruppo SBC; resta da verificare la targa.",
+  });
+
+  assert.equal(risultato.confermato, true);
+  assert.equal(risultato.fonte, "riepilogo_esplicito");
+});
+
 test("non interpreta una semplice richiesta di preventivo come conferma", () => {
   assert.equal(
     riconosciConfermaOrdine({
