@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -202,14 +202,16 @@ function externalKey(body: Body, conversationId: string) {
   }
 
   /*
-   * ULTIMO FALLBACK.
-   *
-   * Senza conversation_id, telefono o targa non esiste nel payload
-   * un identificatore realmente stabile della conversazione.
-   * Manteniamo quindi una chiave anonima giornaliera solo come
-   * ultima protezione, evitando di usare nome/descrizione/DTC:
-   * sono dati mutabili e farebbero cambiare external_key.
+   * Un messaggio web senza identificativo di conversazione, telefono o targa
+   * non può essere collegato in modo affidabile ad altri messaggi. Una
+   * chiave giornaliera mescolerebbe richieste di clienti diversi; isoliamo
+   * ciascuna consegna finché Keplero non fornisce un ID di sessione stabile.
    */
+  if (channel === "web") {
+    return `fallback:web:anonimo:${randomUUID()}`;
+  }
+
+  /* Ultimo fallback per gli altri canali privi di identificativi. */
   return `fallback:${hashBreve(
     [channel, "anonimo", giorno].join("|")
   )}`;
