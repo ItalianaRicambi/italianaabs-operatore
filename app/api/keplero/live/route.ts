@@ -7,8 +7,7 @@ import {
   normalizzaCodice,
   statoLetturaImmagini,
 } from "./normalizzazioneMedia";
-import { riconosciConfermaOrdine } from "./riconoscimentoOrdine";
-import { riconosciNuovaPratica } from "./riconoscimentoNuovaPratica";
+import { decidiEventoKeplero } from "./decisioneEvento";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -464,15 +463,6 @@ export async function POST(request: NextRequest) {
      * ============================================================
      */
 
-    let datiCompleti = bool(
-      primo(
-        body,
-        "dati_completi",
-        "completo",
-        "richiesta_completa"
-      )
-    );
-
     const descrizioneGuasto =
       testo(
         primo(
@@ -484,11 +474,24 @@ export async function POST(request: NextRequest) {
         )
       ) || null;
 
-    const riconoscimentoOrdine =
-      riconosciConfermaOrdine({
+    const decisione = decidiEventoKeplero(
+      {
         ...body,
         descrizione_guasto: descrizioneGuasto,
-      });
+      },
+      {
+        targa,
+        numeroCodici: codici.length,
+        numeroAllegati: allegati.length,
+        numeroDescrizioniAllegati:
+          allegatiNormalizzati.descrizioni.length,
+        descrizioneGuasto,
+        spieAccese,
+        numeroDtc: dtc.length,
+      }
+    );
+
+    const riconoscimentoOrdine = decisione.ordine;
 
     /*
      * Una conferma esplicita di ordine/preventivo appartiene sempre al
@@ -509,34 +512,22 @@ export async function POST(request: NextRequest) {
         )
       ) || null;
 
+    const datiCompleti =
+      tipoFlusso === "commerciale"
+        ? decisione.completezza.completa
+        : bool(
+            primo(
+              body,
+              "dati_completi",
+              "completo",
+              "richiesta_completa"
+            )
+          );
+
     if (tipoFlusso === "commerciale") {
-      if (spieAccese === true && dtc.length === 0) {
-        datiCompleti = false;
-
-        motivoIncompletezza =
-          motivoIncompletezza ||
-          "Spie accese: servono i codici guasto DTC rilevati in diagnosi.";
-      }
-
-      if (spieAccese === false && !descrizioneGuasto) {
-        datiCompleti = false;
-
-        motivoIncompletezza =
-          motivoIncompletezza ||
-          "Nessuna spia accesa: serve una descrizione chiara del comportamento o del guasto.";
-      }
-
-      if (
-        codici.length === 0 &&
-        (allegati.length > 0 ||
-          allegatiNormalizzati.descrizioni.length > 0)
-      ) {
-        datiCompleti = false;
-
-        motivoIncompletezza =
-          motivoIncompletezza ||
-          "Le immagini sono state ricevute, ma Keplero non ha trasmesso alcun codice identificativo verificabile.";
-      }
+      motivoIncompletezza = datiCompleti
+        ? null
+        : `Dati mancanti: ${decisione.completezza.datiMancanti.join(", ")}.`;
     }
 
     const statoImmagini = statoLetturaImmagini(
@@ -545,8 +536,7 @@ export async function POST(request: NextRequest) {
       allegatiNormalizzati.descrizioni.length
     );
 
-    const riconoscimentoNuovaPratica =
-      riconosciNuovaPratica(body);
+    const riconoscimentoNuovaPratica = decisione.nuovaPratica;
 
     const payloadNormalizzato = {
       ...body,
@@ -564,6 +554,16 @@ export async function POST(request: NextRequest) {
         riconoscimentoOrdine.confermato,
       ordine_confermato_fonte:
         riconoscimentoOrdine.fonte,
+      stato_lettura_immagini: statoImmagini,
+      allegati_descritti_ma_non_trasmessi:
+        allegati.length === 0 &&
+        allegatiNormalizzati.descrizioni.length > 0,
+      decisione_sistema: {
+        versione_regole: decisione.versioneRegole,
+        completezza: decisione.completezza,
+        ordine: decisione.ordine,
+        nuova_pratica: decisione.nuovaPratica,
+      },
     };
 
     const instradamentoResponse = await fetch(
