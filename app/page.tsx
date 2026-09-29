@@ -9,6 +9,14 @@ import {
   BarraOperatore,
 } from "./components/IdentitaOperatore";
 import { getOperatoreAttivo } from "./operatore";
+import {
+  dataFatturaEffettiva,
+  filtroMensileSolaLettura,
+  haFatturaNelMese,
+  haPreventivoNelMese,
+  mesiDashboard,
+} from "./lib/dashboardMensile";
+import { fetchTutteLePagine } from "./lib/supabaseRest";
 
 type Pratica = {
   id: string;
@@ -173,26 +181,15 @@ async function getPratiche(): Promise<{
   }
 
   try {
-    const response = await fetch(
-      `${url}/rest/v1/v_coda_operatore_tempi?select=*&order=priorita.asc,created_at.asc`,
-      {
-        headers: {
-          apikey: secretKey,
-          Authorization: `Bearer ${secretKey}`,
-        },
-        cache: "no-store",
-      }
+    const headers = {
+      apikey: secretKey,
+      Authorization: `Bearer ${secretKey}`,
+    };
+
+    const praticheBaseRaw = await fetchTutteLePagine<Pratica>(
+      `${url}/rest/v1/v_coda_operatore_tempi?select=*&order=priorita.asc,created_at.asc,id.asc`,
+      { headers }
     );
-
-    if (!response.ok) {
-      const dettaglio = await response.text();
-      return {
-        pratiche: [],
-        errore: `Errore Supabase ${response.status}: ${dettaglio}`,
-      };
-    }
-
-    const praticheBaseRaw = (await response.json()) as Pratica[];
 
     // v_coda_operatore_tempi aggiunge il timer commerciale con i nomi
     // minuti_attesa_lavorativi e timer_preventivo_started_at.
@@ -213,35 +210,7 @@ async function getPratiche(): Promise<{
     // I campi di conferma cliente sono letti direttamente da public.pratiche
     // e uniti per id. In questo modo la dashboard resta compatibile anche
     // con campi aggiunti dopo la creazione delle view operative.
-    const metaResponse = await fetch(
-      `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at,da_verificare_at,cliente_id,stato_amministrativo,stato_amministrativo_at,nota_amministrativa,stato_richiesta_amministrativa,campi_richiesta_amministrativa,richiesta_amministrativa_preparata_at,richiesta_amministrativa_inviata_at`,
-      {
-        headers: {
-          apikey: secretKey,
-          Authorization: `Bearer ${secretKey}`,
-        },
-        cache: "no-store",
-      }
-    );
-
-    if (!metaResponse.ok) {
-      // La dashboard deve continuare a funzionare anche se i soli
-      // metadati di conferma cliente non fossero temporaneamente leggibili.
-      console.error(
-        "Metadati conferma cliente non disponibili:",
-        metaResponse.status,
-        await metaResponse.text()
-      );
-
-      return {
-        pratiche: ordinaCodaOperativa(
-          praticheBase.map(correggiCodaOperativa)
-        ),
-        errore: null,
-      };
-    }
-
-    const metadati = (await metaResponse.json()) as Array<{
+    let metadati: Array<{
       id: string;
       fonte_completezza: string | null;
       stato_conferma_cliente:
@@ -260,7 +229,19 @@ async function getPratiche(): Promise<{
       campi_richiesta_amministrativa: string[] | null;
       richiesta_amministrativa_preparata_at: string | null;
       richiesta_amministrativa_inviata_at: string | null;
-    }>;
+      data_fattura: string | null;
+    }> = [];
+
+    try {
+      metadati = await fetchTutteLePagine(
+        `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at,da_verificare_at,cliente_id,stato_amministrativo,stato_amministrativo_at,nota_amministrativa,stato_richiesta_amministrativa,campi_richiesta_amministrativa,richiesta_amministrativa_preparata_at,richiesta_amministrativa_inviata_at,data_fattura&order=id.asc`,
+        { headers }
+      );
+    } catch (error) {
+      // La dashboard deve continuare a funzionare anche se i soli
+      // metadati aggiuntivi non fossero temporaneamente leggibili.
+      console.error("Metadati pratiche non disponibili:", error);
+    }
 
     const metadatiPerId = new Map(
       metadati.map((riga) => [riga.id, riga])
@@ -270,17 +251,6 @@ async function getPratiche(): Promise<{
     // Il timer preventivo arriva già da v_coda_operatore_tempi.
     // Manteniamo v_tempi_operativi_dashboard per il timer "Da verificare"
     // e come fallback compatibile per il preventivo.
-    const tempiResponse = await fetch(
-      `${url}/rest/v1/v_tempi_operativi_dashboard?select=id,minuti_lavorativi_preventivo,minuti_lavorativi_verifica`,
-      {
-        headers: {
-          apikey: secretKey,
-          Authorization: `Bearer ${secretKey}`,
-        },
-        cache: "no-store",
-      }
-    );
-
     let tempiPerId = new Map<
       string,
       {
@@ -290,20 +260,19 @@ async function getPratiche(): Promise<{
       }
     >();
 
-    if (!tempiResponse.ok) {
-      console.error(
-        "Tempi lavorativi dashboard non disponibili:",
-        tempiResponse.status,
-        await tempiResponse.text()
-      );
-    } else {
-      const tempi = (await tempiResponse.json()) as Array<{
+    try {
+      const tempi = await fetchTutteLePagine<{
         id: string;
         minuti_lavorativi_preventivo: number | null;
         minuti_lavorativi_verifica: number | null;
-      }>;
+      }>(
+        `${url}/rest/v1/v_tempi_operativi_dashboard?select=id,minuti_lavorativi_preventivo,minuti_lavorativi_verifica&order=id.asc`,
+        { headers }
+      );
 
       tempiPerId = new Map(tempi.map((riga) => [riga.id, riga]));
+    } catch (error) {
+      console.error("Tempi lavorativi dashboard non disponibili:", error);
     }
 
     const praticheComplete = praticheBase.map((pratica) => {
@@ -331,6 +300,7 @@ async function getPratiche(): Promise<{
                 meta.richiesta_amministrativa_preparata_at,
               richiesta_amministrativa_inviata_at:
                 meta.richiesta_amministrativa_inviata_at,
+              data_fattura: meta.data_fattura,
             }
           : {}),
         minuti_lavorativi_preventivo:
@@ -645,7 +615,12 @@ function prioritaClass(pratica: Pratica) {
 }
 
 
-function filtraPratiche(pratiche: Pratica[], filtro: string) {
+function filtraPratiche(
+  pratiche: Pratica[],
+  filtro: string,
+  meseCorrente: string,
+  mesePrecedente: string
+) {
   switch (filtro) {
     case "assistenza_da_evadere":
       return pratiche.filter(
@@ -688,8 +663,19 @@ function filtraPratiche(pratiche: Pratica[], filtro: string) {
     case "da_preventivare":
       return pratiche.filter((pratica) => pratica.coda === "DA PREVENTIVARE");
 
-    case "preventivi_inviati":
+    case "preventivi_in_attesa":
       return pratiche.filter((pratica) => pratica.coda === "PREVENTIVO INVIATO");
+
+    case "preventivi_inviati":
+    case "preventivi_mese_corrente":
+      return pratiche.filter((pratica) =>
+        haPreventivoNelMese(pratica, meseCorrente)
+      );
+
+    case "preventivi_mese_precedente":
+      return pratiche.filter((pratica) =>
+        haPreventivoNelMese(pratica, mesePrecedente)
+      );
 
     case "da_fatturare":
       return pratiche.filter(
@@ -697,7 +683,15 @@ function filtraPratiche(pratiche: Pratica[], filtro: string) {
       );
 
     case "fatturate":
-      return pratiche.filter((pratica) => pratica.coda === "FATTURATA");
+    case "fatture_mese_corrente":
+      return pratiche.filter((pratica) =>
+        haFatturaNelMese(pratica, meseCorrente)
+      );
+
+    case "fatture_mese_precedente":
+      return pratiche.filter((pratica) =>
+        haFatturaNelMese(pratica, mesePrecedente)
+      );
 
     case "admin_cliente_riconosciuto":
       return pratiche.filter(
@@ -742,7 +736,11 @@ function filtraPratiche(pratiche: Pratica[], filtro: string) {
   }
 }
 
-function labelFiltro(filtro: string) {
+function labelFiltro(
+  filtro: string,
+  etichettaCorrente = "mese corrente",
+  etichettaPrecedente = "mese precedente"
+) {
   switch (filtro) {
     case "assistenza_da_evadere":
       return "Assistenze da evadere";
@@ -759,11 +757,19 @@ function labelFiltro(filtro: string) {
     case "da_preventivare":
       return "Da preventivare";
     case "preventivi_inviati":
-      return "Preventivi inviati";
+    case "preventivi_mese_corrente":
+      return `Preventivi emessi · ${etichettaCorrente}`;
+    case "preventivi_in_attesa":
+      return "Preventivi in attesa";
+    case "preventivi_mese_precedente":
+      return `Preventivi mese precedente · ${etichettaPrecedente}`;
     case "da_fatturare":
       return "Da fatturare";
     case "fatturate":
-      return "Fatturati";
+    case "fatture_mese_corrente":
+      return `Fatture emesse · ${etichettaCorrente}`;
+    case "fatture_mese_precedente":
+      return `Fatture mese precedente · ${etichettaPrecedente}`;
     case "admin_cliente_riconosciuto":
       return "Cliente riconosciuto";
     case "admin_dati_mancanti":
@@ -808,7 +814,15 @@ export default async function Home({
       : params?.cerca || ""
   ).trim();
 
-  const praticheFiltratePerStato = filtraPratiche(pratiche, filtroAttivo);
+  const mesi = mesiDashboard();
+  const solaLettura = filtroMensileSolaLettura(filtroAttivo);
+
+  const praticheFiltratePerStato = filtraPratiche(
+    pratiche,
+    filtroAttivo,
+    mesi.corrente,
+    mesi.precedente
+  );
   const termineRicerca = cercaAttiva.toLowerCase();
 
   const praticheFiltrate = termineRicerca
@@ -822,10 +836,12 @@ export default async function Home({
   // NAVIGAZIONE_PRATICHE_V1_20260911: sequenza esatta DOPO filtro e ricerca.
   // Il componente riceve id/codice e filtro/ricerca, non payload o credenziali.
   const chiaveNavigazione = randomUUID();
-  const vociNavigazione = praticheFiltrate.map((pratica) => ({
-    id: pratica.id,
-    codice: pratica.codice_pratica,
-  }));
+  const vociNavigazione = solaLettura
+    ? []
+    : praticheFiltrate.map((pratica) => ({
+        id: pratica.id,
+        codice: pratica.codice_pratica,
+      }));
 
   const hrefConFiltro = (filtro: string) => {
     const query = new URLSearchParams();
@@ -870,9 +886,20 @@ export default async function Home({
     const attesa = attesaDaPreventivare(pratica);
     return attesa?.livello === "urgente";
   }).length;
-  const preventiviInviati = conta(pratiche, "PREVENTIVO INVIATO");
+  const preventiviMeseCorrente = pratiche.filter((pratica) =>
+    haPreventivoNelMese(pratica, mesi.corrente)
+  ).length;
+  const preventiviInAttesa = conta(pratiche, "PREVENTIVO INVIATO");
+  const preventiviMesePrecedente = pratiche.filter((pratica) =>
+    haPreventivoNelMese(pratica, mesi.precedente)
+  ).length;
   const daFatturare = conta(pratiche, "ORDINE ACQUISITO - DA FATTURARE");
-  const fatturate = conta(pratiche, "FATTURATA");
+  const fattureMeseCorrente = pratiche.filter((pratica) =>
+    haFatturaNelMese(pratica, mesi.corrente)
+  ).length;
+  const fattureMesePrecedente = pratiche.filter((pratica) =>
+    haFatturaNelMese(pratica, mesi.precedente)
+  ).length;
   const clientiRiconosciuti = contaAmministrazione(
     pratiche,
     "cliente_riconosciuto"
@@ -902,7 +929,11 @@ export default async function Home({
     <ContestoNavigazioneElenco
       chiave={chiaveNavigazione}
       filtro={filtroAttivo}
-      etichetta={labelFiltro(filtroAttivo)}
+      etichetta={labelFiltro(
+        filtroAttivo,
+        mesi.etichettaCorrente,
+        mesi.etichettaPrecedente
+      )}
       cerca={cercaAttiva}
       voci={vociNavigazione}
     >
@@ -980,7 +1011,7 @@ export default async function Home({
             Commerciale
           </h2>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <DashboardFilterCard
               titolo="Dati mancanti"
               valore={datiMancanti}
@@ -1042,12 +1073,23 @@ export default async function Home({
               attiva={filtroAttivo === "da_preventivare"}
             />
             <DashboardFilterCard
-              titolo="Preventivi inviati"
-              valore={preventiviInviati}
-              descrizione="Offerte inviate, in attesa di esito o follow-up"
+              titolo="Preventivi in attesa"
+              valore={preventiviInAttesa}
+              descrizione="Offerte inviate ancora senza esito definitivo"
+              className="border-sky-300"
+              href={hrefConFiltro("preventivi_in_attesa")}
+              attiva={filtroAttivo === "preventivi_in_attesa"}
+            />
+            <DashboardFilterCard
+              titolo={`Preventivi emessi · ${mesi.etichettaCorrente}`}
+              valore={preventiviMeseCorrente}
+              descrizione="Tutti i preventivi inviati nel mese corrente"
               className="border-blue-400"
-              href={hrefConFiltro("preventivi_inviati")}
-              attiva={filtroAttivo === "preventivi_inviati"}
+              href={hrefConFiltro("preventivi_mese_corrente")}
+              attiva={
+                filtroAttivo === "preventivi_mese_corrente" ||
+                filtroAttivo === "preventivi_inviati"
+              }
             />
             <DashboardFilterCard
               titolo="Da fatturare"
@@ -1058,12 +1100,47 @@ export default async function Home({
               attiva={filtroAttivo === "da_fatturare"}
             />
             <DashboardFilterCard
-              titolo="Fatturati"
-              valore={fatturate}
-              descrizione="Pratiche amministrativamente completate"
+              titolo={`Fatture emesse · ${mesi.etichettaCorrente}`}
+              valore={fattureMeseCorrente}
+              descrizione="Pratiche fatturate nel mese corrente"
               className="border-green-300"
-              href={hrefConFiltro("fatturate")}
-              attiva={filtroAttivo === "fatturate"}
+              href={hrefConFiltro("fatture_mese_corrente")}
+              attiva={
+                filtroAttivo === "fatture_mese_corrente" ||
+                filtroAttivo === "fatturate"
+              }
+            />
+          </div>
+        </section>
+
+        <section className="mt-5">
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">
+              Mese precedente · sola lettura
+            </h2>
+            <p className="text-xs font-semibold text-slate-400">
+              {mesi.etichettaPrecedente} · dati conservati, nessuna modifica consentita
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <DashboardFilterCard
+              titolo="Preventivi mese precedente"
+              valore={preventiviMesePrecedente}
+              descrizione={`${mesi.etichettaPrecedente} · archivio consultabile`}
+              className="border-slate-400"
+              href={hrefConFiltro("preventivi_mese_precedente")}
+              attiva={filtroAttivo === "preventivi_mese_precedente"}
+              solaLettura
+            />
+            <DashboardFilterCard
+              titolo="Fatture mese precedente"
+              valore={fattureMesePrecedente}
+              descrizione={`${mesi.etichettaPrecedente} · archivio consultabile`}
+              className="border-slate-400"
+              href={hrefConFiltro("fatture_mese_precedente")}
+              attiva={filtroAttivo === "fatture_mese_precedente"}
+              solaLettura
             />
           </div>
         </section>
@@ -1129,9 +1206,13 @@ export default async function Home({
           <div className="border-b border-slate-200 px-6 py-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-950">Coda operativa</h2>
+                <h2 className="text-lg font-bold text-slate-950">
+                  {solaLettura ? "Archivio mensile" : "Coda operativa"}
+                </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Assistenza e pratiche commerciali ordinate automaticamente per priorità
+                  {solaLettura
+                    ? `${mesi.etichettaPrecedente} · consultazione senza accesso alle modifiche`
+                    : "Assistenza e pratiche commerciali ordinate automaticamente per priorità"}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -1139,7 +1220,11 @@ export default async function Home({
                   </span>
 
                   <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {labelFiltro(filtroAttivo)}
+                    {labelFiltro(
+                      filtroAttivo,
+                      mesi.etichettaCorrente,
+                      mesi.etichettaPrecedente
+                    )}
                   </span>
 
                   {filtroAttivo !== "tutte" && (
@@ -1201,6 +1286,13 @@ export default async function Home({
             )}
           </div>
 
+          {solaLettura && (
+            <div className="border-b border-slate-200 bg-slate-100 px-6 py-3 text-sm font-semibold text-slate-700">
+              Archivio in sola lettura: le pratiche sono visibili ma non possono
+              essere aperte o modificate da questa sezione.
+            </div>
+          )}
+
           {praticheFiltrate.length === 0 && !errore ? (
             <div className="px-6 py-16 text-center">
               <div className="text-lg font-semibold text-slate-800">
@@ -1258,15 +1350,24 @@ export default async function Home({
                       </td>
 
                       <td className="px-4 py-4 font-semibold text-slate-950">
-                        <ApriPraticaConContesto
-                          praticaId={pratica.id}
-                          className="inline-flex flex-col rounded-lg px-2 py-1 -mx-2 -my-1 transition hover:bg-blue-50 hover:text-blue-700"
-                        >
-                          <span>{pratica.codice_pratica}</span>
-                          <span className="mt-1 text-[10px] font-bold uppercase tracking-wide text-blue-600">
-                            Apri pratica
+                        {solaLettura ? (
+                          <span className="inline-flex flex-col px-2 py-1 -mx-2 -my-1">
+                            <span>{pratica.codice_pratica}</span>
+                            <span className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Sola lettura
+                            </span>
                           </span>
-                        </ApriPraticaConContesto>
+                        ) : (
+                          <ApriPraticaConContesto
+                            praticaId={pratica.id}
+                            className="inline-flex flex-col rounded-lg px-2 py-1 -mx-2 -my-1 transition hover:bg-blue-50 hover:text-blue-700"
+                          >
+                            <span>{pratica.codice_pratica}</span>
+                            <span className="mt-1 text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                              Apri pratica
+                            </span>
+                          </ApriPraticaConContesto>
+                        )}
                       </td>
 
                       <td className="px-4 py-4">
@@ -1431,13 +1532,14 @@ export default async function Home({
                       </td>
 
                       <td className="px-4 py-4">
-                        {pratica.numero_fattura ? (
+                        {pratica.numero_fattura ||
+                        pratica.stato_fatturazione === "fatturato" ? (
                           <div>
                             <div className="font-semibold text-green-700">
-                              {pratica.numero_fattura}
+                              {pratica.numero_fattura || "FATTURATA"}
                             </div>
                             <div className="text-xs text-slate-500">
-                              {pratica.data_fattura || ""}
+                              {formattaData(dataFatturaEffettiva(pratica))}
                             </div>
                           </div>
                         ) : pratica.stato_fatturazione === "da_fatturare" ? (
@@ -1476,6 +1578,7 @@ function DashboardFilterCard({
   className,
   href,
   attiva,
+  solaLettura = false,
 }: {
   titolo: string;
   valore: number;
@@ -1483,6 +1586,7 @@ function DashboardFilterCard({
   className: string;
   href: string;
   attiva: boolean;
+  solaLettura?: boolean;
 }) {
   return (
     <Link
@@ -1493,8 +1597,12 @@ function DashboardFilterCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="text-sm font-semibold text-slate-600">{titolo}</div>
-        <span className="text-[10px] font-bold uppercase tracking-wide text-blue-600">
-          Filtra
+        <span
+          className={`text-[10px] font-bold uppercase tracking-wide ${
+            solaLettura ? "text-slate-500" : "text-blue-600"
+          }`}
+        >
+          {solaLettura ? "Consulta" : "Filtra"}
         </span>
       </div>
 
