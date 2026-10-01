@@ -715,16 +715,26 @@ export async function applicaAzioneOperatore(
 
   if (!AZIONI_CONSENTITE.has(azione)) {
     throw new Error("Azione non consentita");
-  }
+  }  
 
-  await chiamaRpc(
-    "applica_azione_operatore_estesa",
-    {
+  if (azione === "commerciale_rifiuta_lavorazione") {
+    const operatore = await richiediOperatoreAttivo();
+
+    await chiamaRpc("rifiuta_pratica_operatore", {
       p_pratica_id: praticaId,
-      p_azione: azione,
       p_nota: nota || null,
-    }
-  );
+      p_operatore: operatore,
+    });
+  } else {
+    await chiamaRpc(
+      "applica_azione_operatore_estesa",
+      {
+        p_pratica_id: praticaId,
+        p_azione: azione,
+        p_nota: nota || null,
+      }
+    );
+  }
 
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
