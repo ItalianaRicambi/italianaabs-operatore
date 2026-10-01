@@ -1108,7 +1108,7 @@ export default async function Home({
         <section className="mb-6 rounded-2xl border border-amber-200 bg-white p-5">
           <h2 className="text-lg font-bold text-slate-950">Controllo coerenza K e Dashboard</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Messaggi ricevuti negli ultimi 30 giorni confrontati con preventivi e stati della pratica.
+            Messaggi ricevuti nelle ultime 48 ore confrontati con preventivi e stati della pratica.
             Le incongruenze richiedono una verifica dell’operatore.
           </p>
           {controlloK.errore || controlloK.stato?.errore || controlloKInRitardo ? (
