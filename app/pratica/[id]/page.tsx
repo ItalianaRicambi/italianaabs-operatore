@@ -1569,7 +1569,7 @@ export default async function PraticaPage({
                     className="bg-red-600 text-white hover:bg-red-700"
                     disabilitata={
                       pratica.stato_commerciale === "rifiutato" ||
-                      pratica.stato_commerciale === "ordine_acquisito" ||
+                      
                       pratica.stato_fatturazione === "fatturato"
                     }
                     motivoDisabilitata={
@@ -1577,7 +1577,7 @@ export default async function PraticaPage({
                         ? "Stato attuale"
                         : pratica.stato_fatturazione === "fatturato"
                         ? "Bloccato: pratica già fatturata"
-                        : "Bloccato: ordine già acquisito"
+                                                : "Stato attuale"
                     }
                   />
                   </div>
