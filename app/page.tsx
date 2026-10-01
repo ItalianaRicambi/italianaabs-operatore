@@ -82,6 +82,23 @@ type Pratica = {
   blocco_classificazione_operatore: boolean;
   assistenza_aperta_at: string | null;
   assistenza_chiusa_at: string | null;
+  attivita_operative?: AttivitaOperatore[];
+};
+
+type AttivitaOperatore = {
+  id: string;
+  tipo:
+    | "ritiro_programma_scambio"
+    | "richiamata_post_preventivo"
+    | "richiamata_post_vendita"
+    | "richiamata_da_classificare";
+  stato: "da_gestire" | "da_collegare" | "programmata";
+  priorita: "normale" | "alta" | "urgente";
+  pratica_id: string;
+  pratica_origine_id: string | null;
+  codice_pratica_origine: string | null;
+  evidenza: string;
+  richiesta_at: string;
 };
 
 
@@ -168,6 +185,7 @@ function ordinaCodaOperativa(pratiche: Pratica[]) {
 
 async function getPratiche(): Promise<{
   pratiche: Pratica[];
+  attivita: AttivitaOperatore[];
   errore: string | null;
 }> {
   const url = process.env.SUPABASE_URL;
@@ -176,6 +194,7 @@ async function getPratiche(): Promise<{
   if (!url || !secretKey) {
     return {
       pratiche: [],
+      attivita: [],
       errore: "Variabili Supabase non configurate",
     };
   }
@@ -318,13 +337,35 @@ async function getPratiche(): Promise<{
       praticheComplete.map(correggiCodaOperativa)
     );
 
+    let attivita: AttivitaOperatore[] = [];
+    try {
+      attivita = await fetchTutteLePagine<AttivitaOperatore>(
+        `${url}/rest/v1/v_attivita_operatore_aperte?select=id,tipo,stato,priorita,pratica_id,pratica_origine_id,codice_pratica_origine,evidenza,richiesta_at&order=priorita.desc,richiesta_at.asc,id.asc`,
+        { headers }
+      );
+    } catch (error) {
+      console.error("Coda attività operative non disponibile:", error);
+    }
+
+    const attivitaPerPratica = new Map<string, AttivitaOperatore[]>();
+    for (const voce of attivita) {
+      const elenco = attivitaPerPratica.get(voce.pratica_id) || [];
+      elenco.push(voce);
+      attivitaPerPratica.set(voce.pratica_id, elenco);
+    }
+
     return {
-      pratiche: praticheCorrette,
+      pratiche: praticheCorrette.map((pratica) => ({
+        ...pratica,
+        attivita_operative: attivitaPerPratica.get(pratica.id) || [],
+      })),
+      attivita,
       errore: null,
     };
   } catch (error) {
     return {
       pratiche: [],
+      attivita: [],
       errore:
         error instanceof Error
           ? error.message
@@ -376,6 +417,25 @@ function contaAssistenzaPrioritaria(pratiche: Pratica[]) {
       pratica.priorita_assistenza === "urgente" &&
       !["risolta", "chiusa"].includes(pratica.stato_assistenza)
   ).length;
+}
+
+function haAttivita(pratica: Pratica, ...tipi: AttivitaOperatore["tipo"][]) {
+  return (pratica.attivita_operative || []).some((attivita) =>
+    tipi.includes(attivita.tipo)
+  );
+}
+
+function etichettaAttivita(tipo: AttivitaOperatore["tipo"]) {
+  switch (tipo) {
+    case "ritiro_programma_scambio":
+      return "Ritiro da organizzare";
+    case "richiamata_post_preventivo":
+      return "Richiamata post-preventivo";
+    case "richiamata_post_vendita":
+      return "Richiamata post-vendita";
+    default:
+      return "Richiamata da classificare";
+  }
 }
 
 function formattaData(data: string | null) {
@@ -646,6 +706,26 @@ function filtraPratiche(
           !["risolta", "chiusa"].includes(pratica.stato_assistenza)
       );
 
+    case "ritiri_programma_scambio":
+      return pratiche.filter((pratica) =>
+        haAttivita(pratica, "ritiro_programma_scambio")
+      );
+
+    case "richiamate_post_preventivo":
+      return pratiche.filter((pratica) =>
+        haAttivita(pratica, "richiamata_post_preventivo")
+      );
+
+    case "richiamate_post_vendita":
+      return pratiche.filter((pratica) =>
+        haAttivita(pratica, "richiamata_post_vendita")
+      );
+
+    case "richiamate_da_classificare":
+      return pratiche.filter((pratica) =>
+        haAttivita(pratica, "richiamata_da_classificare")
+      );
+
     case "dati_mancanti":
       return pratiche.filter((pratica) => pratica.coda === "DATI MANCANTI");
 
@@ -748,6 +828,14 @@ function labelFiltro(
       return "Assistenza aperta";
     case "assistenza_prioritaria":
       return "Assistenza prioritaria";
+    case "ritiri_programma_scambio":
+      return "Ritiri programma scambio";
+    case "richiamate_post_preventivo":
+      return "Richiamate post-preventivo";
+    case "richiamate_post_vendita":
+      return "Richiamate post-vendita";
+    case "richiamate_da_classificare":
+      return "Richiamate da classificare";
     case "dati_mancanti":
       return "Dati mancanti";
     case "da_verificare":
@@ -801,7 +889,7 @@ export default async function Home({
     return <AccessoOperatore />;
   }
 
-  const { pratiche, errore } = await getPratiche();
+  const { pratiche, attivita, errore } = await getPratiche();
   const params = await searchParams;
 
   const filtroAttivo = Array.isArray(params?.filtro)
@@ -866,6 +954,18 @@ export default async function Home({
   const assistenzaDaEvadere = contaAssistenzaDaEvadere(pratiche);
   const assistenzaAperta = contaAssistenzaAperta(pratiche);
   const assistenzaPrioritaria = contaAssistenzaPrioritaria(pratiche);
+  const ritiriProgrammaScambio = attivita.filter(
+    (voce) => voce.tipo === "ritiro_programma_scambio"
+  ).length;
+  const richiamatePostPreventivo = attivita.filter(
+    (voce) => voce.tipo === "richiamata_post_preventivo"
+  ).length;
+  const richiamatePostVendita = attivita.filter(
+    (voce) => voce.tipo === "richiamata_post_vendita"
+  ).length;
+  const richiamateDaClassificare = attivita.filter(
+    (voce) => voce.tipo === "richiamata_da_classificare"
+  ).length;
 
   const datiMancanti = conta(pratiche, "DATI MANCANTI");
   const daVerificare = conta(pratiche, "DATI INTEGRATI - DA VERIFICARE");
@@ -972,6 +1072,47 @@ export default async function Home({
             <strong>Errore di collegamento:</strong> {errore}
           </div>
         )}
+
+        <section className="mb-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-500">
+            Attività operative
+          </h2>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <DashboardFilterCard
+              titolo="Ritiri programma scambio"
+              valore={ritiriProgrammaScambio}
+              descrizione="Prodotti da ritirare, programmare o collegare all’ordine"
+              className="border-amber-500"
+              href={hrefConFiltro("ritiri_programma_scambio")}
+              attiva={filtroAttivo === "ritiri_programma_scambio"}
+            />
+            <DashboardFilterCard
+              titolo="Richiamate post-preventivo"
+              valore={richiamatePostPreventivo}
+              descrizione="Delucidazioni richieste su offerte già inviate"
+              className="border-sky-500"
+              href={hrefConFiltro("richiamate_post_preventivo")}
+              attiva={filtroAttivo === "richiamate_post_preventivo"}
+            />
+            <DashboardFilterCard
+              titolo="Richiamate post-vendita"
+              valore={richiamatePostVendita}
+              descrizione="Clienti con ordine, fattura o assistenza in corso"
+              className="border-violet-500"
+              href={hrefConFiltro("richiamate_post_vendita")}
+              attiva={filtroAttivo === "richiamate_post_vendita"}
+            />
+            <DashboardFilterCard
+              titolo="Richiamate da classificare"
+              valore={richiamateDaClassificare}
+              descrizione="Richiesta chiara, ma contesto commerciale non univoco"
+              className="border-slate-400"
+              href={hrefConFiltro("richiamate_da_classificare")}
+              attiva={filtroAttivo === "richiamate_da_classificare"}
+            />
+          </div>
+        </section>
 
         <section className="mb-5">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-500">
@@ -1473,6 +1614,25 @@ export default async function Home({
                               In attesa dati cliente
                             </span>
                           )}
+
+                          {(pratica.attivita_operative || []).map((attivita) => (
+                            <span
+                              key={attivita.id}
+                              title={attivita.evidenza}
+                              className={`inline-flex rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                                attivita.tipo === "ritiro_programma_scambio"
+                                  ? "bg-amber-100 text-amber-900"
+                                  : attivita.tipo === "richiamata_post_preventivo"
+                                  ? "bg-sky-100 text-sky-900"
+                                  : attivita.tipo === "richiamata_post_vendita"
+                                  ? "bg-violet-100 text-violet-900"
+                                  : "bg-slate-200 text-slate-800"
+                              }`}
+                            >
+                              {etichettaAttivita(attivita.tipo)}
+                              {attivita.stato === "da_collegare" ? " · verifica collegamento" : ""}
+                            </span>
+                          ))}
                         </div>
                       </td>
 
