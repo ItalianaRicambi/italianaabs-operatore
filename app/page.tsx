@@ -102,6 +102,34 @@ type AttivitaOperatore = {
 };
 
 
+type SegnalazioneK = {
+  chiave: string; pratica_id: string | null; event_id: number;
+  regola: string; descrizione: string; evidenza: string; rilevata_at: string;
+};
+type StatoControlloK = {
+  ultima_esecuzione_at: string | null; eventi_esaminati: number;
+  segnalazioni_aperte: number; risposte_k_disponibili: boolean; errore: string | null;
+};
+
+async function getControlloK(): Promise<{
+  stato: StatoControlloK | null; segnalazioni: SegnalazioneK[]; errore: string | null;
+}> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) return { stato: null, segnalazioni: [], errore: "Controllo non disponibile" };
+  try {
+    const headers = { apikey: key, Authorization: `Bearer ${key}` };
+    const [stati, segnalazioni] = await Promise.all([
+      fetchTutteLePagine<StatoControlloK>(`${url}/rest/v1/keplero_controllo_stato?select=*&order=id.asc`, { headers }),
+      fetchTutteLePagine<SegnalazioneK>(`${url}/rest/v1/keplero_controllo_segnalazioni?select=*&risolta_at=is.null&order=rilevata_at.desc,chiave.asc`, { headers }),
+    ]);
+    return { stato: stati[0] || null, segnalazioni, errore: null };
+  } catch (error) {
+    console.error("Controllo coerenza K non disponibile:", error);
+    return { stato: null, segnalazioni: [], errore: "Impossibile leggere l'esito del controllo" };
+  }
+}
+
 function correggiCodaOperativa(pratica: Pratica): Pratica {
   // Le code assistenza sono già corrette nella view e restano intatte.
   if (pratica.tipo_flusso === "assistenza") {
@@ -889,7 +917,11 @@ export default async function Home({
     return <AccessoOperatore />;
   }
 
-  const { pratiche, attivita, errore } = await getPratiche();
+  const [{ pratiche, attivita, errore }, controlloK] = await Promise.all([
+    getPratiche(), getControlloK(),
+  ]);
+  const controlloKInRitardo = !controlloK.stato?.ultima_esecuzione_at ||
+    Date.now() - new Date(controlloK.stato.ultima_esecuzione_at).getTime() > 15 * 60_000;
   const params = await searchParams;
 
   const filtroAttivo = Array.isArray(params?.filtro)
@@ -1072,6 +1104,46 @@ export default async function Home({
             <strong>Errore di collegamento:</strong> {errore}
           </div>
         )}
+
+        <section className="mb-6 rounded-2xl border border-amber-200 bg-white p-5">
+          <h2 className="text-lg font-bold text-slate-950">Controllo coerenza K e Dashboard</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Messaggi ricevuti negli ultimi 30 giorni confrontati con preventivi e stati della pratica.
+            Le incongruenze richiedono una verifica dell’operatore.
+          </p>
+          {controlloK.errore || controlloK.stato?.errore || controlloKInRitardo ? (
+            <p className="mt-3 font-semibold text-red-700">
+              {controlloK.errore || controlloK.stato?.errore || "Controllo non aggiornato: ultima esecuzione assente o oltre 15 minuti fa"}
+            </p>
+          ) : (
+            <p className="mt-3 text-sm text-slate-700">
+              Ultimo controllo: {formattaData(controlloK.stato?.ultima_esecuzione_at || null)} · {controlloK.stato?.eventi_esaminati} eventi esaminati · {controlloK.segnalazioni.length} segnalazioni aperte
+            </p>
+          )}
+          <p className="mt-2 text-sm text-amber-800">
+            Copertura parziale: le risposte di K non sono trasmesse alla dashboard.
+            Le istruzioni su privati e imballaggio richiedono ancora il controllo della conversazione originale.
+            I messaggi che K non trasmette non possono essere verificati qui.
+          </p>
+          <details className="mt-3" open={controlloK.segnalazioni.length > 0}>
+            <summary className="cursor-pointer text-sm font-semibold text-slate-800">Segnalazioni da verificare ({controlloK.segnalazioni.length})</summary>
+            <div className="mt-3 max-h-96 space-y-3 overflow-y-auto">
+              {controlloK.segnalazioni.map((voce) => {
+                const pratica = pratiche.find((p) => p.id === voce.pratica_id);
+                return (
+                  <div key={voce.chiave} className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm">
+                    <p className="font-semibold text-slate-900">
+                      {voce.pratica_id ? <Link className="underline" href={`/pratica/${voce.pratica_id}`}>{pratica?.codice_pratica || "Apri pratica"}{pratica?.targa ? ` · ${pratica.targa}` : ""}</Link> : "Evento senza pratica"} · Evento {voce.event_id}
+                    </p>
+                    <p className="mt-1 text-slate-700">{voce.descrizione}</p>
+                    {voce.evidenza && <p className="mt-1 whitespace-pre-wrap text-slate-600">Messaggio: {voce.evidenza}</p>}
+                  </div>
+                );
+              })}
+              {controlloK.segnalazioni.length === 0 && !controlloKInRitardo && !controlloK.errore && !controlloK.stato?.errore && <p className="text-sm text-slate-600">Nessuna incoerenza rilevata dalle regole attive.</p>}
+            </div>
+          </details>
+        </section>
 
         <section className="mb-5">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-500">
