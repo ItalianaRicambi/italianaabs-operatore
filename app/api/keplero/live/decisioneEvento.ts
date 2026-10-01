@@ -19,6 +19,12 @@ export type EsitoCompletezzaCommerciale = {
   identificazioneDaImmagine: boolean;
 };
 
+export type ContattoOperativo = {
+  nome: string;
+  ruolo: "fornitore" | "interno";
+  bloccaAutomazioniCommerciali: boolean;
+};
+
 /**
  * Regola deterministica unica per la coda "Da preventivare".
  *
@@ -51,15 +57,37 @@ export function valutaCompletezzaCommerciale(
 
 export function decidiEventoKeplero(
   payload: Payload,
-  completezza: InputCompletezzaCommerciale
+  completezza: InputCompletezzaCommerciale,
+  contattoOperativo: ContattoOperativo | null = null
 ) {
-  const ordine = riconosciConfermaOrdine(payload);
+  const bloccoContatto =
+    contattoOperativo?.bloccaAutomazioniCommerciali === true;
+  const completezzaValutata = valutaCompletezzaCommerciale(completezza);
+  const ordineRilevato = riconosciConfermaOrdine(payload);
+  const ordine = bloccoContatto
+    ? {
+        confermato: false,
+        fonte: "nessuna" as const,
+        messaggio: ordineRilevato.messaggio,
+      }
+    : ordineRilevato;
   const nuovaPratica = riconosciNuovaPratica(payload);
 
   return {
-    versioneRegole: "2026-09-29-v1",
+    versioneRegole: "2026-09-30-v2",
     ordine,
     nuovaPratica,
-    completezza: valutaCompletezzaCommerciale(completezza),
+    completezza: bloccoContatto
+      ? {
+          ...completezzaValutata,
+          completa: false,
+          datiMancanti: [
+            ...completezzaValutata.datiMancanti,
+            "contatto_operativo_non_cliente",
+          ],
+        }
+      : completezzaValutata,
+    contattoOperativo,
+    bloccoContattoOperativo: bloccoContatto,
   };
 }

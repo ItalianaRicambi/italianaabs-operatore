@@ -13,7 +13,6 @@ const positive = [
   "Lavorazione del dispositivo",
   "In merito all'ordine 260915-IN64, è possibile modificarlo e procedere al ritiro?",
   "Va bene, procedete",
-  "Ho effettuato il pagamento",
 ];
 
 const negative = [
@@ -24,6 +23,11 @@ const negative = [
   "Se confermo l'ordine, quando spedite?",
   "Ci penso e vi faccio sapere",
   "Il preventivo è troppo caro",
+  "Ho effettuato il pagamento",
+  "Bonifico eseguito",
+  "Potete organizzare la spedizione?",
+  "Sono in attesa del ricambio",
+  "Quando passate per il ritiro?",
 ];
 
 for (const messaggio of positive) {

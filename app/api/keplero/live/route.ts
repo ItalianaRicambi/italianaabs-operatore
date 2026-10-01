@@ -7,7 +7,10 @@ import {
   normalizzaCodice,
   statoLetturaImmagini,
 } from "./normalizzazioneMedia";
-import { decidiEventoKeplero } from "./decisioneEvento";
+import {
+  decidiEventoKeplero,
+  type ContattoOperativo,
+} from "./decisioneEvento";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -132,6 +135,66 @@ function primo(body: Body, ...keys: string[]) {
 
 function normalizzaTelefono(value: unknown) {
   return testo(value).replace(/[^0-9]/g, "");
+}
+
+function normalizzaTelefonoContatto(value: unknown) {
+  let telefono = normalizzaTelefono(value);
+
+  if (telefono.startsWith("00")) {
+    telefono = telefono.slice(2);
+  }
+
+  if (/^3\d{9}$/.test(telefono)) {
+    telefono = `39${telefono}`;
+  }
+
+  return telefono;
+}
+
+async function cercaContattoOperativo(
+  url: string,
+  secretKey: string,
+  telefono: string
+): Promise<ContattoOperativo | null> {
+  if (!telefono) return null;
+
+  const query = new URLSearchParams({
+    telefono_normalizzato: `eq.${telefono}`,
+    attivo: "eq.true",
+    select: "nome,ruolo,blocca_automazioni_commerciali",
+    limit: "1",
+  });
+  const response = await fetch(
+    `${url}/rest/v1/contatti_operativi?${query.toString()}`,
+    {
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+      },
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Rubrica contatti operativi Supabase ${response.status}: ${await response.text()}`
+    );
+  }
+
+  const [contatto] = (await response.json()) as Array<{
+    nome: string;
+    ruolo: "fornitore" | "interno";
+    blocca_automazioni_commerciali: boolean;
+  }>;
+
+  return contatto
+    ? {
+        nome: contatto.nome,
+        ruolo: contatto.ruolo,
+        bloccaAutomazioniCommerciali:
+          contatto.blocca_automazioni_commerciali,
+      }
+    : null;
 }
 
 function hashBreve(value: string) {
@@ -449,6 +512,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const telefonoContatto = normalizzaTelefonoContatto(
+      primo(body, "telefono", "phone", "whatsapp")
+    );
+    let contattoOperativo: ContattoOperativo | null = null;
+
+    try {
+      contattoOperativo = await cercaContattoOperativo(
+        url,
+        secretKey,
+        telefonoContatto
+      );
+    } catch (error) {
+      // La protezione equivalente nel database resta attiva anche se la
+      // consultazione preventiva non e temporaneamente disponibile.
+      console.error("ERRORE RUBRICA CONTATTI OPERATIVI", {
+        telefono: telefonoContatto || null,
+        errore: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     /*
      * ============================================================
      * CHIAVE STABILE DELLA CONVERSAZIONE
@@ -488,7 +571,8 @@ export async function POST(request: NextRequest) {
         descrizioneGuasto,
         spieAccese,
         numeroDtc: dtc.length,
-      }
+      },
+      contattoOperativo
     );
 
     const riconoscimentoOrdine = decisione.ordine;
@@ -525,9 +609,11 @@ export async function POST(request: NextRequest) {
           );
 
     if (tipoFlusso === "commerciale") {
-      motivoIncompletezza = datiCompleti
-        ? null
-        : `Dati mancanti: ${decisione.completezza.datiMancanti.join(", ")}.`;
+      motivoIncompletezza = decisione.bloccoContattoOperativo
+        ? `Contatto operativo ${contattoOperativo?.ruolo}: non trattare come richiesta commerciale cliente.`
+        : datiCompleti
+          ? null
+          : `Dati mancanti: ${decisione.completezza.datiMancanti.join(", ")}.`;
     }
 
     const statoImmagini = statoLetturaImmagini(
@@ -563,6 +649,9 @@ export async function POST(request: NextRequest) {
         completezza: decisione.completezza,
         ordine: decisione.ordine,
         nuova_pratica: decisione.nuovaPratica,
+        contatto_operativo: decisione.contattoOperativo,
+        blocco_contatto_operativo:
+          decisione.bloccoContattoOperativo,
       },
     };
 

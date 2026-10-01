@@ -64,5 +64,28 @@ test("la decisione conserva insieme completezza, ordine e nuova pratica", () => 
   assert.equal(decisione.completezza.completa, true);
   assert.equal(decisione.ordine.confermato, true);
   assert.equal(decisione.nuovaPratica.richiesta, false);
-  assert.equal(decisione.versioneRegole, "2026-09-29-v1");
+  assert.equal(decisione.versioneRegole, "2026-09-30-v2");
+});
+
+test("un fornitore non genera preventivi o ordini cliente", () => {
+  const decisione = decidiEventoKeplero(
+    {
+      ultimo_messaggio_cliente:
+        "Se vuoi ti faccio preventivo, confermo l'offerta",
+    },
+    base,
+    {
+      nome: "Giacomo Sismi",
+      ruolo: "fornitore",
+      bloccaAutomazioniCommerciali: true,
+    }
+  );
+
+  assert.equal(decisione.completezza.completa, false);
+  assert.deepEqual(decisione.completezza.datiMancanti, [
+    "contatto_operativo_non_cliente",
+  ]);
+  assert.equal(decisione.ordine.confermato, false);
+  assert.equal(decisione.ordine.fonte, "nessuna");
+  assert.equal(decisione.bloccoContattoOperativo, true);
 });
