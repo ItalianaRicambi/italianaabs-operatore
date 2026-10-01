@@ -107,8 +107,6 @@ export function riconosciConfermaOrdine(
     /\bordine\b.{0,80}\b(?:modificar|procedere|ritiro)\b/,
     /^(?:la\s+)?lavorazione\s+(?:elettronica\s+)?(?:del|dello|sul)\s+dispositivo[.! ]*$/,
     /\b(va bene|confermo)[, ]+.{0,25}\bprocedete\b/,
-    /\bpagamento\s+(effettuato|eseguito|fatto)\b/,
-    /\bho\s+(effettuato|eseguito|fatto)\s+il\s+pagamento\b/,
   ].some((regola) => regola.test(frase));
 
   if (confermaEsplicita) {
