@@ -56,7 +56,7 @@ function contieneNegazioneODubbio(frase: string) {
     /\b(non va bene|rifiuto|rifiutiamo|troppo caro)\b/,
     /\b(ci penso|dobbiamo pensarci|devo valutare|dobbiamo valutare)\b/,
     /\b(vi faccio sapere|le faccio sapere|forse|eventualmente)\b/,
-    /\bse\s+(accetto|confermo|procedo|procediamo)\b/,
+    /\bse\s+(accetto|accettiamo|confermo|confermiamo|approvo|approviamo|procedo|procediamo)\b/,
   ].some((regola) => regola.test(frase));
 }
 
@@ -96,7 +96,7 @@ export function riconosciConfermaOrdine(
   }
 
   const confermaEsplicita = [
-    /\b(accetto|confermo|approvo)\b.{0,45}\b(preventivo|offerta|ordine)\b/,
+    /\b(accetto|accettiamo|confermo|confermiamo|approvo|approviamo)\b.{0,45}\b(preventivo|offerta|ordine)\b/,
     /\b(preventivo|offerta|ordine)\b.{0,45}\b(accettat[oa]|confermat[oa]|approvat[oa])\b/,
     /\b(potete|puo|puoi)\s+procedere\b/,
     /\bprocedete\s+pure\b/,
