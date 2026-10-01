@@ -13,6 +13,7 @@ import {
   collegaClientePraticaOperatore,
   correggiStatoCommercialeOperatore,
   creaECollegaClientePraticaOperatore,
+  gestisciAttivitaOperatore,
   registraNotaInternaOperatore,
   rivalutaClientePraticaOperatore,
   segnaRichiestaAmministrativaInviataOperatore,
@@ -183,6 +184,18 @@ type Dtc = {
   created_at: string;
 };
 
+type AttivitaOperatore = {
+  id: string;
+  tipo: string;
+  stato: string;
+  priorita: string;
+  pratica_origine_id?: string | null;
+  codice_pratica_origine?: string | null;
+  evidenza: string;
+  richiesta_at: string;
+  programmata_at?: string | null;
+};
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -253,6 +266,7 @@ async function getPratica(id: string, ricercaCliente: string) {
     annotazioniOperatore,
     candidatiClienteRaw,
     risultatiRicercaCliente,
+    attivitaOperative,
   ] = await Promise.all([
     selectSupabase<Codice[]>(
       `codici_identificativi?pratica_id=eq.${encodeURIComponent(id)}&select=*`
@@ -295,6 +309,11 @@ async function getPratica(id: string, ricercaCliente: string) {
           p_query: ricercaCliente,
         })
       : Promise.resolve([] as Cliente[]),
+    selectSupabase<AttivitaOperatore[]>(
+      `v_attivita_operatore_aperte?pratica_id=eq.${encodeURIComponent(
+        id
+      )}&select=id,tipo,stato,priorita,pratica_origine_id,codice_pratica_origine,evidenza,richiesta_at,programmata_at&order=richiesta_at.asc`
+    ),
   ]);
 
   const clienteIds = Array.from(
@@ -330,6 +349,7 @@ async function getPratica(id: string, ricercaCliente: string) {
       : null,
     candidatiCliente,
     risultatiRicercaCliente,
+    attivitaOperative,
   };
 }
 
@@ -474,6 +494,19 @@ function etichettaAzione(azione: string) {
   return labels[azione] || etichettaStato(azione);
 }
 
+function titoloAttivitaOperativa(tipo: string) {
+  switch (tipo) {
+    case "ritiro_programma_scambio":
+      return "Ritiro programma scambio / rientro";
+    case "richiamata_post_preventivo":
+      return "Richiamata post-preventivo";
+    case "richiamata_post_vendita":
+      return "Richiamata post-vendita";
+    default:
+      return "Richiamata da classificare";
+  }
+}
+
 function rawArray<T>(raw: Record<string, unknown> | null | undefined, key: string): T[] {
   const value = raw?.[key];
   return Array.isArray(value) ? (value as T[]) : [];
@@ -519,6 +552,7 @@ export default async function PraticaPage({
     clienteCollegato,
     candidatiCliente,
     risultatiRicercaCliente,
+    attivitaOperative,
   } = await getPratica(id, ricercaCliente.trim());
 
   const noteInterne = annotazioniOperatore;
@@ -1664,6 +1698,80 @@ export default async function PraticaPage({
               )}
             </Card>
 
+            {attivitaOperative.length > 0 && (
+              <Card titolo="Attività operative rilevate">
+                <div className="space-y-4">
+                  {attivitaOperative.map((attivita) => (
+                    <div
+                      key={attivita.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-bold text-slate-950">
+                            {titoloAttivitaOperativa(attivita.tipo)}
+                          </div>
+                          <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {etichettaStato(attivita.stato)} · {formattaData(attivita.richiesta_at)}
+                          </div>
+                        </div>
+                        {attivita.codice_pratica_origine && (
+                          <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                            Origine {attivita.codice_pratica_origine}
+                          </span>
+                        )}
+                      </div>
+
+                      <blockquote className="mt-3 border-l-4 border-slate-300 pl-3 text-sm text-slate-700">
+                        “{attivita.evidenza}”
+                      </blockquote>
+
+                      {attivita.stato === "da_collegare" && (
+                        <p className="mt-3 rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-950">
+                          Collegamento non univoco: verificare pratica, targa e ordine prima di procedere.
+                        </p>
+                      )}
+
+                      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                        {attivita.tipo === "ritiro_programma_scambio" && (
+                          <AzioneAttivita
+                            praticaId={pratica.id}
+                            attivitaId={attivita.id}
+                            azione="programma"
+                            label="Segna programmato"
+                            className="bg-amber-100 text-amber-950 hover:bg-amber-200"
+                            disabilitata={
+                              attivita.stato === "programmata" ||
+                              !attivita.pratica_origine_id
+                            }
+                          />
+                        )}
+                        <AzioneAttivita
+                          praticaId={pratica.id}
+                          attivitaId={attivita.id}
+                          azione="completa"
+                          label={
+                            attivita.tipo === "ritiro_programma_scambio"
+                              ? "Segna ritirato"
+                              : "Segna richiamato"
+                          }
+                          className="bg-green-600 text-white hover:bg-green-700"
+                          disabilitata={attivita.stato === "da_collegare"}
+                        />
+                        <AzioneAttivita
+                          praticaId={pratica.id}
+                          attivitaId={attivita.id}
+                          azione="annulla"
+                          label="Annulla attività"
+                          className="bg-slate-200 text-slate-900 hover:bg-slate-300"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
             <Card titolo="Logistica / ritiro">
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs font-bold uppercase tracking-wide text-slate-400">
@@ -2408,6 +2516,41 @@ function AzioneOperatore({
       >
         {label}
         {disabilitata ? ` · ${motivoDisabilitata}` : ""}
+      </button>
+    </form>
+  );
+}
+
+function AzioneAttivita({
+  praticaId,
+  attivitaId,
+  azione,
+  label,
+  className,
+  disabilitata = false,
+}: {
+  praticaId: string;
+  attivitaId: string;
+  azione: "programma" | "completa" | "annulla";
+  label: string;
+  className: string;
+  disabilitata?: boolean;
+}) {
+  return (
+    <form action={gestisciAttivitaOperatore}>
+      <input type="hidden" name="pratica_id" value={praticaId} />
+      <input type="hidden" name="attivita_id" value={attivitaId} />
+      <input type="hidden" name="azione" value={azione} />
+      <button
+        type="submit"
+        disabled={disabilitata}
+        className={`w-full rounded-xl px-3 py-2 text-left text-xs font-bold transition ${
+          disabilitata
+            ? "cursor-not-allowed bg-slate-100 text-slate-400"
+            : className
+        }`}
+      >
+        {label}
       </button>
     </form>
   );

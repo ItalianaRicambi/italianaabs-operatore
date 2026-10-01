@@ -740,6 +740,32 @@ export async function applicaAzioneOperatore(
   revalidatePath(`/pratica/${praticaId}`);
 }
 
+export async function gestisciAttivitaOperatore(formData: FormData) {
+  const attivitaId = String(formData.get("attivita_id") || "").trim();
+  const praticaId = String(formData.get("pratica_id") || "").trim();
+  const azione = String(formData.get("azione") || "").trim();
+  const nota = String(formData.get("nota") || "").trim();
+
+  if (!/^[0-9a-f-]{36}$/i.test(attivitaId) || !/^[0-9a-f-]{36}$/i.test(praticaId)) {
+    throw new Error("Identificativo attività non valido");
+  }
+
+  if (!["programma", "completa", "annulla"].includes(azione)) {
+    throw new Error("Azione attività non consentita");
+  }
+
+  const operatore = await richiediOperatoreAttivo();
+  await chiamaRpc("applica_azione_attivita_operatore", {
+    p_attivita_id: attivitaId,
+    p_azione: azione,
+    p_nota: nota || null,
+    p_operatore: operatore,
+  });
+
+  revalidatePath("/");
+  revalidatePath(`/pratica/${praticaId}`);
+}
+
 /* ============================================================
    CODICI IDENTIFICATIVI
    ============================================================ */
