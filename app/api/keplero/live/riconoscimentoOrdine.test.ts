@@ -5,6 +5,9 @@ import { riconosciConfermaOrdine } from "./riconoscimentoOrdine.ts";
 
 const positive = [
   "Accetto il preventivo",
+  "Buongiorno, accettiamo l’offerta 2 - Programma Scambio",
+  "Confermiamo il preventivo, grazie",
+  "Approviamo l'offerta ricevuta",
   "Confermo l'ordine, grazie",
   "L'offerta è approvata",
   "Potete procedere",
@@ -20,6 +23,10 @@ const negative = [
   "Va bene",
   "Come posso confermare il preventivo?",
   "Non accetto il preventivo",
+  "Non accettiamo l'offerta 2 - Programma Scambio",
+  "Se accettiamo l'offerta, quando spedite?",
+  "Se confermiamo il preventivo, quanto tempo serve?",
+  "Se approviamo l'offerta, potete spedire domani?",
   "Se confermo l'ordine, quando spedite?",
   "Ci penso e vi faccio sapere",
   "Il preventivo è troppo caro",
