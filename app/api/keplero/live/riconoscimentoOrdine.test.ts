@@ -19,6 +19,8 @@ const positive = [
 ];
 
 const negative = [
+  "Prima di procedere all'acquisto verifico i codici con il meccanico",
+  "Ne parlo con il mio meccanico per confermare l'offerta",
   "Ok grazie",
   "Va bene",
   "Come posso confermare il preventivo?",
@@ -36,6 +38,21 @@ const negative = [
   "Sono in attesa del ricambio",
   "Quando passate per il ritiro?",
 ];
+
+test("la verifica preliminare prevale su riepilogo e flag di conferma errati", () => {
+  assert.equal(riconosciConfermaOrdine({
+    ordine_confermato: true,
+    ultimo_messaggio_cliente: "Ho visionato il tutto ma faccio un ulteriore passaggio dal meccanico per confrontare i codici; appena pronto mi inviate i riferimenti per l'acquisto",
+    riepilogo_operativo: "Il cliente vuole verificare i codici prima di procedere all'acquisto della centralina indicata nell'offerta.",
+  }).confermato, false);
+});
+
+test("un confronto preliminare nel riepilogo non conferma l'ordine", () => {
+  assert.equal(riconosciConfermaOrdine({
+    ultimo_messaggio_cliente: "Grazie",
+    riepilogo_operativo: "Verifica con il meccanico prima di procedere all'acquisto della centralina indicata nell'offerta.",
+  }).confermato, false);
+});
 
 for (const messaggio of positive) {
   test(`riconosce: ${messaggio}`, () => {

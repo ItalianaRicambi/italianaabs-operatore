@@ -51,7 +51,12 @@ function normalizzaFrase(value: string) {
 }
 
 function contieneNegazioneODubbio(frase: string) {
+  if (/\bprima di\b.{0,45}\b(proced|acquist|ordin)/.test(frase) &&
+      /verific|confront|meccanic|elettraut|valut/.test(frase)) return true;
   return [
+    /\b(devo|faccio|faro|prima)\b.{0,80}(passaggio|confront|verific|sentire).{0,60}(meccanic|elettraut)/,
+    /\b(ne parlo|ne parlero|mi confronto|mi confrontero)\b.{0,35}(meccanic|elettraut)/,
+    /\bappena (pronto|decido)\b.{0,60}(riferiment|conferm|acquist)/,
     /\bnon\b.{0,25}\b(accett|conferm|approv|proced)/,
     /\b(non va bene|rifiuto|rifiutiamo|troppo caro)\b/,
     /\b(ci penso|dobbiamo pensarci|devo valutare|dobbiamo valutare)\b/,

@@ -1153,7 +1153,7 @@ export default async function Home({
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <DashboardFilterCard
               titolo="Ritiri programma scambio"
-              valore={ritiriProgrammaScambio}
+              valore={errore ? null : ritiriProgrammaScambio}
               descrizione="Prodotti da ritirare, programmare o collegare all’ordine"
               className="border-amber-500"
               href={hrefConFiltro("ritiri_programma_scambio")}
@@ -1161,7 +1161,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Richiamate post-preventivo"
-              valore={richiamatePostPreventivo}
+              valore={errore ? null : richiamatePostPreventivo}
               descrizione="Delucidazioni richieste su offerte già inviate"
               className="border-sky-500"
               href={hrefConFiltro("richiamate_post_preventivo")}
@@ -1169,7 +1169,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Richiamate post-vendita"
-              valore={richiamatePostVendita}
+              valore={errore ? null : richiamatePostVendita}
               descrizione="Clienti con ordine, fattura o assistenza in corso"
               className="border-violet-500"
               href={hrefConFiltro("richiamate_post_vendita")}
@@ -1177,7 +1177,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Richiamate da classificare"
-              valore={richiamateDaClassificare}
+              valore={errore ? null : richiamateDaClassificare}
               descrizione="Richiesta chiara, ma contesto commerciale non univoco"
               className="border-slate-400"
               href={hrefConFiltro("richiamate_da_classificare")}
@@ -1194,7 +1194,7 @@ export default async function Home({
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <DashboardFilterCard
               titolo="Assistenze da evadere"
-              valore={assistenzaDaEvadere}
+              valore={errore ? null : assistenzaDaEvadere}
               descrizione="Nuove richieste non ancora prese in carico"
               className="border-violet-500"
               href={hrefConFiltro("assistenza_da_evadere")}
@@ -1202,7 +1202,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Assistenza aperta"
-              valore={assistenzaAperta}
+              valore={errore ? null : assistenzaAperta}
               descrizione="Pratiche già in gestione o in attesa"
               className="border-purple-400"
               href={hrefConFiltro("assistenza_aperta")}
@@ -1210,7 +1210,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Assistenza prioritaria"
-              valore={assistenzaPrioritaria}
+              valore={errore ? null : assistenzaPrioritaria}
               descrizione="Richieste urgenti che richiedono intervento immediato"
               className="border-red-500"
               href={hrefConFiltro("assistenza_prioritaria")}
@@ -1227,7 +1227,7 @@ export default async function Home({
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <DashboardFilterCard
               titolo="Dati mancanti"
-              valore={datiMancanti}
+              valore={errore ? null : datiMancanti}
               descrizione="Pratiche ancora incomplete"
               className="border-slate-300"
               href={hrefConFiltro("dati_mancanti")}
@@ -1235,7 +1235,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Da verificare"
-              valore={daVerificare}
+              valore={errore ? null : daVerificare}
               descrizione={
                 verificheUrgenti > 0
                   ? `${verificheUrgenti} ${
@@ -1263,7 +1263,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Richieste verifiche"
-              valore={richiesteVerifiche}
+              valore={errore ? null : richiesteVerifiche}
               descrizione="Verifiche richieste al cliente, in attesa di risposta"
               className="border-cyan-400"
               href={hrefConFiltro("richieste_verifiche")}
@@ -1271,7 +1271,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Da preventivare"
-              valore={daPreventivare}
+              valore={errore ? null : daPreventivare}
               descrizione={
                 preventiviUrgenti > 0
                   ? `${preventiviUrgenti} ${
@@ -1287,7 +1287,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Preventivi in attesa"
-              valore={preventiviInAttesa}
+              valore={errore ? null : preventiviInAttesa}
               descrizione="Offerte inviate ancora senza esito definitivo"
               className="border-sky-300"
               href={hrefConFiltro("preventivi_in_attesa")}
@@ -1295,7 +1295,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo={`Preventivi emessi · ${mesi.etichettaCorrente}`}
-              valore={preventiviMeseCorrente}
+              valore={errore ? null : preventiviMeseCorrente}
               descrizione="Tutti i preventivi inviati nel mese corrente"
               className="border-blue-400"
               href={hrefConFiltro("preventivi_mese_corrente")}
@@ -1306,7 +1306,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Da fatturare"
-              valore={daFatturare}
+              valore={errore ? null : daFatturare}
               descrizione="Ordini acquisiti senza fattura"
               className="border-red-300"
               href={hrefConFiltro("da_fatturare")}
@@ -1314,7 +1314,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo={`Fatture emesse · ${mesi.etichettaCorrente}`}
-              valore={fattureMeseCorrente}
+              valore={errore ? null : fattureMeseCorrente}
               descrizione="Pratiche fatturate nel mese corrente"
               className="border-green-300"
               href={hrefConFiltro("fatture_mese_corrente")}
@@ -1339,7 +1339,7 @@ export default async function Home({
           <div className="grid gap-4 sm:grid-cols-2">
             <DashboardFilterCard
               titolo="Preventivi mese precedente"
-              valore={preventiviMesePrecedente}
+              valore={errore ? null : preventiviMesePrecedente}
               descrizione={`${mesi.etichettaPrecedente} · archivio consultabile`}
               className="border-slate-400"
               href={hrefConFiltro("preventivi_mese_precedente")}
@@ -1348,7 +1348,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Fatture mese precedente"
-              valore={fattureMesePrecedente}
+              valore={errore ? null : fattureMesePrecedente}
               descrizione={`${mesi.etichettaPrecedente} · archivio consultabile`}
               className="border-slate-400"
               href={hrefConFiltro("fatture_mese_precedente")}
@@ -1366,7 +1366,7 @@ export default async function Home({
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <DashboardFilterCard
               titolo="Richieste dati da inviare"
-              valore={richiesteAmministrativeDaInviare}
+              valore={errore ? null : richiesteAmministrativeDaInviare}
               descrizione="Messaggio mirato già pronto per il cliente"
               className="border-amber-500"
               href={hrefConFiltro("admin_richieste_da_inviare")}
@@ -1374,7 +1374,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="In attesa dati cliente"
-              valore={richiesteAmministrativeInviate}
+              valore={errore ? null : richiesteAmministrativeInviate}
               descrizione="Richiesta inviata, risposta amministrativa attesa"
               className="border-cyan-500"
               href={hrefConFiltro("admin_attesa_dati_cliente")}
@@ -1382,7 +1382,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Cliente riconosciuto"
-              valore={clientiRiconosciuti}
+              valore={errore ? null : clientiRiconosciuti}
               descrizione="Anagrafica individuata, verifica amministrativa da completare"
               className="border-blue-400"
               href={hrefConFiltro("admin_cliente_riconosciuto")}
@@ -1390,7 +1390,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Dati amministrativi mancanti"
-              valore={datiAmministrativiMancanti}
+              valore={errore ? null : datiAmministrativiMancanti}
               descrizione="Cliente da collegare o dati fiscali da integrare"
               className="border-amber-400"
               href={hrefConFiltro("admin_dati_mancanti")}
@@ -1398,7 +1398,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Corrispondenza ambigua"
-              valore={corrispondenzeAmbigue}
+              valore={errore ? null : corrispondenzeAmbigue}
               descrizione="Più anagrafiche compatibili, scelta manuale necessaria"
               className="border-fuchsia-400"
               href={hrefConFiltro("admin_corrispondenza_ambigua")}
@@ -1406,7 +1406,7 @@ export default async function Home({
             />
             <DashboardFilterCard
               titolo="Pronto per fatturazione"
-              valore={prontiFatturazione}
+              valore={errore ? null : prontiFatturazione}
               descrizione="Cliente collegato e dati fiscali completi"
               className="border-green-400"
               href={hrefConFiltro("admin_pronto_fatturazione")}
@@ -1813,7 +1813,7 @@ function DashboardFilterCard({
   solaLettura = false,
 }: {
   titolo: string;
-  valore: number;
+  valore: number | null;
   descrizione: string;
   className: string;
   href: string;
@@ -1839,11 +1839,11 @@ function DashboardFilterCard({
       </div>
 
       <div className="mt-2 text-4xl font-bold tracking-tight text-slate-950">
-        {valore}
+        {valore ?? "—"}
       </div>
 
       <div className="mt-2 text-xs leading-5 text-slate-500">
-        {descrizione}
+        {valore === null ? "Dati non disponibili: caricamento non riuscito" : descrizione}
       </div>
     </Link>
   );

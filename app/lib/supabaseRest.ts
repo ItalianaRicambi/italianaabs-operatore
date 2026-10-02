@@ -1,6 +1,7 @@
 type FetchPaginatoOptions = {
   headers: Record<string, string>;
   pageSize?: number;
+  retryDelayMs?: number;
 };
 
 function totaleDaContentRange(contentRange: string | null) {
@@ -19,13 +20,13 @@ function totaleDaContentRange(contentRange: string | null) {
  */
 export async function fetchTutteLePagine<T>(
   url: string,
-  { headers, pageSize = 1000 }: FetchPaginatoOptions
+  { headers, pageSize = 1000, retryDelayMs = 1000 }: FetchPaginatoOptions
 ): Promise<T[]> {
   const righe: T[] = [];
   let offset = 0;
 
   while (true) {
-    const response = await fetch(url, {
+    const opzioni: RequestInit = {
       headers: {
         ...headers,
         Prefer: "count=exact",
@@ -33,7 +34,16 @@ export async function fetchTutteLePagine<T>(
         "Range-Unit": "items",
       },
       cache: "no-store",
-    });
+    };
+    let response = await fetch(url, opzioni);
+    // Solo letture GET: ripete la stessa pagina senza duplicare i dati.
+    // Gli altri errori di autenticazione restano errori, senza tentativi inutili.
+    for (let tentativo = 0; tentativo < 3 && response.status === 401; tentativo++) {
+      const errore = await response.clone().json().catch(() => null);
+      if (errore?.code !== "PGRST303" || errore?.message !== "JWT issued at future") break;
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * 2 ** tentativo));
+      response = await fetch(url, opzioni);
+    }
 
     if (!response.ok) {
       const dettaglio = await response.text();
@@ -53,4 +63,3 @@ export async function fetchTutteLePagine<T>(
 
   return righe;
 }
-
