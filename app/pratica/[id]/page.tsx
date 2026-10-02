@@ -517,6 +517,36 @@ function rawString(raw: Record<string, unknown> | null | undefined, key: string)
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+function provenienzaPratica(raw: Pratica["dati_raw"]) {
+  const payload = raw?.payload_live;
+  const channel = (
+    rawString(raw, "channel") ||
+    (payload && typeof payload === "object" && !Array.isArray(payload)
+      ? rawString(payload as Record<string, unknown>, "channel")
+      : null)
+  )?.trim().toLowerCase();
+
+  switch (channel) {
+    case "whatsapp":
+      return {
+        label: "WhatsApp",
+        indicazione: "Cerca la conversazione in WhatsApp o in Keplero, assistente «whatsapp».",
+      };
+    case "web":
+      return {
+        label: "Chat del sito web",
+        indicazione: "Cerca la conversazione in Keplero, assistente «Italiana ABS».",
+      };
+    case "test":
+      return { label: "Test", indicazione: "Pratica proveniente da un canale di test." };
+    default:
+      return {
+        label: channel || "Provenienza non disponibile",
+        indicazione: "Usa il riferimento della conversazione nella sezione Origine e riferimenti.",
+      };
+  }
+}
+
 export default async function PraticaPage({
   params,
   searchParams,
@@ -555,6 +585,7 @@ export default async function PraticaPage({
     attivitaOperative,
   } = await getPratica(id, ricercaCliente.trim());
 
+  const provenienza = provenienzaPratica(pratica.dati_raw);
   const noteInterne = annotazioniOperatore;
   const ultimaNotaOperatore = noteInterne[0] || null;
   const azioniStorico = storicoOperatore;
@@ -766,6 +797,13 @@ export default async function PraticaPage({
               <p className="mt-2 text-sm text-slate-500">
                 Creata {formattaData(pratica.created_at)}
               </p>
+
+              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                <p className="text-sm font-bold text-blue-950">
+                  Provenienza: {provenienza.label}
+                </p>
+                <p className="mt-1 text-sm text-blue-900">{provenienza.indicazione}</p>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-2">
