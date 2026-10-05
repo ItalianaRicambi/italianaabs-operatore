@@ -11,6 +11,7 @@ import {
   decidiEventoKeplero,
   type ContattoOperativo,
 } from "./decisioneEvento";
+import { messaggioRaccoltaKeplero } from "./indicazioniRaccolta";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1247,6 +1248,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const risultatoPratica = data as Record<string, unknown> | null;
+    const praticaIdContesto = typeof risultatoPratica?.pratica_id === "string"
+      ? risultatoPratica.pratica_id
+      : "";
+    let contestoCliente: unknown = { stato: "errore" };
+    if (uuidValido(praticaIdContesto)) {
+      try {
+        const response = await fetch(`${url}/rest/v1/rpc/contesto_cliente_keplero`, {
+          method: "POST",
+          headers: {
+            apikey: secretKey,
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ p_pratica_id: praticaIdContesto }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) throw new Error(`Consultazione cliente ${response.status}`);
+        contestoCliente = await response.json();
+      } catch (error) {
+        // Il salvataggio è riuscito. Una ricerca fallita non equivale a un nuovo cliente.
+        console.error("ERRORE CONSULTAZIONE CLIENTE KEPLERO", error);
+      }
+    }
+
     /*
      * ============================================================
      * RISPOSTA POSITIVA A KEPLERO
@@ -1256,8 +1283,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
 
-      message:
-        "Pratica sincronizzata con Dashboard Operatore",
+      message: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini),
+
+      contesto_cliente: contestoCliente,
 
       result:
         data,
