@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { normalizzaEventoPreventivo } from "./normalizzaPreventivo";
+import { esitoRegistrazionePreventivo } from "./esitoRegistrazione";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,7 +97,18 @@ export async function POST(request: NextRequest) {
       // Mantiene la risposta testuale se PostgREST non restituisce JSON.
     }
 
-    return NextResponse.json({ ok: true, result });
+    const esito = esitoRegistrazionePreventivo(result);
+    if (!esito.ok) {
+      console.error("PREVENTIVO NON REGISTRATO", {
+        external_id: evento.externalId,
+        targa: evento.targa,
+        esito: esito.error,
+      });
+    }
+    return NextResponse.json(
+      { ok: esito.ok, ...(esito.error ? { error: esito.error } : {}), result },
+      { status: esito.status }
+    );
   } catch (error) {
     const messaggio =
       error instanceof Error ? error.message : "Errore sconosciuto";

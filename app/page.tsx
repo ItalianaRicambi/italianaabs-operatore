@@ -1108,7 +1108,7 @@ export default async function Home({
         <section className="mb-6 rounded-2xl border border-amber-200 bg-white p-5">
           <h2 className="text-lg font-bold text-slate-950">Controllo coerenza K e Dashboard</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Messaggi ricevuti nelle ultime 48 ore, con conteggio sospeso sabato e domenica confrontati con preventivi e stati della pratica.
+            Messaggi ricevuti nelle ultime 48 ore, con conteggio sospeso sabato e domenica, confrontati con preventivi e stati della pratica. I PDF ricevuti ma non abbinati restano segnalati fino alla risoluzione.
             Le incongruenze richiedono una verifica dell’operatore.
           </p>
           {controlloK.errore || controlloK.stato?.errore || controlloKInRitardo ? (
@@ -1130,13 +1130,17 @@ export default async function Home({
             <div className="mt-3 max-h-96 space-y-3 overflow-y-auto">
               {controlloK.segnalazioni.map((voce) => {
                 const pratica = pratiche.find((p) => p.id === voce.pratica_id);
+                const linkDocumento = voce.regola === "preventivo_pdf_non_abbinato"
+                  ? voce.evidenza.match(/https:\/\/\S+/)?.[0]
+                  : undefined;
                 return (
                   <div key={voce.chiave} className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm">
                     <p className="font-semibold text-slate-900">
-                      {voce.pratica_id ? <Link className="underline" href={`/pratica/${voce.pratica_id}`}>{pratica?.codice_pratica || "Apri pratica"}{pratica?.targa ? ` · ${pratica.targa}` : ""}</Link> : "Evento senza pratica"} · Evento {voce.event_id}
+                      {voce.pratica_id ? <Link className="underline" href={`/pratica/${voce.pratica_id}`}>{pratica?.codice_pratica || "Apri pratica"}{pratica?.targa ? ` · ${pratica.targa}` : ""}</Link> : voce.regola === "preventivo_pdf_non_abbinato" ? "Preventivo da abbinare" : "Evento senza pratica"}{voce.event_id != null ? ` · Evento ${voce.event_id}` : ""}
                     </p>
                     <p className="mt-1 text-slate-700">{voce.descrizione}</p>
-                    {voce.evidenza && <p className="mt-1 whitespace-pre-wrap text-slate-600">Messaggio: {voce.evidenza}</p>}
+                    {voce.evidenza && <p className="mt-1 whitespace-pre-wrap text-slate-600">{voce.regola === "preventivo_pdf_non_abbinato" ? "Documento" : "Messaggio"}: {voce.evidenza}</p>}
+                    {linkDocumento && <a className="mt-2 inline-block font-semibold text-blue-700 underline" href={linkDocumento} target="_blank" rel="noopener noreferrer">Apri PDF da abbinare</a>}
                   </div>
                 );
               })}
