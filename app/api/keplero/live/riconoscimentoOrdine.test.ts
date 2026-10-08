@@ -16,6 +16,7 @@ const positive = [
   "Lavorazione del dispositivo",
   "In merito all'ordine 260915-IN64, è possibile modificarlo e procedere al ritiro?",
   "Va bene, procedete",
+  "Il proprietario ha deciso per la prima opzione, la lavorazione sull'originale. Come dobbiamo procedere? Il componente è già smontato.",
 ];
 
 const negative = [
@@ -37,6 +38,8 @@ const negative = [
   "Potete organizzare la spedizione?",
   "Sono in attesa del ricambio",
   "Quando passate per il ritiro?",
+  "Il proprietario ha deciso di valutare la lavorazione dopo un confronto con il meccanico",
+  "Il proprietario ha deciso per la lavorazione ma prima di procedere si confronterà con il meccanico",
 ];
 
 test("la verifica preliminare prevale su riepilogo e flag di conferma errati", () => {

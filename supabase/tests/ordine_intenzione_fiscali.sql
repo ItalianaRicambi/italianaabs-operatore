@@ -15,6 +15,10 @@ begin
    raise exception 'CF fittizio o ambiguo estratto'; end if;
  if not private.intenzione_offerta_con_fiscali(v_testo,v_riepilogo) then
    raise exception 'Combinazione positiva non riconosciuta'; end if;
+ if not private.scelta_lavorazione_cliente('Il proprietario ha deciso per la prima opzione, la lavorazione sull''originale. Come dobbiamo procedere?')
+   or private.scelta_lavorazione_cliente('Il proprietario ha deciso di valutare la lavorazione')
+   or private.scelta_lavorazione_cliente('Il proprietario ha deciso per la lavorazione ma prima di procedere si confronta con il meccanico') then
+   raise exception 'Scelta del proprietario o rinvio non riconosciuti'; end if;
  if private.intenzione_offerta_con_fiscali('Via Test 59; cliente@test.invalid',v_riepilogo)
    or private.intenzione_offerta_con_fiscali(v_testo,'Il cliente richiede un preventivo e intende procedere.')
    or private.intenzione_offerta_con_fiscali(v_testo,'Il cliente ha ricevuto l''offerta e intende procedere dopo un confronto con il meccanico.')
@@ -63,6 +67,15 @@ begin
    where pratica_id=v_altro and regola='dati_fiscali_senza_ordine') then
    raise exception 'Controllo indipendente non segnala il caso'; end if;
 
+ insert into public.keplero_live_events(external_key,pratica_id,payload,created_at)
+ values('test:ordine:controllo',v_altro,jsonb_build_object('targa','TSTI003',
+   'ultimo_messaggio_cliente','Documento allegato',
+   'allegati',jsonb_build_array('https://example.invalid/Fattura-test.pdf')),now()-interval '15 minutes');
+ if not exists(select 1 from private.candidati_coerenza_keplero()
+   where pratica_id=v_altro and regola='fattura_documento_non_allineato')
+   or exists(select 1 from public.pratiche where id=v_altro and stato_fatturazione='fatturato') then
+   raise exception 'Nome PDF non segnalato o erroneamente sufficiente a fatturare'; end if;
+
  -- Targa diversa e blocco esplicito non possono acquisire l'ordine.
  insert into public.keplero_live_events(external_key,pratica_id,payload)
  values('test:ordine:controllo',v_altro,v_payload||'{"targa":"TSTI999"}'::jsonb) returning id into v_event;
@@ -110,6 +123,18 @@ begin
    raise exception 'Intake servizio non ha acquisito ordine/CF'; end if;
  v_esito:=public.esito_ordine_contestuale_keplero(v_id,'test:ordine:intake');
  if v_esito->>'confermato'<>'true' then raise exception 'Servizio non legge esito: %',v_esito; end if;
+
+ insert into public.pratiche(targa,nome_cliente,tipo_flusso,stato_commerciale,preventivo_inviato_at)
+ values('TSTI006','Test scelta proprietario','commerciale','preventivo_inviato',now()-interval '2 hours') returning id into v_id;
+ insert into public.keplero_live_links(external_key,pratica_id) values('test:ordine:proprietario',v_id);
+ insert into public.keplero_live_events(external_key,pratica_id,payload)
+ values('test:ordine:proprietario',v_id,jsonb_build_object('targa','TSTI006',
+   'ultimo_messaggio_cliente','Il proprietario ha deciso per la prima opzione, la lavorazione sull''originale. Come dobbiamo procedere?'));
+ insert into public.keplero_live_events(external_key,pratica_id,payload)
+ values('test:ordine:proprietario',v_id,jsonb_build_object('targa','TSTI006',
+   'ultimo_messaggio_cliente',v_testo));
+ if not exists(select 1 from public.pratiche where id=v_id and stato_fatturazione='da_fatturare') then
+   raise exception 'Scelta del proprietario seguita da dati fiscali non acquisita'; end if;
 end;
 $test$;
 reset role;

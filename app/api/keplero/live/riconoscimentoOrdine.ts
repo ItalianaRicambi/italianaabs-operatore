@@ -108,6 +108,7 @@ export function riconosciConfermaOrdine(
     /\bprocedete\s+pure\b/,
     /\bdate\s+pure\s+corso\b/,
     /\b(?:vorrei|voglio|intendiamo|intendo|desidero)\s+(?:dare\s+seguito|procedere|proseguire)\b/,
+    /\b(?:il\s+)?(?:proprietario|cliente)\s+ha\s+deciso\s+(?:per|di\s+procedere\s+con)\b.{0,80}\b(?:lavorazione|riparazione|revisione|programma\s+scambio)\b/,
     /\b(?:dare|diamo|date)\s+seguito\b.{0,55}\b(?:preventivo|offerta|lavorazione|riparazione)\b/,
     /\b(?:procedere|proseguire)\b.{0,55}\b(?:preventivo|offerta|lavorazione|riparazione|programma\s+scambio)\b/,
     /\bordine\b.{0,80}\b(?:modificar|procedere|ritiro)\b/,
