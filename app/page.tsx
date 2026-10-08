@@ -17,6 +17,7 @@ import {
   mesiDashboard,
 } from "./lib/dashboardMensile";
 import { fetchTutteLePagine } from "./lib/supabaseRest";
+import { prontaPerFatturazione } from "./lib/fatturazione";
 
 type Pratica = {
   id: string;
@@ -151,9 +152,10 @@ function correggiCodaOperativa(pratica: Pratica): Pratica {
     coda = "FATTURATA";
     priorita = 10;
   } else if (pratica.stato_fatturazione === "da_fatturare") {
-    // La fatturazione prevale sul vecchio stato commerciale (es. preventivo_inviato).
-    coda = "ORDINE ACQUISITO - DA FATTURARE";
-    priorita = 3;
+    coda = prontaPerFatturazione(pratica)
+      ? "ORDINE ACQUISITO - DA FATTURARE"
+      : "ORDINE ACQUISITO - IN ATTESA DATI CLIENTE";
+    priorita = prontaPerFatturazione(pratica) ? 3 : 4;
   } else if (pratica.stato_commerciale === "preventivo_inviato") {
     coda = "PREVENTIVO INVIATO";
     priorita = 9;
@@ -665,6 +667,8 @@ function badgeClass(coda: string) {
       return "bg-slate-100 text-slate-600";
     case "ORDINE ACQUISITO - DA FATTURARE":
       return "bg-red-100 text-red-800";
+    case "ORDINE ACQUISITO - IN ATTESA DATI CLIENTE":
+      return "bg-amber-100 text-amber-800";
     case "DA PREVENTIVARE":
       return "bg-orange-100 text-orange-800";
     case "DATI INTEGRATI - DA VERIFICARE":
@@ -823,11 +827,7 @@ function filtraPratiche(
       );
 
     case "admin_pronto_fatturazione":
-      return pratiche.filter(
-        (pratica) =>
-          pratica.stato_fatturazione === "da_fatturare" &&
-          pratica.stato_amministrativo === "pronto_fatturazione"
-      );
+      return pratiche.filter(prontaPerFatturazione);
 
     case "admin_richieste_da_inviare":
       return pratiche.filter(
@@ -1778,9 +1778,13 @@ export default async function Home({
                               {formattaData(dataFatturaEffettiva(pratica))}
                             </div>
                           </div>
-                        ) : pratica.stato_fatturazione === "da_fatturare" ? (
+                        ) : prontaPerFatturazione(pratica) ? (
                           <span className="font-bold text-red-700">
                             DA EMETTERE
+                          </span>
+                        ) : pratica.stato_fatturazione === "da_fatturare" ? (
+                          <span className="font-semibold text-amber-800">
+                            DATI CLIENTE DA COMPLETARE
                           </span>
                         ) : (
                           "—"

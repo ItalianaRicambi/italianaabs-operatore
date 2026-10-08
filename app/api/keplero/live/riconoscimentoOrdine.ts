@@ -52,6 +52,9 @@ function normalizzaFrase(value: string) {
 }
 
 function contieneNegazioneODubbio(frase: string) {
+  // Chiedere come accettare non costituisce un'accettazione, anche se
+  // il riepilogo o un flag prodotto da K afferma il contrario.
+  if (/^(?:(?:buongiorno|buonasera|ciao|ok|scusi|scusa)[,!. ]*)?(?:come|in che modo|cosa devo fare|che devo fare)\b.{0,65}\b(?:accett|conferm|approv|proced)/.test(frase)) return true;
   if (/\bprima di\b.{0,45}\b(proced|acquist|ordin)/.test(frase) &&
       /verific|confront|meccanic|elettraut|valut/.test(frase)) return true;
   return [
@@ -63,6 +66,7 @@ function contieneNegazioneODubbio(frase: string) {
     /\b(ci penso|dobbiamo pensarci|devo valutare|dobbiamo valutare)\b/,
     /\b(vi faccio sapere|le faccio sapere|forse|eventualmente)\b/,
     /\bse\s+(accetto|accettiamo|confermo|confermiamo|approvo|approviamo|procedo|procediamo)\b/,
+    /\b(?:intende|vorrebbe|valuterebbe)\s+procedere\b.{0,100}\bse\b/,
   ].some((regola) => regola.test(frase));
 }
 

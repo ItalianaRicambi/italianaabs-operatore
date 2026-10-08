@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { richiediOperatoreAttivo } from "../../operatore";
+import { prontaPerFatturazione } from "../../lib/fatturazione";
 
 const AZIONI_CONSENTITE = new Set([
   // Assistenza
@@ -101,6 +102,22 @@ async function chiamaRpc(
 /* ============================================================
    LETTURA / AGGIORNAMENTO PRATICA
    ============================================================ */
+
+export async function gestisciFatturazioneOperatore(formData: FormData) {
+  const praticaId = String(formData.get("pratica_id") || "").trim();
+  const comando = String(formData.get("comando") || "");
+  if (!/^[0-9a-f-]{36}$/i.test(praticaId) || !["sospendi", "abilita"].includes(comando)) {
+    throw new Error("Comando di fatturazione non valido");
+  }
+  const operatore = await richiediOperatoreAttivo();
+  await chiamaRpc("gestisci_sospensione_fatturazione", {
+    p_pratica_id: praticaId,
+    p_sospendi: comando === "sospendi",
+    p_operatore: operatore,
+  });
+  revalidatePath(`/pratica/${praticaId}`);
+  revalidatePath("/");
+}
 
 async function leggiPratica(praticaId: string) {
   const { url, secretKey } = getSupabase();
@@ -492,6 +509,11 @@ export async function correggiStatoCommercialeOperatore(
 
   const prima = await leggiPratica(praticaId);
 
+  if (stato === "fatturata" && prima.stato_fatturazione !== "fatturato" &&
+      !prontaPerFatturazione(prima)) {
+    throw new Error("Prima di fatturare completa e conferma i dati del cliente nella sezione Cliente fiscale.");
+  }
+
   const adesso = new Date().toISOString();
 
   const statoCommercialePrima = String(
@@ -629,8 +651,7 @@ export async function correggiStatoCommercialeOperatore(
 
     modifiche.data_fattura = null;
 
-    etichetta =
-      "Ordine acquisito / da fatturare";
+    etichetta = "Ordine acquisito";
   }
 
   if (stato === "fatturata") {

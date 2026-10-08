@@ -3,6 +3,20 @@ import test from "node:test";
 
 import { riconosciConfermaOrdine } from "./riconoscimentoOrdine.ts";
 
+test("le domande su come accettare prevalgono su flag e riepilogo errati", () => {
+  for (const ultimo_messaggio_cliente of ["Come accetto l’offerta?", "Buongiorno, come confermo il preventivo?", "Ok..come fare per procedere", "Cosa devo fare per accettare?"]) {
+    assert.equal(riconosciConfermaOrdine({ ultimo_messaggio_cliente,
+      ordine_confermato: true, riepilogo_operativo: "Il cliente ha accettato il preventivo." }).confermato, false);
+  }
+  assert.equal(riconosciConfermaOrdine({ ultimo_messaggio_cliente:
+    "Accetto il preventivo. Come dobbiamo procedere?" }).confermato, true);
+});
+
+test("un'intenzione condizionata nel riepilogo non acquisisce l'ordine", () => {
+  assert.equal(riconosciConfermaOrdine({ ultimo_messaggio_cliente: "Ok, altrimenti lasciamo tutto come stabilito",
+    riepilogo_operativo: "Il cliente intende procedere con Programma Scambio se non è possibile riparare il proprio ABS." }).confermato, false);
+});
+
 const positive = [
   "Accetto il preventivo",
   "Buongiorno, accettiamo l’offerta 2 - Programma Scambio",

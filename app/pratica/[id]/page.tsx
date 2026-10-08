@@ -4,6 +4,7 @@ import {
   BarraOperatore,
 } from "../../components/IdentitaOperatore";
 import { getOperatoreAttivo } from "../../operatore";
+import { clienteFiscaleCompleto, fatturazioneSospesa, prontaPerFatturazione } from "../../lib/fatturazione";
 import { notFound } from "next/navigation";
 import {
   aggiungiCodiceOperatore,
@@ -14,6 +15,7 @@ import {
   correggiStatoCommercialeOperatore,
   creaECollegaClientePraticaOperatore,
   gestisciAttivitaOperatore,
+  gestisciFatturazioneOperatore,
   registraNotaInternaOperatore,
   rivalutaClientePraticaOperatore,
   segnaRichiestaAmministrativaInviataOperatore,
@@ -469,6 +471,8 @@ function etichettaAzione(azione: string) {
     commerciale_preventivo_inviato: "Preventivo segnato come inviato",
     commerciale_ordine_acquisito: "Ordine segnato come acquisito",
     commerciale_fatturata: "Pratica segnata come fatturata",
+    fatturazione_sospesa_dati_cliente: "Fatturazione sospesa: dati cliente",
+    fatturazione_abilitata_dati_cliente: "Dati cliente confermati / fatturazione abilitata",
     operatore_non_assistenza: "Riclassificata: non è assistenza",
     commerciale_richiesta_verifica: "Messa in richiesta verifiche / attesa risposta",
     commerciale_rifiuta_lavorazione: "Lavorazione rifiutata",
@@ -1625,12 +1629,12 @@ export default async function PraticaPage({
                     className="bg-green-600 text-white hover:bg-green-700"
                     disabilitata={
                       pratica.stato_fatturazione === "fatturato" ||
-                      pratica.stato_commerciale !== "ordine_acquisito"
+                      !prontaPerFatturazione(pratica)
                     }
                     motivoDisabilitata={
                       pratica.stato_fatturazione === "fatturato"
                         ? "Stato attuale"
-                        : "Bloccato: prima acquisisci l’ordine"
+                        : "Bloccato: completa e conferma i dati del cliente"
                     }
                   />
 
@@ -1708,7 +1712,7 @@ export default async function PraticaPage({
                       <CorrezioneStatoOperatore
                         praticaId={pratica.id}
                         stato="ordine_acquisito"
-                        label="Imposta: Ordine acquisito / da fatturare"
+                        label="Imposta: Ordine acquisito"
                         className="bg-red-100 text-red-900 hover:bg-red-200"
                         disabilitata={
                           pratica.stato_fatturazione === "fatturato" ||
@@ -1727,8 +1731,9 @@ export default async function PraticaPage({
                         stato="fatturata"
                         label="Imposta: Fatturata"
                         className="bg-green-600 text-white hover:bg-green-700"
-                        disabilitata={pratica.stato_fatturazione === "fatturato"}
-                        motivoDisabilitata="Stato attuale"
+                        disabilitata={!prontaPerFatturazione(pratica)}
+                        motivoDisabilitata={pratica.stato_fatturazione === "fatturato"
+                          ? "Stato attuale" : "Completa e conferma prima i dati del cliente"}
                       />
                     </div>
                   </details>
@@ -1991,6 +1996,42 @@ export default async function PraticaPage({
             {(pratica.stato_fatturazione === "da_fatturare" ||
               clienteCollegato) && (
               <Card titolo="Cliente fiscale">
+                {pratica.stato_fatturazione === "da_fatturare" && (
+                  <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                    <p className="text-sm font-semibold text-amber-950">
+                      {fatturazioneSospesa(pratica)
+                        ? "Fatturazione sospesa dall’operatore. K non può riabilitarla."
+                        : prontaPerFatturazione(pratica)
+                          ? "Ordine pronto per la fatturazione."
+                          : "Ordine acquisito, in attesa dei dati del cliente. Escluso dalla coda Da fatturare."}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-700">
+                      Per abilitare la fatturazione collega l’anagrafica corretta con denominazione,
+                      indirizzo, CAP, comune e partita IVA o codice fiscale completi.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {!fatturazioneSospesa(pratica) && (
+                        <form action={gestisciFatturazioneOperatore}>
+                          <input type="hidden" name="pratica_id" value={pratica.id} />
+                          <input type="hidden" name="comando" value="sospendi" />
+                          <button className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800">
+                            Sospendi: dati cliente mancanti
+                          </button>
+                        </form>
+                      )}
+                      {fatturazioneSospesa(pratica) && (
+                        <form action={gestisciFatturazioneOperatore}>
+                          <input type="hidden" name="pratica_id" value={pratica.id} />
+                          <input type="hidden" name="comando" value="abilita" />
+                          <button disabled={!clienteFiscaleCompleto(clienteCollegato)}
+                            className="rounded-lg bg-green-700 px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:opacity-50">
+                            Conferma dati e abilita fatturazione
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
                     Stato amministrativo
@@ -2195,7 +2236,8 @@ export default async function PraticaPage({
                   />
                 )}
                 <Campo label="Stato commerciale" value={etichettaStato(pratica.stato_commerciale)} />
-                <Campo label="Fatturazione" value={etichettaStato(pratica.stato_fatturazione)} />
+                <Campo label="Fatturazione" value={pratica.stato_fatturazione === "da_fatturare" &&
+                  !prontaPerFatturazione(pratica) ? "In attesa dati cliente" : etichettaStato(pratica.stato_fatturazione)} />
                 <Campo label="Logistica" value={etichettaStato(pratica.stato_logistica)} />
                 <Campo label="Follow-up" value={etichettaStato(pratica.stato_followup)} />
               </div>
