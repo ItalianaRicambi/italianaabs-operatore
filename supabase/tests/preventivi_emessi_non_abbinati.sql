@@ -13,7 +13,7 @@ begin
   then raise exception 'PDF senza pratica non persistito'; end if;
 
   insert into public.pratiche(targa,nome_cliente,tipo_flusso,stato_commerciale,created_at)
-  values('TSTQ001','Test rollback','commerciale','raccolta_dati',now()-interval '1 hour')
+  values('TSTQ001','Test rollback','commerciale','raccolta_dati',now())
   returning id into v_pratica;
   update public.preventivi_emessi_ricevuti set ultimo_tentativo_at=now()-interval '5 minutes'
     where external_id='test:preventivi:ritenta';
