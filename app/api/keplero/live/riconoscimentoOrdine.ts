@@ -6,6 +6,7 @@ export type RiconoscimentoOrdine = {
     | "campo_esplicito"
     | "messaggio_esplicito"
     | "riepilogo_esplicito"
+    | "contesto_verificato"
     | "nessuna";
   messaggio: string;
 };

@@ -12,6 +12,7 @@ import {
   type ContattoOperativo,
 } from "./decisioneEvento";
 import { messaggioRaccoltaKeplero } from "./indicazioniRaccolta";
+import { leggiOrdineContestuale } from "./ordineContestuale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -576,7 +577,7 @@ export async function POST(request: NextRequest) {
       contattoOperativo
     );
 
-    const riconoscimentoOrdine = decisione.ordine;
+    let riconoscimentoOrdine = decisione.ordine;
 
     /*
      * Una conferma esplicita di ordine/preventivo appartiene sempre al
@@ -1149,6 +1150,31 @@ export async function POST(request: NextRequest) {
       messaggio: null,
     };
 
+    // L'intake può aver acquisito l'ordine unendo scelta e dati fiscali.
+    // Restituiamo a K l'esito effettivo, invece del solo parser dell'ultimo testo.
+    if (!riconoscimentoOrdine.confermato && !decisione.bloccoContattoOperativo) {
+      const risultato = data as Record<string, unknown> | null;
+      if (typeof risultato?.pratica_id === "string" && uuidValido(risultato.pratica_id)) {
+        const response = await fetch(`${url}/rest/v1/rpc/esito_ordine_contestuale_keplero`, {
+          method: "POST",
+          headers: {
+            apikey: secretKey,
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ p_pratica_id: risultato.pratica_id, p_external_key: key }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) throw new Error(`Lettura esito ordine ${response.status}`);
+        const ordineContestuale = leggiOrdineContestuale(await response.json());
+        if (ordineContestuale) {
+          riconoscimentoOrdine = ordineContestuale.riconoscimento;
+          avanzamentoOrdine = ordineContestuale.avanzamento;
+        }
+      }
+    }
+
     if (riconoscimentoOrdine.confermato) {
       const risultato = data as Record<string, unknown> | null;
       const praticaId =
@@ -1162,51 +1188,52 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const confermaResponse = await fetch(
-        `${url}/rest/v1/rpc/conferma_ordine_da_keplero`,
-        {
-          method: "POST",
-          headers: {
-            apikey: secretKey,
-            Authorization: `Bearer ${secretKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            p_pratica_id: praticaId,
-            p_external_key: key,
-            p_messaggio_cliente:
-              riconoscimentoOrdine.messaggio || null,
-          }),
-          cache: "no-store",
-        }
-      );
-
-      const confermaRaw = await confermaResponse.text();
-
-      if (!confermaResponse.ok) {
-        console.error("ERRORE CONFERMA ORDINE KEPLERO", {
-          supabase_status: confermaResponse.status,
-          supabase_response: confermaRaw,
-          pratica_id: praticaId,
-          external_key: key,
-        });
-
-        return NextResponse.json(
+      if (riconoscimentoOrdine.fonte !== "contesto_verificato") {
+        const confermaResponse = await fetch(
+          `${url}/rest/v1/rpc/conferma_ordine_da_keplero`,
           {
-            ok: false,
-            error: `Conferma ordine Supabase ${confermaResponse.status}`,
-            detail: confermaRaw,
-          },
-          { status: 500 }
+            method: "POST",
+            headers: {
+              apikey: secretKey,
+              Authorization: `Bearer ${secretKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              p_pratica_id: praticaId,
+              p_external_key: key,
+              p_messaggio_cliente:
+                riconoscimentoOrdine.messaggio || null,
+            }),
+            cache: "no-store",
+          }
         );
-      }
 
-      try {
-        avanzamentoOrdine = JSON.parse(confermaRaw);
-      } catch {
-        avanzamentoOrdine = confermaRaw;
-      }
+        const confermaRaw = await confermaResponse.text();
 
+        if (!confermaResponse.ok) {
+          console.error("ERRORE CONFERMA ORDINE KEPLERO", {
+            supabase_status: confermaResponse.status,
+            supabase_response: confermaRaw,
+            pratica_id: praticaId,
+            external_key: key,
+          });
+
+          return NextResponse.json(
+            {
+              ok: false,
+              error: `Conferma ordine Supabase ${confermaResponse.status}`,
+              detail: confermaRaw,
+            },
+            { status: 500 }
+          );
+        }
+
+        try {
+          avanzamentoOrdine = JSON.parse(confermaRaw);
+        } catch {
+          avanzamentoOrdine = confermaRaw;
+        }
+      }
       const richiestaResponse = await fetch(
         `${url}/rest/v1/rpc/prepara_richiesta_dati_amministrativi`,
         {
