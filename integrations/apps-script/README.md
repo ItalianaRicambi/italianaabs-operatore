@@ -1,5 +1,11 @@
 # Collegamento dei PDF privati al registro offerte
 
+Attivo e collaudato il 9 ottobre 2026 nel progetto Google esistente. La notifica in `Codice.gs` avvolge il proprio oggetto con `preparaPayloadOffertaCompleta`; il file `DocumentoOfferta.gs` è stato aggiunto al progetto. Il collaudo su un PDF già registrato ha restituito `stato: "letta"` con tre alternative e `duplicato: true` al secondo invio.
+
+La prima lettura mantiene la data di invio già registrata in `preventivi`, anche se il contenuto arriva successivamente. Le versioni successive mantengono la data del proprio invio. Il test `supabase/tests/offerte_data_prima_lettura.sql` verifica anche il recupero di una conferma precedente alla lettura, l'idempotenza e la conservazione del consenso a seguito di revisione.
+
+Il recupero dei PDF si può suddividere in gruppi mirati per rispettare il limite di esecuzione Google. Un HTTP 409 per pratica ambigua, assente o bloccata dall'operatore conserva comunque il contenuto ricevuto; non forzare gli abbinamenti. Un HTTP 500 da timeout richiede invece di verificare l'acquisizione prima di ritentare.
+
 Nel progetto Apps Script già collegato al foglio “Keplero - Preventivi emessi”, aggiungere `DocumentoOfferta.gs`.
 Nella funzione esistente che notifica `/api/preventivi/emesso`, passare il payload a `preparaPayloadOffertaCompleta` immediatamente prima di `JSON.stringify`.
 
