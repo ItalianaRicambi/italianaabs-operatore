@@ -1,3 +1,5 @@
+import { AssistenzeRientro, GestioneRitiro, OfferteEScelta } from "../../components/FlussiOperativi";
+import { NOMI_RITIRO, type SceltaCliente, type AssistenzaRientro, type OffertaVersione, type AlternativaOfferta } from "../../lib/flussiOperativi";
 import { NavigazionePratica } from "../../components/NavigazionePratiche";
 import {
   AccessoOperatore,
@@ -196,6 +198,8 @@ type AttivitaOperatore = {
   evidenza: string;
   richiesta_at: string;
   programmata_at?: string | null;
+  metadati?: { ritiro_gia_effettuato_segnalato?: boolean; evidenza_ritiro_effettuato?: string };
+  operatore?: string | null; presa_in_carico_at?: string | null; riferimento_ritiro?: string | null; data_ritiro_prevista?: string | null;
 };
 
 function getSupabase() {
@@ -314,9 +318,17 @@ async function getPratica(id: string, ricercaCliente: string) {
     selectSupabase<AttivitaOperatore[]>(
       `v_attivita_operatore_aperte?pratica_id=eq.${encodeURIComponent(
         id
-      )}&select=id,tipo,stato,priorita,pratica_origine_id,codice_pratica_origine,evidenza,richiesta_at,programmata_at&order=richiesta_at.asc`
+      )}&select=id,tipo,stato,priorita,pratica_origine_id,codice_pratica_origine,evidenza,richiesta_at,programmata_at,operatore,presa_in_carico_at,riferimento_ritiro,data_ritiro_prevista,metadati&order=richiesta_at.asc`
     ),
   ]);
+
+  const [scelte, offerte, assistenzeRientro, preventiviOfferta] = await Promise.all([
+    selectSupabase<SceltaCliente[]>(`v_scelte_cliente?pratica_id=eq.${id}&select=*`),
+    selectSupabase<OffertaVersione[]>(`offerte_versioni?pratica_id=eq.${id}&select=id,pratica_id,preventivo_id,versione,inviato_at,stato,errore,file_url,registrata_at&order=inviato_at.desc,registrata_at.desc`),
+    selectSupabase<AssistenzaRientro[]>(`assistenze_rientri?pratica_id=eq.${id}&select=*&order=aperta_at.desc`),
+    selectSupabase<{id:string;file_url:string|null;inviato_at:string|null}[]>(`preventivi?pratica_id=eq.${id}&select=id,file_url,inviato_at&order=inviato_at.desc`),
+  ]);
+  const opzioniOfferta = offerte.length ? await selectSupabase<AlternativaOfferta[]>(`offerta_opzioni?offerta_id=in.(${offerte.map(q=>q.id).join(",")})&select=*&order=numero.asc`) : [];
 
   const clienteIds = Array.from(
     new Set(
@@ -351,7 +363,7 @@ async function getPratica(id: string, ricercaCliente: string) {
       : null,
     candidatiCliente,
     risultatiRicercaCliente,
-    attivitaOperative,
+    attivitaOperative, sceltaCliente: scelte[0] || null, offerte, opzioniOfferta, assistenzeRientro, preventiviOfferta,
   };
 }
 
@@ -499,6 +511,7 @@ function etichettaAzione(azione: string) {
 }
 
 function titoloAttivitaOperativa(tipo: string) {
+  if (NOMI_RITIRO[tipo]) return NOMI_RITIRO[tipo];
   switch (tipo) {
     case "ritiro_programma_scambio":
       return "Ritiro programma scambio / rientro";
@@ -586,7 +599,7 @@ export default async function PraticaPage({
     clienteCollegato,
     candidatiCliente,
     risultatiRicercaCliente,
-    attivitaOperative,
+    attivitaOperative, sceltaCliente, offerte, opzioniOfferta, assistenzeRientro, preventiviOfferta,
   } = await getPratica(id, ricercaCliente.trim());
 
   const provenienza = provenienzaPratica(pratica.dati_raw);
@@ -876,6 +889,8 @@ export default async function PraticaPage({
 
         <div className="grid gap-6 xl:grid-cols-3">
           <section className="space-y-6 xl:col-span-2">
+            <AssistenzeRientro praticaId={pratica.id} assistenze={assistenzeRientro} solaLettura={String(navigazione.filtro || "").includes("mese_precedente")} />
+            <OfferteEScelta praticaId={pratica.id} scelta={sceltaCliente} offerte={offerte} opzioni={opzioniOfferta} preventivi={preventiviOfferta} solaLettura={String(navigazione.filtro || "").includes("mese_precedente")} />
             <Card titolo="Cliente e veicolo">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Campo label="Cliente" value={pratica.nome_cliente} />
@@ -1775,6 +1790,7 @@ export default async function PraticaPage({
                         </p>
                       )}
 
+                      {attivita.tipo.startsWith("ritiro_") ? <GestioneRitiro praticaId={pratica.id} attivita={attivita} solaLettura={String(navigazione.filtro || "").includes("mese_precedente")} /> : (
                       <div className="mt-4 grid gap-2 sm:grid-cols-3">
                         {attivita.tipo === "ritiro_programma_scambio" && (
                           <AzioneAttivita
@@ -1809,6 +1825,7 @@ export default async function PraticaPage({
                           className="bg-slate-200 text-slate-900 hover:bg-slate-300"
                         />
                       </div>
+                      )}
                     </div>
                   ))}
                 </div>

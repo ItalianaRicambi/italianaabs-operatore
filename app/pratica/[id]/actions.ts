@@ -3,6 +3,63 @@
 import { revalidatePath } from "next/cache";
 import { richiediOperatoreAttivo } from "../../operatore";
 import { prontaPerFatturazione } from "../../lib/fatturazione";
+import { createHash } from "node:crypto";
+import { leggiOffertaDaPdf, normalizzaOpzioni } from "../../lib/offerte";
+
+function uuidFlusso(value: FormDataEntryValue | null) {
+  const id = String(value || "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error("Identificativo non valido");
+  return id;
+}
+
+export async function registraAlternativeOfferta(formData: FormData) {
+  await richiediOperatoreAttivo();
+  const praticaId = uuidFlusso(formData.get("pratica_id")), preventivoId = uuidFlusso(formData.get("preventivo_id"));
+  const pratica = await leggiPratica(praticaId);
+  const { url, secretKey } = getSupabase();
+  const response = await fetch(`${url}/rest/v1/preventivi?id=eq.${preventivoId}&pratica_id=eq.${praticaId}&select=id`, {
+    headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}` }, cache: "no-store",
+  });
+  if (!response.ok || !(await response.json()).length) throw new Error("Preventivo estraneo alla pratica");
+  const file = formData.get("pdf");
+  let contenuto;
+  if (file instanceof File && file.size > 0) {
+    contenuto = await leggiOffertaDaPdf(new Uint8Array(await file.arrayBuffer()), String(pratica.targa || ""));
+  } else {
+    const opzioni = normalizzaOpzioni(Array.from({ length: 8 }, (_, i) => {
+      const numero = i + 1;
+      const servizio = String(formData.get(`servizio_${numero}`) || "");
+      return { numero, numero_esplicito: true, servizio, importo: String(formData.get(`importo_${numero}`) || "").replace(",", "."),
+        iva_inclusa: formData.get(`iva_${numero}`) === "inclusa" ? true : formData.get(`iva_${numero}`) === "esclusa" ? false : null,
+        condizioni: String(formData.get("nota") || ""), reso_vecchio: null };
+    }).filter(o => o.servizio));
+    contenuto = { opzioni, impronta: createHash("sha256").update(JSON.stringify(opzioni)).digest("hex"), testo: "", errore: null, validita_giorni: null };
+  }
+  await chiamaRpc("registra_opzioni_offerta", { p_preventivo_id: preventivoId, p_opzioni: contenuto.opzioni,
+    p_impronta: contenuto.impronta, p_testo: contenuto.testo, p_errore: contenuto.errore,
+    p_fonte: `operatore:${await richiediOperatoreAttivo()}`, p_validita_giorni: contenuto.validita_giorni });
+  revalidatePath(`/pratica/${praticaId}`); revalidatePath("/");
+}
+
+export async function correggiSceltaCliente(formData: FormData) {
+  const operatore = await richiediOperatoreAttivo(), praticaId = uuidFlusso(formData.get("pratica_id"));
+  await chiamaRpc("correggi_scelta_cliente", { p_pratica_id: praticaId,
+    p_opzione_id: formData.get("opzione_id") ? uuidFlusso(formData.get("opzione_id")) : null,
+    p_stato: String(formData.get("stato") || ""), p_nota: String(formData.get("nota") || ""), p_operatore: operatore });
+  revalidatePath(`/pratica/${praticaId}`); revalidatePath("/");
+}
+
+export async function gestisciRitiroAssistenza(formData: FormData) {
+  const operatore = await richiediOperatoreAttivo(), praticaId = uuidFlusso(formData.get("pratica_id"));
+  await chiamaRpc("gestisci_ritiro_assistenza", { p_pratica_id: praticaId,
+    p_attivita_id: formData.get("attivita_id") ? uuidFlusso(formData.get("attivita_id")) : null,
+    p_assistenza_id: formData.get("assistenza_id") ? uuidFlusso(formData.get("assistenza_id")) : null,
+    p_azione: String(formData.get("azione") || ""), p_tipo: String(formData.get("tipo") || "") || null,
+    p_nota: String(formData.get("nota") || "") || null, p_riferimento: String(formData.get("riferimento") || "") || null,
+    p_data_ritiro: String(formData.get("data_ritiro") || "") || null, p_operatore: operatore,
+    p_origine_numero: formData.get("origine_numero") ? Number(formData.get("origine_numero")) : null });
+  revalidatePath(`/pratica/${praticaId}`); revalidatePath("/");
+}
 
 const AZIONI_CONSENTITE = new Set([
   // Assistenza

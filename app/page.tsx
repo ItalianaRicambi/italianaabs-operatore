@@ -1,3 +1,4 @@
+import { NOMI_RITIRO, NOMI_SCELTA, type SceltaCliente, type AssistenzaRientro, type OffertaVersione } from "./lib/flussiOperativi";
 import Link from "next/link";
 import { randomUUID } from "node:crypto";
 import {
@@ -84,12 +85,14 @@ type Pratica = {
   assistenza_aperta_at: string | null;
   assistenza_chiusa_at: string | null;
   attivita_operative?: AttivitaOperatore[];
+  scelta_cliente?: SceltaCliente | null; assistenze_rientro?: AssistenzaRientro[]; offerta_da_verificare?: boolean;
 };
 
 type AttivitaOperatore = {
   id: string;
   tipo:
     | "ritiro_programma_scambio"
+    | "ritiro_lavorazione" | "ritiro_verifica_garanzia" | "ritiro_da_classificare" | "ritiro_altro_reso"
     | "richiamata_post_preventivo"
     | "richiamata_post_vendita"
     | "richiamata_da_classificare";
@@ -377,6 +380,14 @@ async function getPratiche(): Promise<{
       console.error("Coda attività operative non disponibile:", error);
     }
 
+    const [scelte, assistenze, offerte] = await Promise.all([
+      fetchTutteLePagine<SceltaCliente>(`${url}/rest/v1/v_scelte_cliente?select=*&order=pratica_id.asc`, {headers}),
+      fetchTutteLePagine<AssistenzaRientro>(`${url}/rest/v1/assistenze_rientri?select=*&chiusa_at=is.null&order=id.asc`, {headers}),
+      fetchTutteLePagine<OffertaVersione>(`${url}/rest/v1/offerte_versioni?select=id,pratica_id,preventivo_id,versione,inviato_at,stato,errore,file_url,registrata_at&order=registrata_at.desc,id.asc`, {headers}),
+    ]);
+    const sceltePerPratica = new Map(scelte.map(s => [s.pratica_id,s]));
+    const ultimeOfferte = new Map<string, OffertaVersione>();
+    for (const q of offerte) if (!ultimeOfferte.has(q.pratica_id)) ultimeOfferte.set(q.pratica_id,q);
     const attivitaPerPratica = new Map<string, AttivitaOperatore[]>();
     for (const voce of attivita) {
       const elenco = attivitaPerPratica.get(voce.pratica_id) || [];
@@ -388,6 +399,8 @@ async function getPratiche(): Promise<{
       pratiche: praticheCorrette.map((pratica) => ({
         ...pratica,
         attivita_operative: attivitaPerPratica.get(pratica.id) || [],
+        scelta_cliente: sceltePerPratica.get(pratica.id) || null, assistenze_rientro: assistenze.filter(c => c.pratica_id === pratica.id),
+        offerta_da_verificare: ultimeOfferte.get(pratica.id)?.stato === "da_verificare",
       })),
       attivita,
       errore: null,
@@ -456,6 +469,7 @@ function haAttivita(pratica: Pratica, ...tipi: AttivitaOperatore["tipo"][]) {
 }
 
 function etichettaAttivita(tipo: AttivitaOperatore["tipo"]) {
+  if (NOMI_RITIRO[tipo]) return NOMI_RITIRO[tipo];
   switch (tipo) {
     case "ritiro_programma_scambio":
       return "Ritiro da organizzare";
@@ -738,6 +752,12 @@ function filtraPratiche(
           !["risolta", "chiusa"].includes(pratica.stato_assistenza)
       );
 
+    case "garanzie_urgenti": return pratiche.filter(p => (p.assistenze_rientro || []).length > 0);
+    case "ritiri_lavorazione": return pratiche.filter(p => haAttivita(p,"ritiro_lavorazione"));
+    case "ritiri_da_classificare": return pratiche.filter(p => haAttivita(p,"ritiro_da_classificare","ritiro_altro_reso"));
+    case "scelte_da_chiarire": return pratiche.filter(p => ["da_chiarire","modifica_da_verificare"].includes(p.scelta_cliente?.stato || "") || p.scelta_cliente?.offerta_successiva || p.scelta_cliente?.prezzo_da_verificare);
+    case "offerte_da_verificare": return pratiche.filter(p => p.offerta_da_verificare);
+
     case "ritiri_programma_scambio":
       return pratiche.filter((pratica) =>
         haAttivita(pratica, "ritiro_programma_scambio")
@@ -862,6 +882,11 @@ function labelFiltro(
       return "Assistenza aperta";
     case "assistenza_prioritaria":
       return "Assistenza prioritaria";
+    case "garanzie_urgenti": return "Rientri assistenza urgenti";
+    case "ritiri_lavorazione": return "Ritiri per lavorazione";
+    case "ritiri_da_classificare": return "Ritiri da classificare / altri resi";
+    case "scelte_da_chiarire": return "Scelte cliente da chiarire";
+    case "offerte_da_verificare": return "Offerte da verificare";
     case "ritiri_programma_scambio":
       return "Ritiri programma scambio";
     case "richiamate_post_preventivo":
@@ -1167,6 +1192,11 @@ export default async function Home({
           </h2>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <DashboardFilterCard titolo="Rientri assistenza urgenti" valore={errore ? null : pratiche.filter(p => (p.assistenze_rientro || []).length > 0).length} descrizione="Verifica in garanzia · aperti fino all’esito tecnico" className="border-red-500" href={hrefConFiltro("garanzie_urgenti")} attiva={filtroAttivo === "garanzie_urgenti"} />
+            <DashboardFilterCard titolo="Ritiri per lavorazione" valore={errore ? null : attivita.filter(a => a.tipo === "ritiro_lavorazione").length} descrizione="Primo invio del dispositivo del cliente" className="border-blue-500" href={hrefConFiltro("ritiri_lavorazione")} attiva={filtroAttivo === "ritiri_lavorazione"} />
+            <DashboardFilterCard titolo="Ritiri da classificare / altri resi" valore={errore ? null : attivita.filter(a => ["ritiro_da_classificare","ritiro_altro_reso"].includes(a.tipo)).length} descrizione="Contenuto del pacco o motivo da verificare" className="border-amber-500" href={hrefConFiltro("ritiri_da_classificare")} attiva={filtroAttivo === "ritiri_da_classificare"} />
+            <DashboardFilterCard titolo="Scelte cliente da chiarire" valore={errore ? null : pratiche.filter(p => ["da_chiarire","modifica_da_verificare"].includes(p.scelta_cliente?.stato || "") || p.scelta_cliente?.offerta_successiva || p.scelta_cliente?.prezzo_da_verificare).length} descrizione="Alternativa, versione o prezzo concordato da verificare" className="border-amber-500" href={hrefConFiltro("scelte_da_chiarire")} attiva={filtroAttivo === "scelte_da_chiarire"} />
+            <DashboardFilterCard titolo="Offerte da verificare" valore={errore ? null : pratiche.filter(p => p.offerta_da_verificare).length} descrizione="Alternative del PDF da leggere o completare" className="border-amber-500" href={hrefConFiltro("offerte_da_verificare")} attiva={filtroAttivo === "offerte_da_verificare"} />
             <DashboardFilterCard
               titolo="Ritiri programma scambio"
               valore={errore ? null : ritiriProgrammaScambio}
@@ -1631,6 +1661,11 @@ export default async function Home({
                         <div className="font-medium text-slate-900">
                           {pratica.nome_cliente || "Cliente"}
                         </div>
+                        {pratica.scelta_cliente && <div title={pratica.scelta_cliente.evidenza} className={`mt-2 rounded-lg px-2 py-1 text-xs font-bold ${pratica.scelta_cliente.stato === "confermata" ? "bg-green-100 text-green-900" : "bg-amber-100 text-amber-900"}`}>
+                          {NOMI_SCELTA[pratica.scelta_cliente.stato]}{pratica.scelta_cliente.servizio ? ` · ${pratica.scelta_cliente.servizio}` : ""}{pratica.scelta_cliente.importo != null ? ` · €${pratica.scelta_cliente.importo}` : ""}
+                        </div>}
+                        {(pratica.assistenze_rientro || []).length > 0 && <div className="mt-2 rounded-lg bg-red-100 px-2 py-1 text-xs font-bold text-red-900">Rientro assistenza URGENTE · {pratica.assistenze_rientro?.[0].operatore || "Da assegnare"}</div>}
+
                         <div className="text-xs text-slate-500">
                           {pratica.telefono || "—"}
                         </div>

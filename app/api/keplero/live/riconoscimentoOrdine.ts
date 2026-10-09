@@ -52,6 +52,8 @@ function normalizzaFrase(value: string) {
 }
 
 function contieneNegazioneODubbio(frase: string) {
+  if (/\b(?:preferisco|preferiamo|preferirei|preferiremmo|sceglierei|sceglieremmo)\b/.test(frase) &&
+      !/\b(?:accetto|accettiamo|confermo|confermiamo|procedete|procediamo)\b|pratica confermata/.test(frase)) return true;
   // Chiedere come accettare non costituisce un'accettazione, anche se
   // il riepilogo o un flag prodotto da K afferma il contrario.
   if (/^(?:(?:buongiorno|buonasera|ciao|ok|scusi|scusa)[,!. ]*)?(?:come|in che modo|cosa devo fare|che devo fare)\b.{0,65}\b(?:accett|conferm|approv|proced)/.test(frase)) return true;

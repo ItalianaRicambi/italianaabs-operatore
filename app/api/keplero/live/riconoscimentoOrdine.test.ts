@@ -3,6 +3,13 @@ import test from "node:test";
 
 import { riconosciConfermaOrdine } from "./riconoscimentoOrdine.ts";
 
+test("la sola preferenza non conferma un ordine neppure con flag errato", () => {
+ for(const ultimo_messaggio_cliente of ["Preferisco il programma scambio","Preferiamo RI","Preferirei l’opzione 2"]) {
+  assert.equal(riconosciConfermaOrdine({ultimo_messaggio_cliente,ordine_confermato:true,riepilogo_operativo:"Il cliente ha accettato il preventivo"}).confermato,false);
+ }
+ assert.equal(riconosciConfermaOrdine({ultimo_messaggio_cliente:"Preferisco RI, confermo il preventivo, procedete"}).confermato,true);
+});
+
 test("le domande su come accettare prevalgono su flag e riepilogo errati", () => {
   for (const ultimo_messaggio_cliente of ["Come accetto l’offerta?", "Buongiorno, come confermo il preventivo?", "Ok..come fare per procedere", "Cosa devo fare per accettare?"]) {
     assert.equal(riconosciConfermaOrdine({ ultimo_messaggio_cliente,
@@ -22,7 +29,6 @@ const positive = [
   "Abbiamo chiarito con l’imperatore gli ultimi dubbi e abbiamo valutato di scegliere l'opzione 1. Nella pratica confermata vorrei applicare il codice sconto coupon. Mi fate sapere quando passerà il corriere a ritirare il pezzo.",
   "Abbiamo scelto l'opzione 2 del preventivo",
   "Scelgo la prima proposta",
-  "Preferisco il programma scambio",
   "Ok vorrei revisionare la mia",
   "Accetto il preventivo",
   "Buongiorno, accettiamo l’offerta 2 - Programma Scambio",

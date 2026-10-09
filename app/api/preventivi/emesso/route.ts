@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { normalizzaEventoPreventivo } from "./normalizzaPreventivo";
 import { esitoRegistrazionePreventivo } from "./esitoRegistrazione";
+import { createHash } from "node:crypto";
+import { leggiOffertaDaPdf, leggiOffertaDaTesto, normalizzaOpzioni, type LetturaOfferta } from "../../../lib/offerte";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,12 +47,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const evento = normalizzaEventoPreventivo(
-      (await request.json()) as Record<string, unknown>
-    );
+    const rawBody = await request.text();
+    if (Buffer.byteLength(rawBody, "utf8") > 4.25 * 1024 * 1024) return NextResponse.json({ ok: false, error: "Documento superiore a 3 MB" }, { status: 413 });
+    const payload = JSON.parse(rawBody) as Record<string, unknown>;
+    const evento = normalizzaEventoPreventivo(payload);
+    let lettura: LetturaOfferta;
+    let fonte = "pdf";
+    try {
+      if (typeof payload.pdf_base64 === "string") {
+        lettura = await leggiOffertaDaPdf(new Uint8Array(Buffer.from(payload.pdf_base64, "base64")), evento.targa);
+      } else if (typeof payload.testo_pdf === "string") {
+        lettura = leggiOffertaDaTesto(payload.testo_pdf, evento.targa);
+        fonte = "testo_pdf";
+      } else if (Array.isArray(payload.opzioni)) {
+        const opzioni = normalizzaOpzioni(payload.opzioni);
+        lettura = { opzioni, impronta: createHash("sha256").update(JSON.stringify(opzioni)).digest("hex"), testo: "", errore: null, validita_giorni: null };
+        fonte = "dati_preventivo";
+      } else {
+        lettura = { opzioni: [], impronta: createHash("sha256").update(`assente:${evento.externalId}:${evento.inviatoAt}`).digest("hex"), testo: "", errore: typeof payload.errore_lettura_pdf === "string" ? payload.errore_lettura_pdf.slice(0, 500) : "Il collegamento Drive ha trasmesso il link senza il PDF: lettura delle alternative da completare", validita_giorni: null };
+      }
+    } catch (error) {
+      lettura = { opzioni: [], impronta: createHash("sha256").update(String(payload.pdf_base64 || payload.testo_pdf || JSON.stringify(payload.opzioni))).digest("hex"), testo: "", errore: error instanceof Error ? error.message : "Lettura non riuscita", validita_giorni: null };
+    }
 
     const response = await fetch(
-      `${url}/rest/v1/rpc/registra_preventivo_emesso_auto`,
+      `${url}/rest/v1/rpc/registra_preventivo_con_offerta`,
       {
         method: "POST",
         headers: {
@@ -65,6 +86,7 @@ export async function POST(request: NextRequest) {
           p_file_url: evento.fileUrl,
           p_data_offerta: evento.dataOfferta,
           p_inviato_at: evento.inviatoAt,
+          p_contenuto: { ...lettura, fonte },
         }),
         cache: "no-store",
       }

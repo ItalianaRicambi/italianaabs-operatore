@@ -1308,10 +1308,43 @@ export async function POST(request: NextRequest) {
      * ============================================================
      */
 
+    const leggiContestoFlusso = async (nome: string) => {
+      if (!uuidValido(praticaIdContesto)) return { stato: "pratica_assente" };
+      try {
+        const response = await fetch(`${url}/rest/v1/rpc/${nome}`, {
+          method: "POST", headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ p_pratica_id: praticaIdContesto, p_external_key: key }), cache: "no-store", signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) throw new Error(`Contesto operativo ${response.status}`);
+        return await response.json() as Record<string, unknown>;
+      } catch (error) { console.error("ERRORE CONTESTO OFFERTA/RIENTRO", error); return { stato: "errore_consultazione", istruzioni: "Verifica operatore richiesta: non dichiarare scelta confermata o ritiro prenotato." }; }
+    };
+    const [contestoOfferta, contestoRientro] = await Promise.all([
+      leggiContestoFlusso("contesto_offerta_keplero"), leggiContestoFlusso("contesto_rientro_keplero"),
+    ]);
+    const scelta = contestoOfferta.scelta as Record<string, unknown> | null;
+    const ritiro = contestoRientro.ritiro as Record<string, unknown> | null;
+    const metadatiRitiro = ritiro?.metadati as Record<string, unknown> | undefined;
+    const istruzioneFlusso = scelta?.stato === "da_chiarire"
+      ? " La conferma o preferenza ricevuta è registrata; chiarire quale alternativa dell’offerta intende scegliere il cliente."
+      : scelta?.stato === "preferenza" || scelta?.stato === "condizionata"
+        ? " La preferenza è registrata e non equivale a un ordine confermato."
+        : scelta?.stato === "modifica_da_verificare"
+          ? " Modifica della scelta registrata per verifica dell’operatore; preservare la scelta precedente."
+          : "";
+    const istruzioneRitiro = metadatiRitiro?.ritiro_gia_effettuato_segnalato
+      ? " Il cliente segnala una prenotazione o un ritiro già effettuato: l’operatore deve verificarlo, senza prenotare un secondo ritiro."
+      : ritiro?.tipo === "ritiro_da_classificare"
+      ? " Il ritiro è registrato da classificare: chiedere se il pacco contiene il vecchio dispositivo da restituire per lo scambio o quello ricevuto da noi che presenta il problema."
+      : ritiro?.stato === "programmata" ? " Il ritiro è già programmato: non creare una seconda prenotazione."
+      : ritiro ? " La richiesta di ritiro è registrata. La prenotazione del corriere deve essere verificata dall’operatore." : "";
     return NextResponse.json({
       ok: true,
 
-      message: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini),
+      message: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini) + istruzioneFlusso + istruzioneRitiro,
+
+      contesto_offerta: contestoOfferta,
+      contesto_ritiro: contestoRientro,
 
       contesto_cliente: contestoCliente,
 
