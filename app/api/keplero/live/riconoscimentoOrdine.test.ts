@@ -18,6 +18,12 @@ test("un'intenzione condizionata nel riepilogo non acquisisce l'ordine", () => {
 });
 
 const positive = [
+  "ok mi sta bene la prima proposta quella di 447",
+  "Abbiamo chiarito con l’imperatore gli ultimi dubbi e abbiamo valutato di scegliere l'opzione 1. Nella pratica confermata vorrei applicare il codice sconto coupon. Mi fate sapere quando passerà il corriere a ritirare il pezzo.",
+  "Abbiamo scelto l'opzione 2 del preventivo",
+  "Scelgo la prima proposta",
+  "Preferisco il programma scambio",
+  "Ok vorrei revisionare la mia",
   "Accetto il preventivo",
   "Buongiorno, accettiamo l’offerta 2 - Programma Scambio",
   "Confermiamo il preventivo, grazie",
@@ -34,6 +40,15 @@ const positive = [
 ];
 
 const negative = [
+  "Posso scegliere la prima proposta?",
+  "Vorrei sapere se posso scegliere l'opzione 1",
+  "Sto valutando l'opzione 1",
+  "Preferirei il programma scambio, ma devo chiarire prima alcuni dubbi",
+  "Se scegliamo l'opzione 1, quando passate?",
+  "Mi sta bene la prima proposta se è possibile riparare il mio pezzo",
+  "Non mi sta bene la prima proposta",
+  "Non scegliamo l'opzione 1",
+  "Vorrei revisionare la mia se è riparabile",
   "Prima di procedere all'acquisto verifico i codici con il meccanico",
   "Ne parlo con il mio meccanico per confermare l'offerta",
   "Ok grazie",

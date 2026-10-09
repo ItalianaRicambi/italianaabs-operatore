@@ -628,6 +628,7 @@ export async function POST(request: NextRequest) {
 
     const payloadNormalizzato = {
       ...body,
+      targa,
       spie_accese: spieAccese,
       diagnosi_presente: diagnosiPresente,
       dati_completi: datiCompleti,

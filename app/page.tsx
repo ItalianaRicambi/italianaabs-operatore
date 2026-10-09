@@ -17,7 +17,7 @@ import {
   mesiDashboard,
 } from "./lib/dashboardMensile";
 import { fetchTutteLePagine } from "./lib/supabaseRest";
-import { prontaPerFatturazione } from "./lib/fatturazione";
+import { ordineConfermatoAperto, ordineDaCompletare, prontaPerFatturazione } from "./lib/fatturazione";
 
 type Pratica = {
   id: string;
@@ -789,6 +789,12 @@ function filtraPratiche(
         haPreventivoNelMese(pratica, mesePrecedente)
       );
 
+    case "ordini_confermati":
+      return pratiche.filter(ordineConfermatoAperto);
+
+    case "ordini_da_completare":
+      return pratiche.filter(ordineDaCompletare);
+
     case "da_fatturare":
       return pratiche.filter(
         (pratica) => pratica.coda === "ORDINE ACQUISITO - DA FATTURARE"
@@ -879,6 +885,10 @@ function labelFiltro(
       return "Preventivi in attesa";
     case "preventivi_mese_precedente":
       return `Preventivi mese precedente · ${etichettaPrecedente}`;
+    case "ordini_confermati":
+      return "Ordini confermati";
+    case "ordini_da_completare":
+      return "Ordini da completare";
     case "da_fatturare":
       return "Da fatturare";
     case "fatturate":
@@ -897,7 +907,7 @@ function labelFiltro(
     case "admin_richieste_da_inviare":
       return "Richieste dati da inviare";
     case "admin_attesa_dati_cliente":
-      return "In attesa dei dati cliente";
+      return "Dati richiesti al cliente";
     default:
       return "Tutte le pratiche";
   }
@@ -1026,6 +1036,8 @@ export default async function Home({
     haPreventivoNelMese(pratica, mesi.precedente)
   ).length;
   const daFatturare = conta(pratiche, "ORDINE ACQUISITO - DA FATTURARE");
+  const ordiniConfermati = pratiche.filter(ordineConfermatoAperto).length;
+  const ordiniDaCompletare = pratiche.filter(ordineDaCompletare).length;
   const fattureMeseCorrente = pratiche.filter((pratica) =>
     haFatturaNelMese(pratica, mesi.corrente)
   ).length;
@@ -1309,9 +1321,25 @@ export default async function Home({
               }
             />
             <DashboardFilterCard
+              titolo="Ordini confermati"
+              valore={errore ? null : ordiniConfermati}
+              descrizione="Tutti gli ordini acquisiti ancora da fatturare"
+              className="border-emerald-500"
+              href={hrefConFiltro("ordini_confermati")}
+              attiva={filtroAttivo === "ordini_confermati"}
+            />
+            <DashboardFilterCard
+              titolo="Ordini da completare"
+              valore={errore ? null : ordiniDaCompletare}
+              descrizione="Ordini confermati, dati cliente o validazione da completare"
+              className="border-amber-500"
+              href={hrefConFiltro("ordini_da_completare")}
+              attiva={filtroAttivo === "ordini_da_completare"}
+            />
+            <DashboardFilterCard
               titolo="Da fatturare"
               valore={errore ? null : daFatturare}
-              descrizione="Ordini acquisiti senza fattura"
+              descrizione="Dati fiscali completi, fattura da emettere"
               className="border-red-300"
               href={hrefConFiltro("da_fatturare")}
               attiva={filtroAttivo === "da_fatturare"}
@@ -1377,7 +1405,7 @@ export default async function Home({
               attiva={filtroAttivo === "admin_richieste_da_inviare"}
             />
             <DashboardFilterCard
-              titolo="In attesa dati cliente"
+              titolo="Dati richiesti al cliente"
               valore={errore ? null : richiesteAmministrativeInviate}
               descrizione="Richiesta inviata, risposta amministrativa attesa"
               className="border-cyan-500"

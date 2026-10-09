@@ -23,6 +23,11 @@ test("mantiene il riconoscimento già acquisito da scelta e fiscali", () => {
     contesto: { confermato: true, regola: "scelta_lavorazione_e_dati_fiscali_v1" } }));
 });
 
+test("riconosce la scelta letterale dell'offerta anche senza anagrafica fiscale", () => {
+  assert.ok(leggiOrdineContestuale({ ...esito,
+    contesto: { confermato: true, regola: "conferma_letterale_offerta_v1" } }));
+});
+
 test("la sola intenzione o un contesto precedente non fanno risultare acquisito l'ordine", () => {
   assert.equal(leggiOrdineContestuale({ ...esito, stato_commerciale: "preventivo_inviato" }), null);
   assert.equal(leggiOrdineContestuale({ ...esito, stato_fatturazione: "non_applicabile" }), null);

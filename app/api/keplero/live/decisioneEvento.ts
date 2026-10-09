@@ -74,7 +74,7 @@ export function decidiEventoKeplero(
   const nuovaPratica = riconosciNuovaPratica(payload);
 
   return {
-    versioneRegole: "2026-09-30-v2",
+    versioneRegole: "2026-10-09-ordini-v3",
     ordine,
     nuovaPratica,
     completezza: bloccoContatto

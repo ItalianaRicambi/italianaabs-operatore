@@ -64,7 +64,7 @@ test("la decisione conserva insieme completezza, ordine e nuova pratica", () => 
   assert.equal(decisione.completezza.completa, true);
   assert.equal(decisione.ordine.confermato, true);
   assert.equal(decisione.nuovaPratica.richiesta, false);
-  assert.equal(decisione.versioneRegole, "2026-09-30-v2");
+  assert.equal(decisione.versioneRegole, "2026-10-09-ordini-v3");
 });
 
 test("un fornitore non genera preventivi o ordini cliente", () => {

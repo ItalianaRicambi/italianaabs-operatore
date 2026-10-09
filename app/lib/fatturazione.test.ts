@@ -1,11 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { prontaPerFatturazione, fatturazioneSospesa, clienteFiscaleCompleto } from "./fatturazione.ts";
+import { prontaPerFatturazione, fatturazioneSospesa, clienteFiscaleCompleto, ordineConfermatoAperto, ordineDaCompletare } from "./fatturazione.ts";
 
 const pronta = {
   stato_commerciale: "ordine_acquisito", stato_fatturazione: "da_fatturare",
   stato_amministrativo: "pronto_fatturazione", cliente_id: "cliente-verificato",
 };
+
+test("gli ordini senza dati fiscali o sospesi restano visibili nelle code commerciali", () => {
+  const incompleta = { stato_commerciale: "ordine_acquisito", stato_fatturazione: "da_fatturare" };
+  const sospesa = { ...pronta, dati_raw: { sospensione_fatturazione_operatore: { attiva: true } } };
+  for (const ordine of [incompleta, sospesa]) {
+    assert.equal(ordineConfermatoAperto(ordine), true);
+    assert.equal(ordineDaCompletare(ordine), true);
+    assert.equal(prontaPerFatturazione(ordine), false);
+  }
+  assert.equal(ordineConfermatoAperto(pronta), true);
+  assert.equal(ordineDaCompletare(pronta), false);
+  for (const ordine of [{ ...pronta, stato_fatturazione: "fatturato" },
+    { ...pronta, stato_commerciale: "preventivo_inviato" }]) {
+    assert.equal(ordineConfermatoAperto(ordine), false);
+    assert.equal(ordineDaCompletare(ordine), false);
+  }
+});
 
 test("un flag completo non sostituisce indirizzo e identificativo fiscale", () => {
   const cliente = { denominazione: "Cliente", indirizzo_fatturazione: "Via Test 1", cap: "28100",

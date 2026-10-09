@@ -57,6 +57,7 @@ function contieneNegazioneODubbio(frase: string) {
   if (/^(?:(?:buongiorno|buonasera|ciao|ok|scusi|scusa)[,!. ]*)?(?:come|in che modo|cosa devo fare|che devo fare)\b.{0,65}\b(?:accett|conferm|approv|proced)/.test(frase)) return true;
   if (/\bprima di\b.{0,45}\b(proced|acquist|ordin)/.test(frase) &&
       /verific|confront|meccanic|elettraut|valut/.test(frase)) return true;
+  if (/^(?:(?:buongiorno|buonasera|ciao|ok)[,!. ]*)?(?:posso|possiamo|potrei|potremmo|vorrei sapere|e possibile)\b.{0,60}\b(?:scegli|scelg|accett|conferm|revision|ripar)/.test(frase)) return true;
   return [
     /\b(devo|faccio|faro|prima)\b.{0,80}(passaggio|confront|verific|sentire).{0,60}(meccanic|elettraut)/,
     /\b(ne parlo|ne parlero|mi confronto|mi confrontero)\b.{0,35}(meccanic|elettraut)/,
@@ -67,6 +68,9 @@ function contieneNegazioneODubbio(frase: string) {
     /\b(vi faccio sapere|le faccio sapere|forse|eventualmente)\b/,
     /\bse\s+(accetto|accettiamo|confermo|confermiamo|approvo|approviamo|procedo|procediamo)\b/,
     /\b(?:intende|vorrebbe|valuterebbe)\s+procedere\b.{0,100}\bse\b/,
+    /\bnon\b.{0,30}\b(?:scegli|scelg|va bene|mi sta bene|vogli|vorrei|revision|ripar)/,
+    /\b(?:valutare|valutando|pensando|preferirei|sceglierei|sceglieremmo)\b/,
+    /\b(?:se|qualora)\b.{0,60}\b(?:scegli|scelg|opzione|proposta|riparabile|possibile)/,
   ].some((regola) => regola.test(frase));
 }
 
@@ -106,6 +110,10 @@ export function riconosciConfermaOrdine(
   }
 
   const confermaEsplicita = [
+    /\b(?:mi|ci)\s+sta\s+bene\b.{0,55}\b(?:proposta|offerta|opzione|preventivo)\b/,
+    /\b(?:scelgo|scegliamo|ho scelto|abbiamo scelto|ho deciso per|abbiamo deciso per|preferisco|preferiamo)\b.{0,65}\b(?:opzione|proposta|offerta|preventivo|revisione|riparazione|programma scambio)\b/,
+    /\bpratica\s+confermata\b/,
+    /\b(?:vorrei|voglio|vogliamo)\s+(?:revisionare|riparare)\b/,
     /\b(accetto|accettiamo|confermo|confermiamo|approvo|approviamo)\b.{0,45}\b(preventivo|offerta|ordine)\b/,
     /\b(preventivo|offerta|ordine)\b.{0,45}\b(accettat[oa]|confermat[oa]|approvat[oa])\b/,
     /\b(potete|puo|puoi)\s+procedere\b/,

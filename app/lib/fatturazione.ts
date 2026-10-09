@@ -41,3 +41,13 @@ export function prontaPerFatturazione(pratica: StatoFatturazionePratica): boolea
     pratica.stato_amministrativo === "pronto_fatturazione" &&
     Boolean(pratica.cliente_id?.trim()) && !fatturazioneSospesa(pratica);
 }
+
+// L'ordine resta visibile anche quando anagrafica e fatturazione sono bloccate.
+export function ordineConfermatoAperto(pratica: StatoFatturazionePratica): boolean {
+  return pratica.stato_commerciale === "ordine_acquisito" &&
+    pratica.stato_fatturazione !== "fatturato";
+}
+
+export function ordineDaCompletare(pratica: StatoFatturazionePratica): boolean {
+  return ordineConfermatoAperto(pratica) && !prontaPerFatturazione(pratica);
+}
