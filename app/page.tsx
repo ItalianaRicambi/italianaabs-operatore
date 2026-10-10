@@ -1,4 +1,6 @@
 import { AbbinamentoPresa } from "./components/AbbinamentoPresa";
+import { leggiEsitiGls } from "./lib/glsServer";
+import { statoGlsAttuale, presaPrenotata, etichettaPresa, type MetadatiGls } from "./lib/esitiGls";
 import { dataPresaIt } from "./lib/prenotazioniPrese";
 import { NOMI_RITIRO, NOMI_SCELTA, type SceltaCliente, type AssistenzaRientro, type OffertaVersione } from "./lib/flussiOperativi";
 import Link from "next/link";
@@ -107,6 +109,7 @@ type AttivitaOperatore = {
   richiesta_at: string;
   riferimento_ritiro?: string | null;
   data_ritiro_prevista?: string | null;
+  metadati?: MetadatiGls;
 };
 
 
@@ -388,7 +391,7 @@ async function getPratiche(): Promise<{
     let attivita: AttivitaOperatore[] = [];
     try {
       attivita = await fetchTutteLePagine<AttivitaOperatore>(
-        `${url}/rest/v1/v_attivita_operatore_aperte?select=id,tipo,stato,priorita,pratica_id,pratica_origine_id,codice_pratica_origine,evidenza,richiesta_at,riferimento_ritiro,data_ritiro_prevista&order=priorita.desc,richiesta_at.asc,id.asc`,
+        `${url}/rest/v1/v_attivita_operatore_aperte?select=id,tipo,stato,priorita,pratica_id,pratica_origine_id,codice_pratica_origine,evidenza,richiesta_at,riferimento_ritiro,data_ritiro_prevista,metadati&order=priorita.desc,richiesta_at.asc,id.asc`,
         { headers }
       );
     } catch (error) {
@@ -769,7 +772,7 @@ function filtraPratiche(
 
     case "garanzie_urgenti": return pratiche.filter(p => (p.assistenze_rientro || []).length > 0);
     case "ritiri_lavorazione": return pratiche.filter(p => haAttivita(p,"ritiro_lavorazione"));
-    case "prese_prenotate": return pratiche.filter(p => (p.attivita_operative || []).some(a => a.tipo.startsWith("ritiro_") && a.stato === "programmata"));
+    case "prese_prenotate": return pratiche.filter(p => (p.attivita_operative || []).some(presaPrenotata));
     case "ritiri_da_classificare": return pratiche.filter(p => haAttivita(p,"ritiro_da_classificare","ritiro_altro_reso"));
     case "scelte_da_chiarire": return pratiche.filter(p => ["da_chiarire","modifica_da_verificare"].includes(p.scelta_cliente?.stato || "") || p.scelta_cliente?.offerta_successiva || p.scelta_cliente?.prezzo_da_verificare);
     case "offerte_da_verificare": return pratiche.filter(p => p.offerta_da_verificare);
@@ -969,8 +972,8 @@ export default async function Home({
     return <AccessoOperatore />;
   }
 
-  const [{ pratiche, attivita, errore }, controlloK, prenotazioniInAttesa] = await Promise.all([
-    getPratiche(), getControlloK(), getPrenotazioniInAttesa(),
+  const [{ pratiche, attivita, errore }, controlloK, prenotazioniInAttesa, esitiGls] = await Promise.all([
+    getPratiche(), getControlloK(), getPrenotazioniInAttesa(), leggiEsitiGls(),
   ]);
   const controlloKInRitardo = !controlloK.stato?.ultima_esecuzione_at ||
     Date.now() - new Date(controlloK.stato.ultima_esecuzione_at).getTime() > 15 * 60_000;
@@ -1153,6 +1156,22 @@ export default async function Home({
           </div>
         </header>
 
+        <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-blue-950">Monitoraggio prese GLS</h2>
+            <Link href="/gls" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Apri esiti e motivazioni GLS</Link>
+          </div>
+          <p className="mt-2 text-sm text-amber-900">Aggiornamento automatico da configurare. Gli esiti mostrano la data dell’ultimo controllo registrato.</p>
+          {esitiGls.errore ? <p className="mt-2 text-sm text-red-800">{esitiGls.errore}</p> : <div className="mt-3 flex flex-wrap gap-4 text-sm">
+            <Link href="/gls?stato=prenotata" className="font-semibold text-blue-800">Prenotate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'prenotata').length}</Link>
+            <Link href="/gls?stato=effettuata" className="font-semibold text-green-800">Effettuate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'effettuata').length}</Link>
+            <Link href="/gls?stato=non_effettuata" className="font-semibold text-red-800">Non effettuate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'non_effettuata').length}</Link>
+            <Link href="/gls?stato=annullata" className="font-semibold text-amber-950">Annullate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'annullata').length}</Link>
+            <Link href="/gls?stato=da_verificare" className="font-semibold text-amber-950">Esiti da verificare: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'da_verificare').length}</Link>
+            <Link href="/gls?stato=da_abbinare" className="font-semibold text-amber-950">Abbinamenti da verificare: {esitiGls.righe.filter(e => e.esito_abbinamento !== 'abbinata').length}</Link>
+          </div>}
+        </section>
+
         {errore && (
           <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
             <strong>Errore di collegamento:</strong> {errore}
@@ -1223,7 +1242,7 @@ export default async function Home({
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <DashboardFilterCard titolo="Rientri assistenza urgenti" valore={errore ? null : pratiche.filter(p => (p.assistenze_rientro || []).length > 0).length} descrizione="Verifica in garanzia · aperti fino all’esito tecnico" className="border-red-500" href={hrefConFiltro("garanzie_urgenti")} attiva={filtroAttivo === "garanzie_urgenti"} />
             <DashboardFilterCard titolo="Ritiri per lavorazione" valore={errore ? null : attivita.filter(a => a.tipo === "ritiro_lavorazione").length} descrizione="Primo invio del dispositivo del cliente" className="border-blue-500" href={hrefConFiltro("ritiri_lavorazione")} attiva={filtroAttivo === "ritiri_lavorazione"} />
-            <DashboardFilterCard titolo="Prese prenotate" valore={errore ? null : pratiche.filter(p => (p.attivita_operative || []).some(a => a.tipo.startsWith("ritiro_") && a.stato === "programmata")).length} descrizione="Data e codice della presa · lavorazioni e rientri" className="border-green-500" href={hrefConFiltro("prese_prenotate")} attiva={filtroAttivo === "prese_prenotate"} />
+            <DashboardFilterCard titolo="Prese prenotate" valore={errore ? null : pratiche.filter(p => (p.attivita_operative || []).some(presaPrenotata)).length} descrizione="Data e codice della presa · lavorazioni e rientri" className="border-green-500" href={hrefConFiltro("prese_prenotate")} attiva={filtroAttivo === "prese_prenotate"} />
             <DashboardFilterCard titolo="Ritiri da classificare / altri resi" valore={errore ? null : attivita.filter(a => ["ritiro_da_classificare","ritiro_altro_reso"].includes(a.tipo)).length} descrizione="Contenuto del pacco o motivo da verificare" className="border-amber-500" href={hrefConFiltro("ritiri_da_classificare")} attiva={filtroAttivo === "ritiri_da_classificare"} />
             <DashboardFilterCard titolo="Scelte cliente da chiarire" valore={errore ? null : pratiche.filter(p => ["da_chiarire","modifica_da_verificare"].includes(p.scelta_cliente?.stato || "") || p.scelta_cliente?.offerta_successiva || p.scelta_cliente?.prezzo_da_verificare).length} descrizione="Alternativa, versione o prezzo concordato da verificare" className="border-amber-500" href={hrefConFiltro("scelte_da_chiarire")} attiva={filtroAttivo === "scelte_da_chiarire"} />
             <DashboardFilterCard titolo="Offerte da verificare" valore={errore ? null : pratiche.filter(p => p.offerta_da_verificare).length} descrizione="Alternative del PDF da leggere o completare" className="border-amber-500" href={hrefConFiltro("offerte_da_verificare")} attiva={filtroAttivo === "offerte_da_verificare"} />
@@ -1799,7 +1818,7 @@ export default async function Home({
                               }`}
                             >
                               {etichettaAttivita(attivita.tipo)}
-                              {attivita.tipo.startsWith("ritiro_") && attivita.stato === "programmata" ? ` · Presa prenotata${attivita.data_ritiro_prevista ? ` · ${attivita.data_ritiro_prevista.split("-").reverse().join("/")}` : ""}${attivita.riferimento_ritiro ? ` · ${attivita.riferimento_ritiro}` : ""}` : ""}
+                              {attivita.tipo.startsWith("ritiro_") && attivita.stato === "programmata" ? ` · ${etichettaPresa(attivita)}${attivita.data_ritiro_prevista ? ` · ${attivita.data_ritiro_prevista.split("-").reverse().join("/")}` : ""}${attivita.riferimento_ritiro ? ` · ${attivita.riferimento_ritiro}` : ""}` : ""}
                               {attivita.stato === "da_collegare" ? " · verifica collegamento" : ""}
                             </span>
                           ))}

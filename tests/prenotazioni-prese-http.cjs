@@ -10,10 +10,13 @@ const secret = 'test-prenotazioni-session-secret-000000000';
 const pratica = {id:p,numero_pratica:1,codice_pratica:'ABS-000001',created_at:new Date().toISOString(),targa:'TST001A',nome_cliente:'Fixture prese',tipo_flusso:'commerciale',stato_assistenza:'non_applicabile',stato_completezza:'dati_mancanti',stato_commerciale:'ordine_acquisito',stato_fatturazione:'non_applicabile',stato_followup:'non_previsto',stato_logistica:'ritiro_programmato',coda:'ORDINE ACQUISITO',priorita:3,dati_raw:{},campi_bloccati_operatore:[],campi_richiesta_amministrativa:[]};
 const activity = {id:a,pratica_id:p,pratica_origine_id:p,codice_pratica_origine:'ABS-000001',tipo:'ritiro_lavorazione',stato:'programmata',priorita:'alta',evidenza:'Presa verificata',richiesta_at:new Date().toISOString(),riferimento_ritiro:'P3 9260993058',data_ritiro_prevista:'2026-10-12',metadati:{prenotazione_fonte:'email_gls'}};
 const pending = {id:'10000000-0000-4000-8000-000000000003',pratica_id:null,esito:'abbinamento_ambiguo',riferimento:'P3 9260993999',data_ritiro:'2026-10-13',testo:'Conferma GLS da abbinare',errore:null};
+const gls = {id:'10000000-0000-4000-8000-000000000004',fonte:'portale_gls',contratto:'6178',riferimento:'P39260993058',data_ritiro:'2026-10-12',mittente:'Fixture prese',destinatario:'Monika Bednarska - Germania',destinazione:'Monika Bednarska',stato:'prenotata',motivo:'Ritiro Inserito',verificata_at:new Date().toISOString(),esito_abbinamento:'abbinata',pratica_id:p,attivita_id:a,numero_pratica:1,targa:'TST001A',eventi:[{at:new Date().toISOString(),luogo:'Novara',stato:'Ritiro Inserito',note:''}]};
+const glsPending = {...gls,id:'10000000-0000-4000-8000-000000000005',riferimento:'P39260993059',stato:'non_effettuata',motivo:'Merce non presente',esito_abbinamento:'da_abbinare',pratica_id:null,attivita_id:null,numero_pratica:null};
 let app, output = '';
 const db = http.createServer((req,res) => {
   const u=new URL(req.url,'http://localhost'); const table=u.pathname.split('/').pop();
   let rows=table==='pratiche'||table==='v_coda_operatore_tempi'?[pratica]:table==='v_attivita_operatore_aperte'?[activity]:table==='prenotazioni_prese_ricevute'?[pending]:table==='keplero_controllo_stato'?[{id:1,ultima_esecuzione_at:new Date().toISOString(),segnalazioni_aperte:0,eventi_esaminati:1,risposte_k_disponibili:false}]:[];
+  if(table==='v_esiti_prese_gls_correnti')rows=u.searchParams.has('pratica_id')?[gls]:[gls,glsPending];
   const select=u.searchParams.get('select');
   if(select&&select!=='*')rows=rows.map(r=>Object.fromEntries(select.split(',').map(k=>[k,r[k]])));
   res.writeHead(200,{'Content-Type':'application/json','content-range':`0-${Math.max(rows.length-1,0)}/${rows.length}`}); res.end(JSON.stringify(rows));
@@ -35,5 +38,9 @@ const db = http.createServer((req,res) => {
   for(const text of ['Presa prenotata','P3 9260993058','12/10/2026','Leggi data e codice','Conferma presa prenotata'])assert.ok(body.includes(text),`Scheda manca ${text}; ${output}`);
   assert.ok(!body.includes('name="azione" value="logistica_ritiro_programmato"'),'Azione logistica storica visibile sul ritiro corrente');
   assert.ok(!html.includes('Impossibile leggere le conferme delle prese'));
-  console.log('PASS: filtro e dati prenotazione, coda ambigua, scheda e separazione logistica storica (HTTP 200).');
+  assert.ok(body.includes('Esiti delle prese GLS')&&body.includes('Monika Bednarska'),'Storico GLS non visibile nella pratica');
+  const tracking=await fetch('http://127.0.0.1:3192/gls',{headers:{cookie}});const trackingHtml=await tracking.text();assert.equal(tracking.status,200,output);
+  for(const text of ['Monitoraggio prese GLS','Aggiornamento automatico GLS da configurare','Merce non presente','Conferma abbinamento GLS','Ultimo controllo','Judmax','ALB Meccatronica','C2200','/pratica/'+p])assert.ok(trackingHtml.includes(text),`GLS manca ${text}`);
+  const anonymous=await fetch('http://127.0.0.1:3192/gls');assert.ok(!(await anonymous.text()).includes('Monika Bednarska'),'Dati GLS esposti senza sessione');
+  console.log('PASS: prenotazioni, coda ambigua, separazione logistica, pagina GLS, motivazioni, link pratica e protezione sessione (HTTP 200).');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{app?.kill('SIGTERM');db.close();});

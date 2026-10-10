@@ -1325,6 +1325,7 @@ export async function POST(request: NextRequest) {
     const scelta = contestoOfferta.scelta as Record<string, unknown> | null;
     const ritiro = contestoRientro.ritiro as Record<string, unknown> | null;
     const metadatiRitiro = ritiro?.metadati as Record<string, unknown> | undefined;
+    const esitoGls = metadatiRitiro?.gls as Record<string, unknown> | undefined;
     const istruzioneFlusso = scelta?.stato === "da_chiarire"
       ? " La conferma o preferenza ricevuta è registrata; chiarire quale alternativa dell’offerta intende scegliere il cliente."
       : scelta?.stato === "preferenza" || scelta?.stato === "condizionata"
@@ -1332,7 +1333,11 @@ export async function POST(request: NextRequest) {
         : scelta?.stato === "modifica_da_verificare"
           ? " Modifica della scelta registrata per verifica dell’operatore; preservare la scelta precedente."
           : "";
-    const istruzioneRitiro = ritiro?.stato === "programmata" && metadatiRitiro?.prenotazione_confermata
+    const istruzioneRitiro = esitoGls?.stato === "effettuata"
+      ? ` GLS conferma il ritiro effettuato, verificato il ${esitoGls.verificata_at}. Non prenotare nuovamente e non dichiarare il dispositivo ricevuto o l’assistenza chiusa.`
+      : ["non_effettuata", "annullata", "da_verificare"].includes(String(esitoGls?.stato || ""))
+      ? ` L’ultimo controllo GLS del ${esitoGls?.verificata_at} segnala: ${esitoGls?.motivo || esitoGls?.stato}. L’operatore deve verificare il ritiro; non comunicare una nuova prenotazione o un ritiro effettuato senza conferma.`
+      : ritiro?.stato === "programmata" && metadatiRitiro?.prenotazione_confermata
       ? ` La presa è prenotata: ${ritiro.data_ritiro_prevista || "data in dashboard"}, codice ${ritiro.riferimento_ritiro || "in dashboard"}. Non creare una seconda prenotazione. Il pacco non risulta ancora ritirato.`
       : metadatiRitiro?.ritiro_gia_effettuato_segnalato
       ? " Il cliente segnala una prenotazione o un ritiro già effettuato: l’operatore deve verificarlo, senza prenotare un secondo ritiro."

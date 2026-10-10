@@ -1,4 +1,7 @@
 import { AssistenzeRientro, GestioneRitiro, OfferteEScelta } from "../../components/FlussiOperativi";
+import { leggiEsitiGls } from "../../lib/glsServer";
+import { EsitoGlsCard } from "../../components/EsitiGls";
+import { etichettaPresa, type MetadatiGls } from "../../lib/esitiGls";
 import { NOMI_RITIRO, type SceltaCliente, type AssistenzaRientro, type OffertaVersione, type AlternativaOfferta } from "../../lib/flussiOperativi";
 import { NavigazionePratica } from "../../components/NavigazionePratiche";
 import {
@@ -198,7 +201,7 @@ type AttivitaOperatore = {
   evidenza: string;
   richiesta_at: string;
   programmata_at?: string | null;
-  metadati?: { ritiro_gia_effettuato_segnalato?: boolean; evidenza_ritiro_effettuato?: string;
+  metadati?: MetadatiGls & { ritiro_gia_effettuato_segnalato?: boolean; evidenza_ritiro_effettuato?: string;
     prenotazione_rilevata?: { riferimento: string; data_ritiro: string; testo: string }; prenotazione_fonte?: string };
   operatore?: string | null; presa_in_carico_at?: string | null; riferimento_ritiro?: string | null; data_ritiro_prevista?: string | null;
 };
@@ -603,6 +606,7 @@ export default async function PraticaPage({
     attivitaOperative, sceltaCliente, offerte, opzioniOfferta, assistenzeRientro, preventiviOfferta,
   } = await getPratica(id, ricercaCliente.trim());
 
+  const esitiGls = await leggiEsitiGls(id);
   const provenienza = provenienzaPratica(pratica.dati_raw);
   const noteInterne = annotazioniOperatore;
   const ultimaNotaOperatore = noteInterne[0] || null;
@@ -1757,6 +1761,12 @@ export default async function PraticaPage({
               )}
             </Card>
 
+            {(esitiGls.righe.length > 0 || esitiGls.errore) && <section className="mb-5 rounded-2xl border border-blue-200 bg-white p-5">
+              <h2 className="mb-3 text-lg font-bold text-blue-950">Esiti delle prese GLS</h2>
+              <p className="mb-3 text-xs text-slate-600">Il ritiro effettuato non equivale alla ricezione del dispositivo. Gli esiti si riferiscono al controllo indicato.</p>
+              {esitiGls.errore && <p className="text-sm text-red-800">{esitiGls.errore}</p>}
+              <div className="space-y-3">{esitiGls.righe.map(e => <EsitoGlsCard key={e.id} esito={e} />)}</div>
+            </section>}
             {attivitaOperative.length > 0 && (
               <Card titolo="Attività operative rilevate">
                 <div className="space-y-4">
@@ -1771,7 +1781,7 @@ export default async function PraticaPage({
                             {titoloAttivitaOperativa(attivita.tipo)}
                           </div>
                           <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            {attivita.tipo.startsWith("ritiro_") && attivita.stato === "programmata" ? "Presa prenotata" : etichettaStato(attivita.stato)} · {formattaData(attivita.richiesta_at)}
+                            {attivita.tipo.startsWith("ritiro_") ? etichettaPresa(attivita) : etichettaStato(attivita.stato)} · {formattaData(attivita.richiesta_at)}
                           </div>
                         </div>
                         {attivita.codice_pratica_origine && (
@@ -1836,7 +1846,7 @@ export default async function PraticaPage({
             <Card titolo="Logistica / ritiro">
               {attivitaOperative.some(a => a.tipo.startsWith("ritiro_")) && <div className="mb-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
                 {attivitaOperative.filter(a => a.tipo.startsWith("ritiro_")).map(a => <p key={a.id} className="font-semibold">
-                  Ritiro in corso: {titoloAttivitaOperativa(a.tipo)} · {a.stato === "programmata" ? "Presa prenotata" : "Da prenotare / verificare"}
+                  Ritiro in corso: {titoloAttivitaOperativa(a.tipo)} · {etichettaPresa(a)}
                 </p>)}
                 <p className="mt-1 text-xs">La presa corrente si gestisce nella sezione Attività operative. Lo stato sotto può riferirsi a un precedente invio del dispositivo.</p>
               </div>}
