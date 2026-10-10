@@ -17,6 +17,8 @@ Abbinamento automatico solo con codice completo univoco già presente nell'attiv
 
 La conferma del ritiro completa soltanto l'attività di presa. Per una lavorazione allinea il riepilogo logistico a `ritirato`. Per garanzia/scambio non altera il ritiro storico della lavorazione, non registra ricezione e non chiude assistenza, garanzia o reso. Esiti annullati/non effettuati restano visibili per verifica e nuova prenotazione; non cancellano la richiesta del cliente. Una nuova prenotazione rimuove dall'attività il vecchio esito GLS, conservando lo storico nella tabella dedicata. Correzioni, retry, controlli vecchi e attività chiuse dall'operatore sono protetti.
 
+Se lo storico contiene eventi di spedizione successivi a un esito di presa ma manca `Ritiro Effettuato`, la dashboard segnala **Storico GLS incoerente / Esito da verificare**. Una consegna successiva a "merce non presente" non permette di applicare con certezza l'esito della presa: conservare tutti gli eventi e lasciare aperta la richiesta operativa.
+
 ## Collegamento continuativo: blocco effettivo
 
 Non è stato attivato un job che simuli l'accesso futuro al browser. Il login interattivo non fornisce automaticamente credenziali a un worker backend. La schermata dichiara **Aggiornamento automatico GLS da configurare**.

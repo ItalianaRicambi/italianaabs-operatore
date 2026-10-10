@@ -35,6 +35,16 @@ begin
   r:=public.registra_esito_presa_gls(dati||jsonb_build_object('fonte_id','test:gls:vecchio:'||i,'verificata_at',check_at-interval '2 hours',
    'eventi',jsonb_build_array(jsonb_build_object('at',now()-interval '3 hours','stato','Ritiro Inserito','luogo','Test','note',''))));
   if r->>'esito'<>'controllo_precedente' then raise exception 'Controllo vecchio applicato'; end if;
+  -- Mancata presa/annullamento e successiva consegna: nessuna chiusura inventata.
+  foreach code in array array['Merce non presente. In attesa di istruzioni dal Cliente per effettuare il ritiro.','Ritiro Annullato','Ritiro preso in carico'] loop
+   r:=public.registra_esito_presa_gls(dati||jsonb_build_object('fonte_id','test:gls:incoerente:'||i||':'||code,'verificata_at',check_at-interval '30 minutes',
+    'eventi',jsonb_build_array(jsonb_build_object('at',now()-interval '35 minutes','stato','Consegnata.','luogo','Test','note',''),
+     jsonb_build_object('at',now()-interval '45 minutes','stato',code,'luogo','Test','note',''))));
+   if r->>'stato'<>'da_verificare' or (select stato from public.attivita_operatore where id=a)<>'programmata'
+    or (select metadati#>>'{gls,motivo}' from public.attivita_operatore where id=a) not like 'Storico GLS incoerente:%' then
+    raise exception 'Storico incoerente applicato senza verifica';
+   end if;
+  end loop;
   dati:=dati||jsonb_build_object('fonte_id','test:gls:effettuata:'||i,'verificata_at',check_at,'numero_spedizione','MT 260099991',
    'eventi',jsonb_build_array(jsonb_build_object('at',now()-interval '15 minutes','stato','Spedizione creata','luogo','Test','note',''),
     jsonb_build_object('at',now()-interval '20 minutes','stato','Ritiro Effettuato','luogo','Test','note','')));
