@@ -1,5 +1,7 @@
 import { correggiSceltaCliente, gestisciRitiroAssistenza, registraAlternativeOfferta } from "../pratica/[id]/actions";
 import { NOMI_ASSISTENZA, NOMI_RITIRO, NOMI_SCELTA, type AlternativaOfferta, type AssistenzaRientro, type OffertaVersione, type SceltaCliente } from "../lib/flussiOperativi";
+import { PrenotazionePresa } from "./PrenotazionePresa";
+import { dataPresaIt } from "../lib/prenotazioniPrese";
 
 const data = (value: string) => new Date(value).toLocaleString("it-IT", { timeZone: "Europe/Rome" });
 const euro = (value: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
@@ -62,11 +64,17 @@ export function OfferteEScelta({ praticaId, scelta, offerte, opzioni, preventivi
 export function GestioneRitiro({ praticaId, attivita, solaLettura }: { praticaId: string; solaLettura: boolean; attivita: {
  id: string; tipo: string; stato: string; operatore?: string | null; presa_in_carico_at?: string | null;
  riferimento_ritiro?: string | null; data_ritiro_prevista?: string | null;
- metadati?: { ritiro_gia_effettuato_segnalato?: boolean; evidenza_ritiro_effettuato?: string };
+ metadati?: { ritiro_gia_effettuato_segnalato?: boolean; evidenza_ritiro_effettuato?: string;
+   prenotazione_rilevata?: { riferimento: string; data_ritiro: string; testo: string }; prenotazione_fonte?: string };
 } }) {
  return <div className="mt-3">
   {attivita.operatore && <p className="text-sm font-bold">In carico a {attivita.operatore}</p>}
-  {attivita.riferimento_ritiro && <p className="mt-1 text-sm">Prenotazione: {attivita.riferimento_ritiro} · {attivita.data_ritiro_prevista}</p>}
+  {attivita.stato === "programmata" && attivita.riferimento_ritiro && <p className="mt-1 rounded-lg bg-green-100 p-2 text-sm font-bold text-green-900">Presa prenotata · {attivita.riferimento_ritiro} · {attivita.data_ritiro_prevista ? dataPresaIt(attivita.data_ritiro_prevista) : "Data da verificare"}</p>}
+  {attivita.metadati?.prenotazione_rilevata && attivita.stato !== "programmata" && <p className="mt-2 text-xs font-semibold text-amber-900">Data e codice rilevati nella risposta del cliente: da confermare.</p>}
+  {!solaLettura && <PrenotazionePresa praticaId={praticaId} attivitaId={attivita.id}
+    testoIniziale={attivita.metadati?.prenotazione_rilevata?.testo || ""}
+    riferimento={attivita.riferimento_ritiro || attivita.metadati?.prenotazione_rilevata?.riferimento || ""}
+    dataRitiro={attivita.data_ritiro_prevista || attivita.metadati?.prenotazione_rilevata?.data_ritiro || ""} />}
   {attivita.metadati?.ritiro_gia_effettuato_segnalato && <p className="mt-2 rounded-lg bg-amber-100 p-3 text-sm font-bold text-amber-950">Il cliente segnala un ritiro già prenotato o effettuato. Verificare prenotazione, tracking e ricezione prima di prenotare nuovamente. “{attivita.metadati.evidenza_ritiro_effettuato}”</p>}
   {!solaLettura && <form action={gestisciRitiroAssistenza} className="mt-3 space-y-2">
    <input type="hidden" name="pratica_id" value={praticaId} /><input type="hidden" name="attivita_id" value={attivita.id} />

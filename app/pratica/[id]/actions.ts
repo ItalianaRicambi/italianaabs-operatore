@@ -5,6 +5,7 @@ import { richiediOperatoreAttivo } from "../../operatore";
 import { prontaPerFatturazione } from "../../lib/fatturazione";
 import { createHash } from "node:crypto";
 import { leggiOffertaDaPdf, normalizzaOpzioni } from "../../lib/offerte";
+import { leggiPrenotazionePresa } from "../../lib/prenotazioniPrese";
 
 function uuidFlusso(value: FormDataEntryValue | null) {
   const id = String(value || "");
@@ -59,6 +60,46 @@ export async function gestisciRitiroAssistenza(formData: FormData) {
     p_data_ritiro: String(formData.get("data_ritiro") || "") || null, p_operatore: operatore,
     p_origine_numero: formData.get("origine_numero") ? Number(formData.get("origine_numero")) : null });
   revalidatePath(`/pratica/${praticaId}`); revalidatePath("/");
+}
+
+export async function importaPrenotazionePresa(_state: { ok: boolean; messaggio: string }, formData: FormData) {
+  const operatore = await richiediOperatoreAttivo();
+  try {
+    const praticaId = uuidFlusso(formData.get("pratica_id")), attivitaId = uuidFlusso(formData.get("attivita_id"));
+    const testo = String(formData.get("testo") || "").trim();
+    const riferimento = String(formData.get("riferimento") || "").trim();
+    const data = String(formData.get("data_ritiro") || "");
+    if (formData.get("verificata") !== "on" || !testo || testo.length > 30000 || riferimento.length < 6 || riferimento.length > 80 || !/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+      return { ok: false, messaggio: "Verifica testo, codice completo e data della presa." };
+    }
+    const dati = leggiPrenotazionePresa(testo);
+    if (dati.corriere !== "GLS") return { ok: false, messaggio: "La conferma deve identificare il corriere GLS." };
+    const fonteId = createHash("sha256").update(JSON.stringify([attivitaId, testo, riferimento.toUpperCase(), data])).digest("hex");
+    const result = await chiamaRpc("registra_prenotazione_presa", { p_dati: {
+      fonte: "messaggio_operatore", fonte_id: fonteId, corriere: "GLS", riferimento, data_ritiro: data,
+      testo, confermata: true, operatore, pratica_id: praticaId, attivita_id: attivitaId,
+    } }) as { esito?: string };
+    const riuscita = ["presa_prenotata", "gia_registrata"].includes(result.esito || "");
+    revalidatePath(`/pratica/${praticaId}`); revalidatePath("/");
+    return { ok: riuscita, messaggio: riuscita ? "Presa prenotata: data e codice registrati." : "Prenotazione acquisita, ma occorre verificare il collegamento, il tipo di ritiro o una precedente presa già effettuata." };
+  } catch {
+    return { ok: false, messaggio: "Prenotazione non registrata. Controlla i dati e che il ritiro sia ancora aperto." };
+  }
+}
+
+export async function confermaAbbinamentoPresa(_state: { ok: boolean; messaggio: string }, formData: FormData) {
+  const operatore = await richiediOperatoreAttivo();
+  try {
+    if (formData.get("verificata") !== "on") return { ok: false, messaggio: "Verifica il destinatario e la prenotazione prima di confermare." };
+    const result = await chiamaRpc("conferma_abbinamento_presa", { p_id: uuidFlusso(formData.get("ricevuta_id")),
+      p_attivita_id: uuidFlusso(formData.get("attivita_id")), p_operatore: operatore }) as { esito?: string; pratica_id?: string };
+    revalidatePath("/");
+    if (result.pratica_id) revalidatePath(`/pratica/${result.pratica_id}`);
+    const ok = ["presa_prenotata", "gia_registrata"].includes(result.esito || "");
+    return { ok, messaggio: ok ? "Abbinamento verificato: presa prenotata." : "Verifica il tipo, l’origine o una presa già effettuata nella pratica scelta." };
+  } catch {
+    return { ok: false, messaggio: "Conferma non registrata. Verifica che il ritiro sia ancora aperto." };
+  }
 }
 
 const AZIONI_CONSENTITE = new Set([

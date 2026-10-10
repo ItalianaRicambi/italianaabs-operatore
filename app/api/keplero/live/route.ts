@@ -1332,7 +1332,9 @@ export async function POST(request: NextRequest) {
         : scelta?.stato === "modifica_da_verificare"
           ? " Modifica della scelta registrata per verifica dell’operatore; preservare la scelta precedente."
           : "";
-    const istruzioneRitiro = metadatiRitiro?.ritiro_gia_effettuato_segnalato
+    const istruzioneRitiro = ritiro?.stato === "programmata" && metadatiRitiro?.prenotazione_confermata
+      ? ` La presa è prenotata: ${ritiro.data_ritiro_prevista || "data in dashboard"}, codice ${ritiro.riferimento_ritiro || "in dashboard"}. Non creare una seconda prenotazione. Il pacco non risulta ancora ritirato.`
+      : metadatiRitiro?.ritiro_gia_effettuato_segnalato
       ? " Il cliente segnala una prenotazione o un ritiro già effettuato: l’operatore deve verificarlo, senza prenotare un secondo ritiro."
       : ritiro?.tipo === "ritiro_da_classificare"
       ? " Il ritiro è registrato da classificare: chiedere se il pacco contiene il vecchio dispositivo da restituire per lo scambio o quello ricevuto da noi che presenta il problema."

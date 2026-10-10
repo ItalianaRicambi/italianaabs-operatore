@@ -1,3 +1,5 @@
+import { AbbinamentoPresa } from "./components/AbbinamentoPresa";
+import { dataPresaIt } from "./lib/prenotazioniPrese";
 import { NOMI_RITIRO, NOMI_SCELTA, type SceltaCliente, type AssistenzaRientro, type OffertaVersione } from "./lib/flussiOperativi";
 import Link from "next/link";
 import { randomUUID } from "node:crypto";
@@ -103,8 +105,21 @@ type AttivitaOperatore = {
   codice_pratica_origine: string | null;
   evidenza: string;
   richiesta_at: string;
+  riferimento_ritiro?: string | null;
+  data_ritiro_prevista?: string | null;
 };
 
+
+type PrenotazioneInAttesa = { id: string; pratica_id: string | null; esito: string; riferimento: string; data_ritiro: string; testo: string; errore: string | null };
+async function getPrenotazioniInAttesa(): Promise<{ righe: PrenotazioneInAttesa[]; errore: string | null }> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { righe: [], errore: "Conferme prese non disponibili" };
+  try {
+    const righe = await fetchTutteLePagine<PrenotazioneInAttesa>(`${url}/rest/v1/prenotazioni_prese_ricevute?select=id,pratica_id,esito,riferimento,data_ritiro,testo,errore&fonte=eq.email_gls&applicata_at=is.null&order=ricevuta_at.desc,id.asc`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+    return { righe, errore: null };
+  } catch { return { righe: [], errore: "Impossibile leggere le conferme delle prese" }; }
+}
 
 type SegnalazioneK = {
   chiave: string; pratica_id: string | null; event_id: number;
@@ -373,7 +388,7 @@ async function getPratiche(): Promise<{
     let attivita: AttivitaOperatore[] = [];
     try {
       attivita = await fetchTutteLePagine<AttivitaOperatore>(
-        `${url}/rest/v1/v_attivita_operatore_aperte?select=id,tipo,stato,priorita,pratica_id,pratica_origine_id,codice_pratica_origine,evidenza,richiesta_at&order=priorita.desc,richiesta_at.asc,id.asc`,
+        `${url}/rest/v1/v_attivita_operatore_aperte?select=id,tipo,stato,priorita,pratica_id,pratica_origine_id,codice_pratica_origine,evidenza,richiesta_at,riferimento_ritiro,data_ritiro_prevista&order=priorita.desc,richiesta_at.asc,id.asc`,
         { headers }
       );
     } catch (error) {
@@ -754,6 +769,7 @@ function filtraPratiche(
 
     case "garanzie_urgenti": return pratiche.filter(p => (p.assistenze_rientro || []).length > 0);
     case "ritiri_lavorazione": return pratiche.filter(p => haAttivita(p,"ritiro_lavorazione"));
+    case "prese_prenotate": return pratiche.filter(p => (p.attivita_operative || []).some(a => a.tipo.startsWith("ritiro_") && a.stato === "programmata"));
     case "ritiri_da_classificare": return pratiche.filter(p => haAttivita(p,"ritiro_da_classificare","ritiro_altro_reso"));
     case "scelte_da_chiarire": return pratiche.filter(p => ["da_chiarire","modifica_da_verificare"].includes(p.scelta_cliente?.stato || "") || p.scelta_cliente?.offerta_successiva || p.scelta_cliente?.prezzo_da_verificare);
     case "offerte_da_verificare": return pratiche.filter(p => p.offerta_da_verificare);
@@ -884,6 +900,7 @@ function labelFiltro(
       return "Assistenza prioritaria";
     case "garanzie_urgenti": return "Rientri assistenza urgenti";
     case "ritiri_lavorazione": return "Ritiri per lavorazione";
+    case "prese_prenotate": return "Prese prenotate";
     case "ritiri_da_classificare": return "Ritiri da classificare / altri resi";
     case "scelte_da_chiarire": return "Scelte cliente da chiarire";
     case "offerte_da_verificare": return "Offerte da verificare";
@@ -952,8 +969,8 @@ export default async function Home({
     return <AccessoOperatore />;
   }
 
-  const [{ pratiche, attivita, errore }, controlloK] = await Promise.all([
-    getPratiche(), getControlloK(),
+  const [{ pratiche, attivita, errore }, controlloK, prenotazioniInAttesa] = await Promise.all([
+    getPratiche(), getControlloK(), getPrenotazioniInAttesa(),
   ]);
   const controlloKInRitardo = !controlloK.stato?.ultima_esecuzione_at ||
     Date.now() - new Date(controlloK.stato.ultima_esecuzione_at).getTime() > 15 * 60_000;
@@ -1142,7 +1159,19 @@ export default async function Home({
           </div>
         )}
 
-        <section className="mb-6 rounded-2xl border border-amber-200 bg-white p-5">
+        {(prenotazioniInAttesa.errore || prenotazioniInAttesa.righe.length > 0) && <section className="mb-6 rounded-2xl border border-amber-300 bg-white p-5">
+        <h2 className="text-lg font-bold text-amber-950">Conferme prese da verificare ({prenotazioniInAttesa.righe.length})</h2>
+        {prenotazioniInAttesa.errore && <p className="mt-2 text-sm text-red-800">{prenotazioniInAttesa.errore}</p>}
+        {prenotazioniInAttesa.righe.map(r => <details key={r.id} className="mt-3 rounded-xl border border-amber-200 p-3">
+          <summary className="cursor-pointer text-sm font-bold">{r.riferimento} · {dataPresaIt(r.data_ritiro)} · {r.esito.replaceAll("_", " ")}</summary>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{r.testo}</p>
+          {r.errore && <p className="mt-2 text-sm text-red-800">Elaborazione da verificare</p>}
+          {r.pratica_id && <Link className="mt-2 block text-sm font-bold text-blue-700" href={`/pratica/${r.pratica_id}`}>Apri la pratica collegata</Link>}
+          {!solaLettura && <AbbinamentoPresa ricevutaId={r.id} ritiri={attivita.filter(a => a.tipo.startsWith("ritiro_")).map(a => ({ id: a.id, label: `${pratiche.find(p => p.id === a.pratica_id)?.codice_pratica || a.pratica_id} · ${pratiche.find(p => p.id === a.pratica_id)?.targa || "Targa assente"} · ${NOMI_RITIRO[a.tipo] || a.tipo}` }))} />}
+        </details>)}
+      </section>}
+
+      <section className="mb-6 rounded-2xl border border-amber-200 bg-white p-5">
           <h2 className="text-lg font-bold text-slate-950">Controllo coerenza K e Dashboard</h2>
           <p className="mt-1 text-sm text-slate-600">
             Messaggi ricevuti nelle ultime 48 ore, con conteggio sospeso sabato e domenica, confrontati con preventivi e stati della pratica. I PDF ricevuti ma non abbinati restano segnalati fino alla risoluzione.
@@ -1194,6 +1223,7 @@ export default async function Home({
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <DashboardFilterCard titolo="Rientri assistenza urgenti" valore={errore ? null : pratiche.filter(p => (p.assistenze_rientro || []).length > 0).length} descrizione="Verifica in garanzia · aperti fino all’esito tecnico" className="border-red-500" href={hrefConFiltro("garanzie_urgenti")} attiva={filtroAttivo === "garanzie_urgenti"} />
             <DashboardFilterCard titolo="Ritiri per lavorazione" valore={errore ? null : attivita.filter(a => a.tipo === "ritiro_lavorazione").length} descrizione="Primo invio del dispositivo del cliente" className="border-blue-500" href={hrefConFiltro("ritiri_lavorazione")} attiva={filtroAttivo === "ritiri_lavorazione"} />
+            <DashboardFilterCard titolo="Prese prenotate" valore={errore ? null : pratiche.filter(p => (p.attivita_operative || []).some(a => a.tipo.startsWith("ritiro_") && a.stato === "programmata")).length} descrizione="Data e codice della presa · lavorazioni e rientri" className="border-green-500" href={hrefConFiltro("prese_prenotate")} attiva={filtroAttivo === "prese_prenotate"} />
             <DashboardFilterCard titolo="Ritiri da classificare / altri resi" valore={errore ? null : attivita.filter(a => ["ritiro_da_classificare","ritiro_altro_reso"].includes(a.tipo)).length} descrizione="Contenuto del pacco o motivo da verificare" className="border-amber-500" href={hrefConFiltro("ritiri_da_classificare")} attiva={filtroAttivo === "ritiri_da_classificare"} />
             <DashboardFilterCard titolo="Scelte cliente da chiarire" valore={errore ? null : pratiche.filter(p => ["da_chiarire","modifica_da_verificare"].includes(p.scelta_cliente?.stato || "") || p.scelta_cliente?.offerta_successiva || p.scelta_cliente?.prezzo_da_verificare).length} descrizione="Alternativa, versione o prezzo concordato da verificare" className="border-amber-500" href={hrefConFiltro("scelte_da_chiarire")} attiva={filtroAttivo === "scelte_da_chiarire"} />
             <DashboardFilterCard titolo="Offerte da verificare" valore={errore ? null : pratiche.filter(p => p.offerta_da_verificare).length} descrizione="Alternative del PDF da leggere o completare" className="border-amber-500" href={hrefConFiltro("offerte_da_verificare")} attiva={filtroAttivo === "offerte_da_verificare"} />
@@ -1769,6 +1799,7 @@ export default async function Home({
                               }`}
                             >
                               {etichettaAttivita(attivita.tipo)}
+                              {attivita.tipo.startsWith("ritiro_") && attivita.stato === "programmata" ? ` · Presa prenotata${attivita.data_ritiro_prevista ? ` · ${attivita.data_ritiro_prevista.split("-").reverse().join("/")}` : ""}${attivita.riferimento_ritiro ? ` · ${attivita.riferimento_ritiro}` : ""}` : ""}
                               {attivita.stato === "da_collegare" ? " · verifica collegamento" : ""}
                             </span>
                           ))}

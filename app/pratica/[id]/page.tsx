@@ -198,7 +198,8 @@ type AttivitaOperatore = {
   evidenza: string;
   richiesta_at: string;
   programmata_at?: string | null;
-  metadati?: { ritiro_gia_effettuato_segnalato?: boolean; evidenza_ritiro_effettuato?: string };
+  metadati?: { ritiro_gia_effettuato_segnalato?: boolean; evidenza_ritiro_effettuato?: string;
+    prenotazione_rilevata?: { riferimento: string; data_ritiro: string; testo: string }; prenotazione_fonte?: string };
   operatore?: string | null; presa_in_carico_at?: string | null; riferimento_ritiro?: string | null; data_ritiro_prevista?: string | null;
 };
 
@@ -1770,7 +1771,7 @@ export default async function PraticaPage({
                             {titoloAttivitaOperativa(attivita.tipo)}
                           </div>
                           <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            {etichettaStato(attivita.stato)} · {formattaData(attivita.richiesta_at)}
+                            {attivita.tipo.startsWith("ritiro_") && attivita.stato === "programmata" ? "Presa prenotata" : etichettaStato(attivita.stato)} · {formattaData(attivita.richiesta_at)}
                           </div>
                         </div>
                         {attivita.codice_pratica_origine && (
@@ -1833,6 +1834,12 @@ export default async function PraticaPage({
             )}
 
             <Card titolo="Logistica / ritiro">
+              {attivitaOperative.some(a => a.tipo.startsWith("ritiro_")) && <div className="mb-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
+                {attivitaOperative.filter(a => a.tipo.startsWith("ritiro_")).map(a => <p key={a.id} className="font-semibold">
+                  Ritiro in corso: {titoloAttivitaOperativa(a.tipo)} · {a.stato === "programmata" ? "Presa prenotata" : "Da prenotare / verificare"}
+                </p>)}
+                <p className="mt-1 text-xs">La presa corrente si gestisce nella sezione Attività operative. Lo stato sotto può riferirsi a un precedente invio del dispositivo.</p>
+              </div>}
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs font-bold uppercase tracking-wide text-slate-400">
                   Stato logistica
@@ -1854,7 +1861,7 @@ export default async function PraticaPage({
                 )}
               </div>
 
-              <div className="grid gap-3">
+              {!attivitaOperative.some(a => a.tipo.startsWith("ritiro_")) && <div className="grid gap-3">
                 <AzioneOperatore
                   praticaId={pratica.id}
                   azione="logistica_ritiro_richiesto"
@@ -1911,7 +1918,7 @@ export default async function PraticaPage({
                   }
                   motivoDisabilitata="Nessun ritiro attivo"
                 />
-              </div>
+              </div>}
             </Card>
 
             <Card titolo="Note interne operatore">
