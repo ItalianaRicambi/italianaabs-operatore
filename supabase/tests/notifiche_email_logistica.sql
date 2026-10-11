@@ -56,6 +56,20 @@ begin
   update public.attivita_operatore set stato='annullata' where id=a;
   if (select stato from public.notifiche_email_logistica where id=nid)<>'annullata' then raise exception 'Ritiro annullato invia avviso'; end if;
  end loop;
+ -- Una correzione non supera un esito incerto della stessa presa.
+ update public.attivita_operatore set stato='programmata' where id=a;
+ select id into nid from public.notifiche_email_logistica where attivita_id=a and revisione=5;
+ n:=public.prendi_email_logistica(nid);
+ perform public.esito_email_logistica(nid,(n->>'token')::uuid,'esito_incerto');
+ update public.attivita_operatore set data_ritiro_prevista=current_date+6 where id=a;
+ select id into cliente from public.notifiche_email_logistica where attivita_id=a and revisione=6;
+ r:=public.prendi_email_logistica(cliente);
+ if r is not null or (select stato from public.notifiche_email_logistica where id=cliente)<>'da_verificare' then raise exception 'Correzione supera esito incerto'; end if;
+ perform public.risolvi_email_logistica(nid,'errore','Riscontro sintetico del servizio di posta: messaggio non accettato.','Operatore test');
+ if public.esito_email_logistica(nid,(n->>'token')::uuid,'inviata') then raise exception 'Esito tardivo sovrascrive verifica operatore'; end if;
+ r:=public.rivaluta_email_logistica(cliente,'Operatore test');
+ if r->>'stato'<>'in_attesa' then raise exception 'Correzione bloccata dopo verifica'; end if;
+ update public.attivita_operatore set stato='annullata' where id=a;
  -- Indirizzi discordanti, cliente duplicato e prenotazione trascorsa.
  insert into public.pratiche(nome_cliente,email_cliente,targa,stato_commerciale,stato_fatturazione) values('Test conflitto email','uno@test.invalid','TSTCON','ordine_acquisito','da_fatturare') returning id into p;
  perform public.crea_e_collega_cliente_pratica(p,'Test conflitto email','Via Test 1','Novara','28100',p_codice_fiscale=>'TSTFSC80A01F955A',p_email=>'due@test.invalid');
