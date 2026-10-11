@@ -1,6 +1,7 @@
 import 'server-only';
 import nodemailer from 'nodemailer';
 import { connessioneGlsDb } from './glsServer';
+import { leggiRispostaEmailRpc } from './emailLogisticaRpc';
 import { MITTENTE_LOGISTICA, MAIL_COLLAUDO_LOGISTICA, messaggioPresa, esitoErroreSmtp, type AvvisoPresa } from './emailLogistica';
 
 export type ConfigLogistica = { abilitata: boolean; configurata: boolean; test_at: string | null; test_message_id: string | null; password?: string | null };
@@ -9,9 +10,7 @@ export type NotificaLogistica = { id: string; pratica_id: string; attivita_id: s
 export async function rpcEmail<T>(nome: string, dati: Record<string, unknown> = {}): Promise<T> {
   const { url, headers } = connessioneGlsDb();
   const response = await fetch(`${url}/rest/v1/rpc/${nome}`, { method: 'POST', headers, body: JSON.stringify(dati), cache: 'no-store', signal: AbortSignal.timeout(10000) });
-  // Non propagare risposte DB che potrebbero contenere argomenti sensibili.
-  if (!response.ok) throw new Error('Operazione email logistica non riuscita.');
-  return response.json() as Promise<T>;
+  return leggiRispostaEmailRpc<T>(response);
 }
 
 export function leggiConfigEmail(segreti = false) { return rpcEmail<ConfigLogistica>('configurazione_email_logistica', { p_segreti: segreti }); }
