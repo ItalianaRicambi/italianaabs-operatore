@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from 'next/link';
 import {
   cambiaOperatore,
   selezionaOperatore,
@@ -124,6 +125,7 @@ export function BarraOperatore({ operatore }: { operatore: Operatore }) {
           Operatore attivo: <strong>{operatore}</strong>
         </div>
 
+        <Link href="/logistica/email" className="text-sm font-bold text-blue-800 underline">Email ritiri e spedizioni</Link>
         <form action={cambiaOperatore}>
           <button
             type="submit"
