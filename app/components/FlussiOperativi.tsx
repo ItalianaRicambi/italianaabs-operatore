@@ -1,4 +1,5 @@
-import { correggiSceltaCliente, gestisciRitiroAssistenza, registraAlternativeOfferta } from "../pratica/[id]/actions";
+import { gestisciRitiroAssistenza, registraAlternativeOfferta } from "../pratica/[id]/actions";
+import { CorrezioneSceltaCliente } from "./CorrezioneSceltaCliente";
 import { NOMI_ASSISTENZA, NOMI_RITIRO, NOMI_SCELTA, type AlternativaOfferta, type AssistenzaRientro, type OffertaVersione, type SceltaCliente } from "../lib/flussiOperativi";
 import { PrenotazionePresa } from "./PrenotazionePresa";
 import { dataPresaIt } from "../lib/prenotazioniPrese";
@@ -49,14 +50,7 @@ export function OfferteEScelta({ praticaId, scelta, offerte, opzioni, preventivi
     </form>
    </details>
    <details className="mt-4"><summary className="cursor-pointer text-sm font-bold text-blue-800">Correggi la scelta del cliente</summary>
-    <form action={correggiSceltaCliente} className="mt-3 space-y-3">
-     <input type="hidden" name="pratica_id" value={praticaId} />
-     <select className={input} name="opzione_id" defaultValue={scelta?.opzione_id || ""}><option value="">Soluzione da chiarire</option>{opzioni.map(o => <option key={o.id} value={o.id}>{o.servizio} · {euro(o.importo)} · versione {offerte.find(q => q.id === o.offerta_id)?.versione} · opzione {o.numero}</option>)}</select>
-     <select className={input} name="stato" defaultValue={scelta?.stato === "modifica_da_verificare" ? "da_chiarire" : scelta?.stato || "preferenza"}>{Object.entries(NOMI_SCELTA).filter(([k]) => k !== "modifica_da_verificare").map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-     <textarea className={input} name="nota" placeholder="Frase del cliente o motivo della correzione" required />
-     <p className="text-xs text-slate-500">La correzione viene tracciata e protetta. Lo stato dell’ordine si gestisce nella sezione commerciale.</p>
-     <button className={button}>Salva scelta verificata</button>
-    </form>
+    <CorrezioneSceltaCliente praticaId={praticaId} scelta={scelta} offerte={offerte} opzioni={opzioni} />
    </details>
   </>}
  </section>;
