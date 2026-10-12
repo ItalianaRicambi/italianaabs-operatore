@@ -32,7 +32,19 @@ begin
  perform public.prepara_instradamento_keplero('test:plico:route',null,'390000009900','TSTP900','Suzuki','Vitara',payload);
  if (select pratica_id from public.keplero_live_links where external_key='test:plico:route')<>other_p then
    raise exception 'Blocco operatore ignorato'; end if;
- update public.pratiche set blocco_operatore=false where id=other_p;
+ -- Un flag di archivio senza destinazione non autorizza a ignorare un blocco.
+ update public.pratiche set dati_raw='{"pratica_duplicata":{"archiviata":true}}' where id=other_p;
+ result:=public.prepara_instradamento_keplero('test:plico:route',null,'390000009900','TSTP900','Suzuki','Vitara',payload);
+ if result->>'pratica_id' is distinct from other_p::text then raise exception 'Consolidamento senza destinazione ignora blocco'; end if;
+ perform set_config('app.allow_archived_record_update','1',true);
+ update public.pratiche set dati_raw='{}'::jsonb,blocco_operatore=false where id=other_p;
+ perform set_config('app.allow_archived_record_update','0',true);
+ update public.pratiche set stato_commerciale='chiuso',blocco_operatore=true,
+   dati_raw=jsonb_build_object('pratica_duplicata',jsonb_build_object('archiviata',true,'pratica_canonica_id',p))
+   where id=other_p;
+ result:=public.prepara_instradamento_keplero('test:plico:route',null,'390000009900','TSTP900','Suzuki','Vitara',payload);
+ if result->>'pratica_id' is distinct from p::text or result->>'external_key' is distinct from 'test:plico:canonico' then
+   raise exception 'Scheda consolidata interrompe continuità: %',result; end if;
  perform public.prepara_instradamento_keplero('test:plico:route',null,'390000009900','TSTP900','Suzuki','Vitara',payload);
  insert into public.keplero_live_events(external_key,pratica_id,payload)
  values('test:plico:canonico',p,payload||jsonb_build_object('ultimo_messaggio_cliente','Plico effettuato.'));
