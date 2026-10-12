@@ -6,6 +6,7 @@ import { prontaPerFatturazione } from "../../lib/fatturazione";
 import { createHash } from "node:crypto";
 import { leggiOffertaDaPdf, normalizzaOpzioni } from "../../lib/offerte";
 import { leggiPrenotazionePresa } from "../../lib/prenotazioniPrese";
+import { salvaCorrezioneScelta, type EsitoCorrezioneScelta } from "../../lib/correzioneScelta";
 
 function uuidFlusso(value: FormDataEntryValue | null) {
   const id = String(value || "");
@@ -42,12 +43,13 @@ export async function registraAlternativeOfferta(formData: FormData) {
   revalidatePath(`/pratica/${praticaId}`); revalidatePath("/");
 }
 
-export async function correggiSceltaCliente(formData: FormData) {
-  const operatore = await richiediOperatoreAttivo(), praticaId = uuidFlusso(formData.get("pratica_id"));
-  await chiamaRpc("correggi_scelta_cliente", { p_pratica_id: praticaId,
-    p_opzione_id: formData.get("opzione_id") ? uuidFlusso(formData.get("opzione_id")) : null,
-    p_stato: String(formData.get("stato") || ""), p_nota: String(formData.get("nota") || ""), p_operatore: operatore });
-  revalidatePath(`/pratica/${praticaId}`); revalidatePath("/");
+export async function correggiSceltaCliente(_state: EsitoCorrezioneScelta, formData: FormData): Promise<EsitoCorrezioneScelta> {
+  let operatore;
+  try { operatore = await richiediOperatoreAttivo(); }
+  catch { return { ok: false, messaggio: "Sessione operatore non valida. Torna alla Dashboard ed effettua nuovamente l’accesso." }; }
+  const esito = await salvaCorrezioneScelta(formData, operatore, dati => chiamaRpc("correggi_scelta_cliente", dati));
+  if (esito.ok) { revalidatePath(`/pratica/${String(formData.get("pratica_id"))}`); revalidatePath("/"); }
+  return esito;
 }
 
 export async function gestisciRitiroAssistenza(formData: FormData) {
