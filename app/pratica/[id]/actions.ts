@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { salvaEVerificaDatiPratica, type EsitoSalvataggioDati } from "../../lib/salvataggioDatiPratica";
 import { richiediOperatoreAttivo } from "../../operatore";
 import { prontaPerFatturazione } from "../../lib/fatturazione";
 import { createHash } from "node:crypto";
@@ -1163,4 +1164,11 @@ export async function aggiornaDatiPraticaOperatore(
 
   revalidatePath("/");
   revalidatePath(`/pratica/${praticaId}`);
+}
+
+export async function salvaDatiPraticaOperatore(
+  _stato: EsitoSalvataggioDati,
+  formData: FormData,
+): Promise<EsitoSalvataggioDati> {
+  return salvaEVerificaDatiPratica(formData, aggiornaDatiPraticaOperatore, leggiPratica);
 }
