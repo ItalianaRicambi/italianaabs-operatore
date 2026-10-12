@@ -1,4 +1,7 @@
 import { AssistenzeRientro, GestioneRitiro, OfferteEScelta } from "../../components/FlussiOperativi";
+import { ImportazioneDocumentoAmministrativo } from "../../components/DocumentoAmministrativo";
+import { AnagraficaFiscale } from "../../components/AnagraficaFiscale";
+import { datiFiscaliDaChat } from "../../lib/datiFiscaliChat";
 import { leggiEsitiGls } from "../../lib/glsServer";
 import { EsitoGlsCard } from "../../components/EsitiGls";
 import { etichettaPresa, type MetadatiGls } from "../../lib/esitiGls";
@@ -18,7 +21,6 @@ import {
   applicaAzioneOperatore,
   collegaClientePraticaOperatore,
   correggiStatoCommercialeOperatore,
-  creaECollegaClientePraticaOperatore,
   gestisciAttivitaOperatore,
   gestisciFatturazioneOperatore,
   registraNotaInternaOperatore,
@@ -326,11 +328,13 @@ async function getPratica(id: string, ricercaCliente: string) {
     ),
   ]);
 
-  const [scelte, offerte, assistenzeRientro, preventiviOfferta] = await Promise.all([
+  const [scelte, offerte, assistenzeRientro, preventiviOfferta, documentiAmministrativi, messaggiAmministrativi] = await Promise.all([
     selectSupabase<SceltaCliente[]>(`v_scelte_cliente?pratica_id=eq.${id}&select=*`),
     selectSupabase<OffertaVersione[]>(`offerte_versioni?pratica_id=eq.${id}&select=id,pratica_id,preventivo_id,versione,inviato_at,stato,errore,file_url,registrata_at&order=inviato_at.desc,registrata_at.desc`),
     selectSupabase<AssistenzaRientro[]>(`assistenze_rientri?pratica_id=eq.${id}&select=*&order=aperta_at.desc`),
     selectSupabase<{id:string;file_url:string|null;inviato_at:string|null}[]>(`preventivi?pratica_id=eq.${id}&select=id,file_url,inviato_at&order=inviato_at.desc`),
+    selectSupabase<{id:string;tipo_documento:string;numero_documento:string|null;data_documento:string|null;documento_url:string|null}[]>(`documenti_amministrativi?pratica_id=eq.${id}&select=id,tipo_documento,numero_documento,data_documento,documento_url&order=data_documento.desc`),
+    selectSupabase<{id:number;testo:string|null}[]>(`keplero_live_events?pratica_id=eq.${id}&select=id,testo:payload->>ultimo_messaggio_cliente&order=id.desc&limit=200`),
   ]);
   const opzioniOfferta = offerte.length ? await selectSupabase<AlternativaOfferta[]>(`offerta_opzioni?offerta_id=in.(${offerte.map(q=>q.id).join(",")})&select=*&order=numero.asc`) : [];
 
@@ -368,6 +372,7 @@ async function getPratica(id: string, ricercaCliente: string) {
     candidatiCliente,
     risultatiRicercaCliente,
     attivitaOperative, sceltaCliente: scelte[0] || null, offerte, opzioniOfferta, assistenzeRientro, preventiviOfferta,
+    documentiAmministrativi, datiAmministrativiChat: datiFiscaliDaChat(messaggiAmministrativi.reverse()),
   };
 }
 
@@ -604,6 +609,7 @@ export default async function PraticaPage({
     candidatiCliente,
     risultatiRicercaCliente,
     attivitaOperative, sceltaCliente, offerte, opzioniOfferta, assistenzeRientro, preventiviOfferta,
+    documentiAmministrativi, datiAmministrativiChat,
   } = await getPratica(id, ricercaCliente.trim());
 
   const esitiGls = await leggiEsitiGls(id);
@@ -2027,6 +2033,17 @@ export default async function PraticaPage({
               )}
             </Card>
 
+            {documentiAmministrativi.length > 0 && <Card titolo="Documenti amministrativi registrati">
+              <div className="space-y-3">{documentiAmministrativi.map(d => <div key={d.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+                <p className="font-bold">{d.tipo_documento === "proforma" ? "Pro-forma" : d.tipo_documento === "fattura" ? "Fattura" : d.tipo_documento} {d.numero_documento}</p>
+                <p>{d.data_documento ? new Date(`${d.data_documento}T12:00:00Z`).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" }) : "Data da verificare"}</p>
+                {d.documento_url && <a href={d.documento_url} target="_blank" rel="noreferrer" className="font-semibold text-blue-700 underline">Apri documento</a>}
+              </div>)}</div>
+            </Card>}
+            {pratica.tipo_flusso === "commerciale" && pratica.stato_commerciale === "ordine_acquisito" &&
+              !String(navigazione.filtro || "").includes("mese_precedente") && (
+                <ImportazioneDocumentoAmministrativo praticaId={pratica.id} />
+              )}
             {(pratica.stato_fatturazione === "da_fatturare" ||
               clienteCollegato) && (
               <Card titolo="Cliente fiscale">
@@ -2212,38 +2229,22 @@ export default async function PraticaPage({
                 {!clienteCollegato && (
                   <details className="mt-5 border-t border-slate-200 pt-4">
                     <summary className="cursor-pointer text-sm font-bold text-blue-700">
-                      Crea una nuova anagrafica fiscale
+                      Conferma i dati ricevuti e collega il cliente fiscale
                     </summary>
                     <p className="mt-2 text-xs leading-5 text-slate-500">
-                      Usalo solo dopo la ricerca: partita IVA e codice fiscale già
-                      presenti vengono bloccati per evitare duplicati.
+                      Verifica i dati recuperati dalla chat. La conferma crea e collega il cliente,
+                      poi riabilita la fatturazione nella stessa operazione. Per un cliente già presente usa la ricerca.
                     </p>
-                    <form action={creaECollegaClientePraticaOperatore} className="mt-4 grid gap-3">
-                      <input type="hidden" name="pratica_id" value={pratica.id} />
-                      <input name="denominazione" required maxLength={240} defaultValue={pratica.nome_cliente || ""} placeholder="Denominazione *" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                      <input name="indirizzo_fatturazione" required maxLength={300} placeholder="Indirizzo di fatturazione *" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                      <div className="grid grid-cols-[1fr_90px] gap-3">
-                        <input name="comune" required maxLength={160} placeholder="Comune *" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                        <input name="cap" required maxLength={20} placeholder="CAP *" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                      </div>
-                      <div className="grid grid-cols-[1fr_90px] gap-3">
-                        <input name="provincia" maxLength={10} placeholder="Provincia" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                        <input name="paese" maxLength={2} defaultValue="IT" placeholder="Paese" className="rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase" />
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <input name="partita_iva" maxLength={40} placeholder="Partita IVA" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                        <input name="codice_fiscale" maxLength={40} placeholder="Codice fiscale" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                      </div>
-                      <input name="email" type="email" maxLength={320} defaultValue={pratica.email_cliente || ""} placeholder="E-mail" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                      <input name="telefono" maxLength={80} defaultValue={pratica.telefono || ""} placeholder="Telefono" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <input name="pec" type="email" maxLength={320} placeholder="PEC" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                        <input name="codice_sdi" maxLength={20} placeholder="Codice SDI" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                      </div>
-                      <button className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700">
-                        Crea e collega cliente
-                      </button>
-                    </form>
+                    {datiAmministrativiChat.fonti.length > 0 && <details className="mt-3 rounded-lg bg-blue-50 p-3">
+                      <summary className="cursor-pointer text-xs font-bold text-blue-900">Dati amministrativi già ricevuti nella chat</summary>
+                      {datiAmministrativiChat.fonti.map(f => <blockquote key={f.id} className="mt-2 whitespace-pre-wrap border-l-2 border-blue-300 pl-2 text-xs text-slate-700">{f.testo}</blockquote>)}
+                    </details>}
+                    {datiAmministrativiChat.conflitti.length > 0 && <p className="mt-2 text-xs font-bold text-amber-800">Dati discordanti da verificare: {datiAmministrativiChat.conflitti.join(', ')}. Questi campi non vengono precompilati.</p>}
+                    <AnagraficaFiscale praticaId={pratica.id} iniziali={{
+                      denominazione: pratica.nome_cliente || '', email: pratica.email_cliente || '',
+                      telefono: pratica.telefono || '', paese: 'IT', ...datiAmministrativiChat.dati,
+                      ...Object.fromEntries(datiAmministrativiChat.conflitti.map(campo => [campo, ''])),
+                    }} />
                   </details>
                 )}
 
