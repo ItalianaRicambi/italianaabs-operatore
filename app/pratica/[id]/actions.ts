@@ -7,11 +7,43 @@ import { createHash } from "node:crypto";
 import { leggiOffertaDaPdf, normalizzaOpzioni } from "../../lib/offerte";
 import { leggiPrenotazionePresa } from "../../lib/prenotazioniPrese";
 import { salvaCorrezioneScelta, type EsitoCorrezioneScelta } from "../../lib/correzioneScelta";
+import { leggiDocumentoAmministrativoPdf } from "../../lib/documentiAmministrativi";
 
 function uuidFlusso(value: FormDataEntryValue | null) {
   const id = String(value || "");
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error("Identificativo non valido");
   return id;
+}
+
+export async function importaDocumentoAmministrativo(_state: EsitoCorrezioneScelta, formData: FormData): Promise<EsitoCorrezioneScelta> {
+  let operatore;
+  try { operatore = await richiediOperatoreAttivo(); }
+  catch { return { ok: false, messaggio: "Sessione scaduta: torna alla Dashboard ed effettua l’accesso." }; }
+  const praticaId = String(formData.get("pratica_id") || "");
+  const file = formData.get("pdf");
+  if (!/^[0-9a-f-]{36}$/i.test(praticaId) || formData.get("verificata") !== "on" || !(file instanceof File) || !file.size) {
+    return { ok: false, messaggio: "Seleziona il PDF e conferma la verifica del documento." };
+  }
+  let documento;
+  try {
+    const pratica = await leggiPratica(praticaId);
+    documento = await leggiDocumentoAmministrativoPdf(new Uint8Array(await file.arrayBuffer()), String(pratica.targa || ""));
+  } catch (errore) {
+    const messaggio = errore instanceof Error ? errore.message : "";
+    return { ok: false, messaggio: /^(Documento |Il documento |Il PDF |Carica un PDF|La targa |La data |Data |Numero |Tipo |Targa |Totale |Destinatario |Dati del destinatario|Indirizzo |Importo )/.test(messaggio)
+      ? messaggio : "Documento non leggibile. Verifica il PDF originale e riprova." };
+  }
+  try {
+    const risultato = await chiamaRpc("registra_documento_amministrativo_verificato", { p_pratica_id: praticaId,
+      p_documento: { ...documento, verificata: true, fonte_id: `pdf:${documento.impronta}` }, p_operatore: operatore }) as { esito?: string; tipo?: string };
+    if (!["fatturata", "proforma_registrata", "gia_registrato"].includes(risultato?.esito || "")) return { ok: false, messaggio: "Registrazione non confermata. Ricarica la pratica per verificarla." };
+    revalidatePath(`/pratica/${praticaId}`); revalidatePath("/");
+    return { ok: true, messaggio: risultato.esito === "gia_registrato" ? "Documento già registrato: nessun duplicato creato."
+      : documento.tipo === "fattura" ? `Fattura ${documento.numero} registrata: pratica allineata a Fatturata.`
+        : `Pro-forma ${documento.numero} registrata: dati completi, ordine pronto per la fatturazione.` };
+  } catch {
+    return { ok: false, messaggio: "Salvataggio non confermato. Ricarica la pratica per verificare se il documento è stato acquisito; se manca, controlla l’anagrafica fiscale e lo stato dell’ordine prima di riprovare." };
+  }
 }
 
 export async function registraAlternativeOfferta(formData: FormData) {
@@ -446,55 +478,30 @@ export async function collegaClientePraticaOperatore(formData: FormData) {
   revalidatePath(`/pratica/${praticaId}`);
 }
 
-export async function creaECollegaClientePraticaOperatore(formData: FormData) {
-  const praticaId = valoreModulo(formData, "pratica_id", 36);
-  const denominazione = valoreModulo(formData, "denominazione", 240);
-  const indirizzo = valoreModulo(formData, "indirizzo_fatturazione", 300);
-  const comune = valoreModulo(formData, "comune", 160);
-  const cap = valoreModulo(formData, "cap", 20);
-  const provincia = valoreModulo(formData, "provincia", 10);
-  const paese = valoreModulo(formData, "paese", 2).toUpperCase();
-  const partitaIva = valoreModulo(formData, "partita_iva", 40);
-  const codiceFiscale = valoreModulo(formData, "codice_fiscale", 40);
-  const email = valoreModulo(formData, "email", 320);
-  const telefono = valoreModulo(formData, "telefono", 80);
-  const pec = valoreModulo(formData, "pec", 320);
-  const codiceSdi = valoreModulo(formData, "codice_sdi", 20);
-
-  verificaPraticaId(praticaId);
-
-  if (!denominazione || !indirizzo || !comune || !cap) {
-    throw new Error("Denominazione, indirizzo, CAP e comune sono obbligatori");
+export async function creaECollegaClientePraticaOperatore(_state: EsitoCorrezioneScelta, formData: FormData): Promise<EsitoCorrezioneScelta> {
+  let operatore;
+  try { operatore = await richiediOperatoreAttivo(); }
+  catch { return { ok: false, messaggio: "Sessione scaduta: torna alla Dashboard ed effettua l’accesso." }; }
+  const praticaId = String(formData.get("pratica_id") || "");
+  const campi = ["denominazione", "indirizzo_fatturazione", "comune", "cap", "provincia", "paese",
+    "partita_iva", "codice_fiscale", "email", "telefono", "pec", "codice_sdi"];
+  const dati = Object.fromEntries(campi.map(k => [k, String(formData.get(k) || "").trim().slice(0, 320)]));
+  if (!/^[0-9a-f-]{36}$/i.test(praticaId) || formData.get("verificata") !== "on" ||
+    ["denominazione", "indirizzo_fatturazione", "comune", "cap"].some(k => !dati[k]) ||
+    (!dati.partita_iva && !dati.codice_fiscale)) {
+    return { ok: false, messaggio: "Completa denominazione, indirizzo, CAP, comune e identificativo fiscale; conferma la verifica dei dati." };
   }
-
-  if (!partitaIva && !codiceFiscale) {
-    throw new Error("Inserire almeno la partita IVA o il codice fiscale");
+  try {
+    const risultato = await chiamaRpc("crea_e_conferma_cliente_pratica", { p_pratica_id: praticaId,
+      p_dati: { ...dati, paese: dati.paese.toUpperCase() || "IT", verificata: true }, p_operatore: operatore }) as { esito?: string };
+    if (risultato?.esito !== "pronto_fatturazione") return { ok: false, messaggio: "Conferma non riuscita: ricarica la pratica per verificare l’anagrafica." };
+  } catch (errore) {
+    const duplicata = errore instanceof Error && errore.message.includes("Esiste già un cliente");
+    return { ok: false, messaggio: duplicata ? "Cliente fiscale già presente: cercalo e collega la sua anagrafica senza creare duplicati."
+      : "Salvataggio non confermato. Ricarica la pratica per verificare l’anagrafica prima di riprovare; i valori inseriti sono conservati nel modulo." };
   }
-
-  await chiamaRpc("crea_e_collega_cliente_pratica", {
-    p_pratica_id: praticaId,
-    p_denominazione: denominazione,
-    p_indirizzo_fatturazione: indirizzo,
-    p_comune: comune,
-    p_cap: cap,
-    p_provincia: provincia || null,
-    p_paese: paese || "IT",
-    p_partita_iva: partitaIva || null,
-    p_codice_fiscale: codiceFiscale || null,
-    p_email: email || null,
-    p_telefono: telefono || null,
-    p_pec: pec || null,
-    p_codice_sdi: codiceSdi || null,
-  });
-
-  await registraEventoOperatore(
-    praticaId,
-    "cliente_creato_collegato_operatore",
-    "Nuova anagrafica fiscale creata e collegata dall’operatore."
-  );
-
-  revalidatePath("/");
-  revalidatePath(`/pratica/${praticaId}`);
+  revalidatePath("/"); revalidatePath(`/pratica/${praticaId}`);
+  return { ok: true, messaggio: "Cliente collegato e dati confermati: fatturazione riabilitata." };
 }
 
 export async function segnaRichiestaAmministrativaInviataOperatore(
