@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { modificheNonSalvate } from "../lib/modifichePratica";
+import { avviaControlloModifiche, modificheNonSalvate } from "../lib/modifichePratica";
 import {
   createContext,
   useCallback,
@@ -230,6 +230,9 @@ export function NavigazionePratica({
   posizione?: "alto" | "basso";
 }) {
   const chiave = primo(nav);
+  useEffect(() => {
+    if (posizione === "alto") return avviaControlloModifiche();
+  }, [praticaId, posizione]);
   const filtroUrl = primo(filtro) || "tutte";
   const cercaUrl = primo(cerca).trim();
   const [letto, setLetto] = useState<{
