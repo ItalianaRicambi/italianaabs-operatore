@@ -125,6 +125,7 @@ export function BarraOperatore({ operatore }: { operatore: Operatore }) {
           Operatore attivo: <strong>{operatore}</strong>
         </div>
 
+        <Link href="/email" className="text-sm font-bold text-blue-800 underline">Richieste email</Link>
         <Link href="/logistica/email" className="text-sm font-bold text-blue-800 underline">Email ritiri e spedizioni</Link>
         <form action={cambiaOperatore}>
           <button

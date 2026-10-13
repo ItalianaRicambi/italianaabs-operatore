@@ -554,6 +554,8 @@ function provenienzaPratica(raw: Pratica["dati_raw"]) {
   )?.trim().toLowerCase();
 
   switch (channel) {
+    case "email":
+      return { label: "Email · info@italianaabs.com", indicazione: "Apri Richieste email per consultare il messaggio originale e gli allegati in Keplero." };
     case "whatsapp":
       return {
         label: "WhatsApp",
