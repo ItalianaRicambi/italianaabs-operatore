@@ -23,6 +23,7 @@ import {
 } from "./lib/dashboardMensile";
 import { fetchTutteLePagine } from "./lib/supabaseRest";
 import { ordineConfermatoAperto, ordineDaCompletare, prontaPerFatturazione } from "./lib/fatturazione";
+import { rpcEmail } from './lib/emailLogisticaServer';
 
 type Pratica = {
   id: string;
@@ -975,6 +976,8 @@ export default async function Home({
   const [{ pratiche, attivita, errore }, controlloK, prenotazioniInAttesa, esitiGls] = await Promise.all([
     getPratiche(), getControlloK(), getPrenotazioniInAttesa(), leggiEsitiGls(),
   ]);
+  let emailStato: {ricevute:number;da_classificare:number;errori:number;ultima_ricezione:string|null;allegati_da_verificare:number}|null=null;
+  try {emailStato=await rpcEmail('stato_richieste_email');}catch{/* L'errore rimane visibile nel riquadro email. */}
   const controlloKInRitardo = !controlloK.stato?.ultima_esecuzione_at ||
     Date.now() - new Date(controlloK.stato.ultima_esecuzione_at).getTime() > 15 * 60_000;
   const params = await searchParams;
@@ -1155,6 +1158,11 @@ export default async function Home({
               : "Supabase collegato"}
           </div>
         </header>
+
+        <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-blue-950">Richieste email · info@italianaabs.com</h2><Link href="/email" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Apri richieste email</Link></div>
+          {emailStato ? <p className="mt-3 text-sm">Ricevute: {emailStato.ricevute} · Da classificare: {emailStato.da_classificare} · Errori: {emailStato.errori} · Allegati da verificare: {emailStato.allegati_da_verificare}<br/>Ultima acquisizione: {formattaData(emailStato.ultima_ricezione)}</p> : <p role="alert" className="mt-3 text-sm text-red-800">Registro email non disponibile: verificare l’acquisizione delle richieste.</p>}
+        </section>
 
         <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
