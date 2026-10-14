@@ -4,6 +4,27 @@ export type SceltaCliente = {
  evidenza: string; richiesta_at: string; fonte: string; operatore: string | null; protetta_operatore: boolean;
  offerta_successiva: boolean; prezzo_da_verificare: boolean; file_url: string | null;
 };
+
+type PraticaConScelta = {
+ stato_fatturazione: string;
+ stato_commerciale: string;
+ tipo_flusso: string;
+ scelta_cliente?: Pick<SceltaCliente, "stato" | "offerta_successiva" | "prezzo_da_verificare"> | null;
+};
+
+// La scelta resta nello storico, ma una vendita conclusa non richiede
+// più chiarimenti commerciali. La stessa regola serve elenco e contatore.
+export function sceltaClienteDaChiarire(pratica: PraticaConScelta): boolean {
+ if (pratica.stato_fatturazione === "fatturato" ||
+     ["chiuso", "rifiutato"].includes(pratica.stato_commerciale) ||
+     pratica.tipo_flusso !== "commerciale") return false;
+
+ const scelta = pratica.scelta_cliente;
+ return Boolean(scelta && (
+   ["da_chiarire", "modifica_da_verificare"].includes(scelta.stato) ||
+   scelta.offerta_successiva || scelta.prezzo_da_verificare
+ ));
+}
 export type AssistenzaRientro = {
  id: string; pratica_id: string; pratica_origine_id: string | null; stato: string; priorita: string;
  evidenza: string; aperta_at: string; presa_in_carico_at: string | null; operatore: string | null;
