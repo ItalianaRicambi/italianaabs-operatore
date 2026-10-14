@@ -11,6 +11,7 @@ export type InputCompletezzaCommerciale = {
   descrizioneGuasto: string | null;
   spieAccese: boolean | null;
   numeroDtc: number;
+  diagnosiSenzaErrori?: boolean;
 };
 
 export type EsitoCompletezzaCommerciale = {
@@ -43,9 +44,13 @@ export function valutaCompletezzaCommerciale(
   if (!input.targa) datiMancanti.push("targa");
   if (!haIdentificazione) datiMancanti.push("codice_o_immagine_componente");
   if (!input.descrizioneGuasto?.trim()) datiMancanti.push("descrizione_guasto");
-  if (input.spieAccese === null) datiMancanti.push("stato_spie");
-  if (input.spieAccese === true && input.numeroDtc === 0) {
+  const esitoDiagnosiAcquisito = input.numeroDtc > 0 || input.diagnosiSenzaErrori === true;
+  if (input.spieAccese === null && !esitoDiagnosiAcquisito) datiMancanti.push("stato_spie");
+  if (input.spieAccese === true && !esitoDiagnosiAcquisito) {
     datiMancanti.push("dtc_con_spie_accese");
+  }
+  if (input.spieAccese === true && input.numeroDtc === 0 && input.diagnosiSenzaErrori === true) {
+    datiMancanti.push("diagnosi_discordante_da_verificare_operatore");
   }
 
   return {
