@@ -2,7 +2,7 @@ import { AbbinamentoPresa } from "./components/AbbinamentoPresa";
 import { leggiEsitiGls } from "./lib/glsServer";
 import { statoGlsAttuale, presaPrenotata, etichettaPresa, type MetadatiGls } from "./lib/esitiGls";
 import { dataPresaIt } from "./lib/prenotazioniPrese";
-import { NOMI_RITIRO, NOMI_SCELTA, type SceltaCliente, type AssistenzaRientro, type OffertaVersione } from "./lib/flussiOperativi";
+import { NOMI_RITIRO, NOMI_SCELTA, sceltaClienteDaChiarire, type SceltaCliente, type AssistenzaRientro, type OffertaVersione } from "./lib/flussiOperativi";
 import Link from "next/link";
 import { randomUUID } from "node:crypto";
 import {
@@ -775,7 +775,7 @@ function filtraPratiche(
     case "ritiri_lavorazione": return pratiche.filter(p => haAttivita(p,"ritiro_lavorazione"));
     case "prese_prenotate": return pratiche.filter(p => (p.attivita_operative || []).some(presaPrenotata));
     case "ritiri_da_classificare": return pratiche.filter(p => haAttivita(p,"ritiro_da_classificare","ritiro_altro_reso"));
-    case "scelte_da_chiarire": return pratiche.filter(p => ["da_chiarire","modifica_da_verificare"].includes(p.scelta_cliente?.stato || "") || p.scelta_cliente?.offerta_successiva || p.scelta_cliente?.prezzo_da_verificare);
+    case "scelte_da_chiarire": return pratiche.filter(sceltaClienteDaChiarire);
     case "offerte_da_verificare": return pratiche.filter(p => p.offerta_da_verificare);
 
     case "ritiri_programma_scambio":
@@ -1252,7 +1252,7 @@ export default async function Home({
             <DashboardFilterCard titolo="Ritiri per lavorazione" valore={errore ? null : attivita.filter(a => a.tipo === "ritiro_lavorazione").length} descrizione="Primo invio del dispositivo del cliente" className="border-blue-500" href={hrefConFiltro("ritiri_lavorazione")} attiva={filtroAttivo === "ritiri_lavorazione"} />
             <DashboardFilterCard titolo="Prese prenotate" valore={errore ? null : pratiche.filter(p => (p.attivita_operative || []).some(presaPrenotata)).length} descrizione="Data e codice della presa · lavorazioni e rientri" className="border-green-500" href={hrefConFiltro("prese_prenotate")} attiva={filtroAttivo === "prese_prenotate"} />
             <DashboardFilterCard titolo="Ritiri da classificare / altri resi" valore={errore ? null : attivita.filter(a => ["ritiro_da_classificare","ritiro_altro_reso"].includes(a.tipo)).length} descrizione="Contenuto del pacco o motivo da verificare" className="border-amber-500" href={hrefConFiltro("ritiri_da_classificare")} attiva={filtroAttivo === "ritiri_da_classificare"} />
-            <DashboardFilterCard titolo="Scelte cliente da chiarire" valore={errore ? null : pratiche.filter(p => ["da_chiarire","modifica_da_verificare"].includes(p.scelta_cliente?.stato || "") || p.scelta_cliente?.offerta_successiva || p.scelta_cliente?.prezzo_da_verificare).length} descrizione="Alternativa, versione o prezzo concordato da verificare" className="border-amber-500" href={hrefConFiltro("scelte_da_chiarire")} attiva={filtroAttivo === "scelte_da_chiarire"} />
+            <DashboardFilterCard titolo="Scelte cliente da chiarire" valore={errore ? null : pratiche.filter(sceltaClienteDaChiarire).length} descrizione="Vendite aperte: alternativa, versione o prezzo da verificare" className="border-amber-500" href={hrefConFiltro("scelte_da_chiarire")} attiva={filtroAttivo === "scelte_da_chiarire"} />
             <DashboardFilterCard titolo="Offerte da verificare" valore={errore ? null : pratiche.filter(p => p.offerta_da_verificare).length} descrizione="Alternative del PDF da leggere o completare" className="border-amber-500" href={hrefConFiltro("offerte_da_verificare")} attiva={filtroAttivo === "offerte_da_verificare"} />
             <DashboardFilterCard
               titolo="Ritiri programma scambio"
