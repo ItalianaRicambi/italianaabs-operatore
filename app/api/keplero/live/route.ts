@@ -12,6 +12,7 @@ import {
   type ContattoOperativo,
 } from "./decisioneEvento";
 import { messaggioRaccoltaKeplero } from "./indicazioniRaccolta";
+import { diagnosiSenzaErroriDichiarata } from "./esitoDiagnosi";
 import { leggiOrdineContestuale } from "./ordineContestuale";
 
 export const runtime = "nodejs";
@@ -413,8 +414,9 @@ export async function POST(request: NextRequest) {
       )
     );
 
+    const diagnosiSenzaErrori = dtc.length === 0 && diagnosiSenzaErroriDichiarata(body);
     const diagnosiPresente =
-      dtc.length > 0
+      dtc.length > 0 || diagnosiSenzaErrori
         ? true
         : diagnosiDichiarata;
 
@@ -573,6 +575,7 @@ export async function POST(request: NextRequest) {
         descrizioneGuasto,
         spieAccese,
         numeroDtc: dtc.length,
+        diagnosiSenzaErrori,
       },
       contattoOperativo
     );

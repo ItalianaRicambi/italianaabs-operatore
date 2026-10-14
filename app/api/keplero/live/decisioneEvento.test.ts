@@ -55,6 +55,22 @@ test("senza spie un guasto idraulico descritto non richiede DTC", () => {
   assert.equal(esito.completa, true);
 });
 
+test("Golf TEXA: tre DTC già letti chiudono la domanda sulle spie", () => {
+  const input = { ...base, spieAccese: null, numeroDtc: 3 };
+  assert.equal(valutaCompletezzaCommerciale(input).completa, true);
+  assert.deepEqual(valutaCompletezzaCommerciale(input).datiMancanti, []);
+  assert.equal(input.spieAccese, null);
+});
+
+test("esito senza errori acquisito: non richiede spie neanche fuori dall'idraulica", () => {
+  assert.equal(valutaCompletezzaCommerciale({ ...base, descrizioneGuasto: "Anomalia da valutare", spieAccese: null, diagnosiSenzaErrori: true }).completa, true);
+});
+
+test("nessun esito: array DTC vuoto non chiude la domanda; contraddizione va all'operatore", () => {
+  assert.deepEqual(valutaCompletezzaCommerciale({ ...base, spieAccese: null }).datiMancanti, ["stato_spie"]);
+  assert.deepEqual(valutaCompletezzaCommerciale({ ...base, spieAccese: true, diagnosiSenzaErrori: true }).datiMancanti, ["diagnosi_discordante_da_verificare_operatore"]);
+});
+
 test("la decisione conserva insieme completezza, ordine e nuova pratica", () => {
   const decisione = decidiEventoKeplero(
     { ultimo_messaggio_cliente: "Confermo il preventivo, procedete pure" },

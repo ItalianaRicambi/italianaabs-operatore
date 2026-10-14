@@ -20,6 +20,7 @@ export function messaggioRaccoltaKeplero(
   const contesto = record(contestoCliente);
   const richiesta = record(richiestaAmministrativa);
   const indicazioni = ["Pratica sincronizzata con Dashboard Operatore."];
+  indicazioni.push("Prima di chiedere dati rileggi quelli già acquisiti per la stessa vettura/dispositivo. DTC già ricevuti o esito esplicito di diagnosi senza errori chiudono la domanda sulle spie: non chiedere se/quali siano accese, conferma o foto del cruscotto. Spie dichiarate spente: non chiedere DTC solo per riconfermare il dato. Conserva i fatti reali, senza inventare spie o un esito diagnostico; eventuali contraddizioni esplicite richiedono verifica dell’operatore, senza domande ripetute.");
 
   if (contesto.stato === "riconosciuto" && contesto.cliente_riconosciuto === true) {
     const nome = stringa(contesto.denominazione);

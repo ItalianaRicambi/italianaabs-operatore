@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { messaggioRaccoltaKeplero } from "./indicazioniRaccolta.ts";
 
+test("message impedisce richieste ripetute di spie e diagnosi", () => {
+  const message = messaggioRaccoltaKeplero({}, {}, "codici_acquisiti");
+  assert.match(message, /DTC già ricevuti.*chiudono la domanda sulle spie/);
+  assert.match(message, /senza inventare spie o un esito diagnostico/);
+});
+
 test("Ortolani: il campo message impedisce di chiedere tutta l'anagrafica", () => {
   const message = messaggioRaccoltaKeplero({stato: "riconosciuto", cliente_riconosciuto: true, denominazione: "ORTOLANI SERVICE SAS", dati_fiscali_completi: true}, {necessaria: false, stato: "completata"}, "codici_acquisiti");
   assert.match(message, /ORTOLANI SERVICE SAS/);
