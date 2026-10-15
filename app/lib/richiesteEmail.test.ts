@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizzaEmail, payloadEmail, esclusioneEmail, autorizzazioneEmail } from './richiesteEmail.ts';
+import { normalizzaEmail, payloadEmail, esclusioneEmail, autorizzazioneEmail, praticaDaEsitoEmail } from './richiesteEmail.ts';
 const originale = {mailbox:'info@italianaabs.com',sender:'officina@example.com',subject:'Richiesta ABS',content:'Buongiorno, targa AB123CD, errore C2200. Foto in allegato.',conversation_id:'b3be5f5b-ece5-4c5e-90be-e39d856fe12f'};
 test('identità stabile sui retry; messaggi diversi nello stesso thread restano distinti',()=>{
  const e=normalizzaEmail(originale); assert.equal(e.fingerprint,normalizzaEmail({...originale}).fingerprint);
@@ -30,4 +30,18 @@ test('le conferme nella cronologia citata non diventano una nuova accettazione',
  assert.equal(p.body.ultimo_messaggio_cliente,'Ho una domanda.');assert.equal(p.body.targa,null);
  const html=payloadEmail(normalizzaEmail({...originale,content:'<p>Ho una domanda.</p><blockquote>Confermo.</blockquote>'}));
  assert.doesNotMatch(html.body.ultimo_messaggio_cliente,/Confermo/);
+});
+test('collega la pratica dal risultato effettivo di live; conflitti restano da verificare',()=>{
+ const id='78b097ef-1e89-46a0-b443-a59af5b6c7a7';
+ assert.equal(praticaDaEsitoEmail({ok:true,result:{ok:true,pratica_id:id}}),id);
+ assert.equal(praticaDaEsitoEmail({pratica_id:id}),id);
+ assert.equal(praticaDaEsitoEmail({ok:true,result:{pratica_id:'non valido'}}),null);
+ assert.equal(praticaDaEsitoEmail({pratica_id:id,result:{pratica_id:originale.conversation_id}}),null);
+ assert.equal(praticaDaEsitoEmail(null),null);
+});
+test('la risposta con sola targa viene acquisita senza usare la citazione',()=>{
+ const risposta={...originale,subject:'Re: Riparazione centralina ABS',content:'DF271RF.\nInviato da iPhone\n\n> Il giorno 14 ott ha scritto:\n> Targa AB123CD'};
+ assert.equal(payloadEmail(normalizzaEmail(risposta)).body.targa,'DF271RF');
+ assert.equal(payloadEmail(normalizzaEmail({...risposta,content:'DF271RF\nAB123CD'})).body.targa,null);
+ assert.equal(payloadEmail(normalizzaEmail({...risposta,content:'Codice componente DF271RF'})).body.targa,null);
 });

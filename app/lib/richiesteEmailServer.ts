@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { POST as sincronizzaLive } from '../api/keplero/live/route';
 import { rpcEmail } from './emailLogisticaServer';
 import { connessioneGlsDb } from './glsServer';
-import { esclusioneEmail, payloadEmail, type EmailOriginale } from './richiesteEmail';
+import { esclusioneEmail, payloadEmail, praticaDaEsitoEmail, type EmailOriginale } from './richiesteEmail';
 
 export type RichiestaEmail = {id:string;sender:string;subject:string;content:string;conversation_id:string;fingerprint:string;mailbox:string;stato:string;motivo:string|null;pratica_id:string|null;created_at:string;updated_at:string;consegne:number;token?:string|null;allegati_da_verificare:boolean};
 export async function leggiRichiesteEmail() {
@@ -26,7 +26,7 @@ export async function processaRichiestaEmail(e:EmailOriginale) {
    const response=await sincronizzaLive(new NextRequest('https://italianaabs-operatore.vercel.app/api/keplero/live',{method:'POST',headers:{'x-keplero-secret':secret,'Content-Type':'application/json'},body:JSON.stringify(p.body)}));
    const result=await response.json();
    if(!response.ok || result.ok!==true) throw new Error('Sincronizzazione non completata');
-   pratica=typeof result.pratica_id==='string'?result.pratica_id:null;
+   pratica=praticaDaEsitoEmail(result);
    stato=pratica?'registrata':'da_classificare';
    motivo=pratica?'Richiesta collegata alla pratica.':'Richiesta registrata: abbinamento alla pratica da verificare.';
    if(p.allegatiIndicati && p.body.email_allegati_da_verificare) motivo+=' Allegati indicati ma non trasmessi: aprire l’email originale in Keplero.';
