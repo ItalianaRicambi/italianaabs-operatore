@@ -33,20 +33,25 @@ export function esclusioneEmail(e: EmailOriginale) {
 }
 export function payloadEmail(e: EmailOriginale) {
   const text = testoEmail(e), utile = `${e.subject}\n${text}`;
+  // Una risposta con la sola targa integra l'identità della richiesta: non
+  // sostituisce il guasto già descritto con l'oggetto e la firma dell'email.
+  const righeUtili=text.split('\n').map(r=>r.trim()).filter(r=>r && !/^inviato da (?:iphone|ipad|android)|^sent from my /i.test(r));
+  const soloTarga=righeUtili.length===1 && /^(?:targa\s*(?:del veicolo\s*)?[:=\-]?\s*)?[A-Z]{2}[\s-]?\d{3}[\s-]?[A-Z]{2}[.!]?$/i.test(righeUtili[0]);
   const targhe = [
     ...[...utile.matchAll(/\btarga\s*(?:del veicolo\s*)?[:=\-]?\s*([A-Z]{2}[\s-]?\d{3}[\s-]?[A-Z]{2})\b/gi)].map(m=>m[1]),
     ...[...text.matchAll(/^\s*([A-Z]{2}[\s-]?\d{3}[\s-]?[A-Z]{2})[.!]?\s*$/gmi)].map(m=>m[1]),
   ].map(t=>t.replace(/[\s-]/g,'').toUpperCase());
   const targa = new Set(targhe).size === 1 ? targhe[0] : null;
   const dtc = [...new Set([...utile.matchAll(/\b[PCBU]\d{4}(?:[-:]?[A-F0-9]{2})?\b/gi)].map(m=>m[0].toUpperCase()))];
-  const urls = [...new Set([...e.content.matchAll(/https:\/\/[^\s<>"']+/gi)].map(m=>m[0].replace(/[).,;]+$/,'')))].filter(u=>/\.(?:png|jpe?g|webp|pdf)(?:\?|$)/i.test(u));
+  const testoConLink=testoEmail({...e,content:e.content.replace(/<(?:a|img)\b[^>]*\b(?:href|src)=["'](https:\/\/[^"']+)["'][^>]*>/gi,' $1 ')});
+  const urls = [...new Set([...testoConLink.matchAll(/https:\/\/[^\s<>"']+/gi)].map(m=>m[0].replace(/[).,;]+$/,'')))].filter(u=>/\.(?:png|jpe?g|webp|pdf)(?:\?|$)/i.test(u));
   const allegatiIndicati = /\ballegat[oi]\b|\bin allegato\b|\bfoto\b/i.test(utile);
   const operativo = !!text.trim() && /\b(?:abs|esp|ecu|tcu|centralina|preventivo|riparazione|garanzia|rientro|reso|ordine|confermo|confermiamo|accetto|accettiamo|ritiro|fattura|spedizione)\b/i.test(utile);
   const garanzia = /\bgaranzia\b/i.test(utile), assistenza = garanzia || /\b(?:rientro|reso|assistenza|post[- ]?vendita|problema dopo|dopo (?:installazione|riparazione))\b/i.test(utile);
   return { operativo, allegatiIndicati, body: {
     channel:'email', conversation_id:e.conversation_id, email_mittente:e.sender,
     nome_cliente:e.sender, email_cliente:e.sender, email_oggetto:e.subject,
-    ultimo_messaggio_cliente:text, descrizione_guasto:utile.slice(0,30000),
+    ultimo_messaggio_cliente:text, descrizione_guasto:soloTarga?null:utile.slice(0,30000),
     targa, dtc, allegati:urls, dati_completi:false,
     tipo_flusso:assistenza?'assistenza':'commerciale', tipo_assistenza:garanzia?'garanzia':assistenza?'altro':null,
     email_allegati_da_verificare:allegatiIndicati && !urls.length,
