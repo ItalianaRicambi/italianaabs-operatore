@@ -26,6 +26,8 @@ Il successivo collaudo deve provare immagine ruotata, PDF, file illeggibile, ris
 
 Un lease di due minuti impedisce elaborazioni concorrenti. Gli errori lasciano il messaggio nel registro, con riprova protetta. Le richieste non operative restano da classificare. Il controllo periodico K copre anche gli eventi con channel=email; la sezione Richieste email rende visibili anche le email escluse o non associate.
 
-## Verifica riservata della risposta originale
+## Verifica riservata degli allegati
 
-`GET /api/keplero/email/{id_richiesta_email}/messaggi` recupera gli originali della conversazione associata al registro email. Richiede una sessione operatore valida, non accetta URL arbitrari né chiavi dalla richiesta e non modifica dati o stati. Risposte senza cache, nessuna chiave o body del provider negli errori. Non è un endpoint pubblico per gli allegati e non effettua OCR. Il collaudo con risposta reale è ancora da eseguire; senza sessione operatore risponde 401 prima di interrogare database o Keplero.
+La pagina `/email/{id_richiesta_email}/allegati`, raggiungibile dal registro con «Verifica allegati in K», recupera lato server i messaggi della conversazione e mostra solo conteggi e metadati dei file nel formato documentato. Richiede la sessione operatore; non espone l'intera risposta del provider né la chiave. Il precedente endpoint di lettura JSON è stato rimosso per ridurre i dati esposti.
+
+Sono accettati soltanto messaggi `image` o `file` con `content` che inizia con `attachment:` e URL HTTPS sul dominio esatto `v2.api.keplero.ai`, percorso `/v2/session-attachments/`, senza credenziali. La pagina non scarica, non esegue e non attribuisce automaticamente file o istruzioni contenute nei messaggi. Un elenco vuoto non prova l'assenza di allegati email. Nessuna modifica a pratica, completezza o stati; OCR e collegamento certo al singolo messaggio email restano da verificare sul formato reale.
