@@ -17,7 +17,11 @@ export default async function AllegatiEmail({params}:{params:Promise<{id:string}
  const e=await leggiRichiestaEmail(id);if(!e)notFound();
  let riepilogo:ReturnType<typeof riepilogoAllegatiConversazione>|null=null,errore:string|null=null;
  try{riepilogo=riepilogoAllegatiConversazione(await leggiMessaggiConversazioneKeplero(e.conversation_id));}
- catch(error){errore=ERRORI[error instanceof ErroreMessaggiKeplero?error.codice:'non_disponibile']||ERRORI.non_disponibile;}
+ catch(error){
+  errore=ERRORI[error instanceof ErroreMessaggiKeplero?error.codice:'non_disponibile']||ERRORI.non_disponibile;
+  if(error instanceof ErroreMessaggiKeplero && error.statoHttp===401) errore='La credenziale API viene rifiutata da Keplero (401). Verificare la chiave salvata sul server.';
+  if(error instanceof ErroreMessaggiKeplero && error.statoHttp===403) errore='Keplero nega il permesso di leggere questa conversazione (403). Verificare con l’assistenza l’accesso della chiave all’assistente collegato alla casella email.';
+ }
  return <main className="min-h-screen bg-slate-50"><BarraOperatore operatore={operatore}/><div className="mx-auto max-w-4xl px-6 py-8">
  <Link href="/email" className="font-bold text-blue-800 underline">Torna alle richieste email</Link><h1 className="mt-4 text-3xl font-bold">Allegati originali in Keplero</h1><p className="mt-3 font-semibold">{e.subject||'(senza oggetto)'}</p>
  <p className="mt-3 text-slate-700">I file elencati appartengono alla conversazione. Prima di usarli, verificare il messaggio e il veicolo a cui si riferiscono. Il recupero non modifica la pratica e non conferma la lettura delle immagini.</p>

@@ -6,10 +6,12 @@ export type MessaggioKeplero = Readonly<Record<string, unknown>>;
 export type ErroreKeplero = 'non_configurato' | 'conversazione_non_valida' | 'non_autorizzato' | 'non_disponibile' | 'risposta_non_valida' | 'limite_superato';
 export class ErroreMessaggiKeplero extends Error {
  readonly codice: ErroreKeplero;
- constructor(codice: ErroreKeplero) {
+ readonly statoHttp?: number;
+ constructor(codice: ErroreKeplero, statoHttp?: number) {
   super(`Recupero messaggi Keplero: ${codice}`);
   this.name = 'ErroreMessaggiKeplero';
   this.codice = codice;
+  this.statoHttp = statoHttp;
  }
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,7 +51,8 @@ export async function recuperaMessaggiKeplero(
  richiedi: typeof fetch = fetch,
 ): Promise<MessaggioKeplero[]> {
  if (!UUID.test(conversazione)) throw new ErroreMessaggiKeplero('conversazione_non_valida');
- if (!chiave?.trim() || /[\r\n]/.test(chiave)) throw new ErroreMessaggiKeplero('non_configurato');
+ const token = chiave?.trim().replace(/^Bearer[ \t]+/i, '').trim();
+ if (!token || /[\r\n]/.test(token)) throw new ErroreMessaggiKeplero('non_configurato');
  const signal = AbortSignal.timeout(25_000);
  const messaggi: MessaggioKeplero[] = [];
  let byteTotali = 0;
@@ -59,12 +62,12 @@ export async function recuperaMessaggiKeplero(
    // Host fisso: nessun URL proveniente da email o parametro viene richiesto.
    const url = `https://v2.api.keplero.ai/v2/sessions/${conversazione}/messages?page=${page}&perPage=100`;
    const r = await richiedi(url, {
-    method: 'GET', headers: {Authorization: `Bearer ${chiave}`, Accept: 'application/json'},
+    method: 'GET', headers: {Authorization: `Bearer ${token}`, Accept: 'application/json'},
     cache: 'no-store', redirect: 'error', signal,
    });
    if (!r.ok) {
     await r.body?.cancel().catch(() => {});
-    throw new ErroreMessaggiKeplero(r.status === 401 || r.status === 403 ? 'non_autorizzato' : 'non_disponibile');
+    throw new ErroreMessaggiKeplero(r.status === 401 || r.status === 403 ? 'non_autorizzato' : 'non_disponibile', r.status);
    }
    const {dati, byte} = await leggiJson(r);
    byteTotali += byte;

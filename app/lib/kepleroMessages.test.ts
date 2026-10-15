@@ -41,3 +41,13 @@ test('limiti su conteggio e byte; conversazione vuota valida',async()=>{
  await assert.rejects(recuperaMessaggiKeplero(session,key,async()=>new Response('x'.repeat(4*1024*1024+1))),errore('limite_superato'));
  assert.deepEqual(await recuperaMessaggiKeplero(session,key,async()=>risposta(1,0,[])),[]);
 });
+
+test('normalizza il prefisso Bearer e gli spazi esterni senza esporre il token',async()=>{
+ await recuperaMessaggiKeplero(session,` \nBearer ${key}\n `,async(_input,init)=>{
+  assert.equal((init?.headers as Record<string,string>).Authorization,`Bearer ${key}`);
+  return risposta(1,0,[]);
+ });
+ for(const status of [401,403]) {
+  await assert.rejects(recuperaMessaggiKeplero(session,key,async()=>new Response('',{status})),e=>e instanceof ErroreMessaggiKeplero && e.codice==='non_autorizzato' && e.statoHttp===status && !e.message.includes(key));
+ }
+});
