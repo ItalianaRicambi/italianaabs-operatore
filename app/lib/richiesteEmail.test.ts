@@ -44,4 +44,13 @@ test('la risposta con sola targa viene acquisita senza usare la citazione',()=>{
  assert.equal(payloadEmail(normalizzaEmail(risposta)).body.targa,'DF271RF');
  assert.equal(payloadEmail(normalizzaEmail({...risposta,content:'DF271RF\nAB123CD'})).body.targa,null);
  assert.equal(payloadEmail(normalizzaEmail({...risposta,content:'Codice componente DF271RF'})).body.targa,null);
+ assert.equal(payloadEmail(normalizzaEmail(risposta)).body.descrizione_guasto,null);
+ assert.equal(payloadEmail(normalizzaEmail({...risposta,content:'Targa: DF271RF.\nInviato da iPhone'})).body.descrizione_guasto,null);
+ assert.match(payloadEmail(normalizzaEmail({...risposta,content:'Targa DF271RF, non frena la ruota anteriore.'})).body.descrizione_guasto||'',/non frena/);
+});
+test('gli allegati soltanto citati nella vecchia email non diventano nuovi file ricevuti',()=>{
+ const p=payloadEmail(normalizzaEmail({...originale,content:'DF271RF.\nIl giorno 14 ottobre Mario ha scritto:\nFoto ABS: https://v2.api.keplero.ai/vecchio.pdf'}));
+ assert.deepEqual(p.body.allegati,[]);
+ const html=payloadEmail(normalizzaEmail({...originale,content:'<p>Foto ABS</p><img src="https://v2.api.keplero.ai/nuovo.jpg"><blockquote><a href="https://v2.api.keplero.ai/vecchio.pdf">Vecchio file</a></blockquote>'}));
+ assert.deepEqual(html.body.allegati,['https://v2.api.keplero.ai/nuovo.jpg']);
 });
