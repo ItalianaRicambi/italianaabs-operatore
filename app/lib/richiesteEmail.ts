@@ -33,7 +33,10 @@ export function esclusioneEmail(e: EmailOriginale) {
 }
 export function payloadEmail(e: EmailOriginale) {
   const text = testoEmail(e), utile = `${e.subject}\n${text}`;
-  const targhe = [...utile.matchAll(/\btarga\s*(?:del veicolo\s*)?[:=\-]?\s*([A-Z]{2}[\s-]?\d{3}[\s-]?[A-Z]{2})\b/gi)].map(m=>m[1].replace(/[\s-]/g,'').toUpperCase());
+  const targhe = [
+    ...[...utile.matchAll(/\btarga\s*(?:del veicolo\s*)?[:=\-]?\s*([A-Z]{2}[\s-]?\d{3}[\s-]?[A-Z]{2})\b/gi)].map(m=>m[1]),
+    ...[...text.matchAll(/^\s*([A-Z]{2}[\s-]?\d{3}[\s-]?[A-Z]{2})[.!]?\s*$/gmi)].map(m=>m[1]),
+  ].map(t=>t.replace(/[\s-]/g,'').toUpperCase());
   const targa = new Set(targhe).size === 1 ? targhe[0] : null;
   const dtc = [...new Set([...utile.matchAll(/\b[PCBU]\d{4}(?:[-:]?[A-F0-9]{2})?\b/gi)].map(m=>m[0].toUpperCase()))];
   const urls = [...new Set([...e.content.matchAll(/https:\/\/[^\s<>"']+/gi)].map(m=>m[0].replace(/[).,;]+$/,'')))].filter(u=>/\.(?:png|jpe?g|webp|pdf)(?:\?|$)/i.test(u));
@@ -53,4 +56,13 @@ export function payloadEmail(e: EmailOriginale) {
 }
 export function linkConversazioneEmail(id: string) {
   return `https://console.keplero.ai/dashboard/027160a9-3c91-490c-92f7-d0236aff8352/conversations?sessionId=${encodeURIComponent(id)}`;
+}
+
+/** /live restituisce la pratica dentro result; alcuni esiti sono diretti. */
+export function praticaDaEsitoEmail(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const r=value as Record<string,unknown>;
+  const interno=r.result && typeof r.result==='object' && !Array.isArray(r.result) ? r.result as Record<string,unknown> : {};
+  const valori=[r.pratica_id,interno.pratica_id].filter((v):v is string=>typeof v==='string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(v));
+  return new Set(valori.map(v=>v.toLowerCase())).size===1 ? valori[0].toLowerCase() : null;
 }
