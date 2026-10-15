@@ -12,6 +12,14 @@ export async function leggiRichiesteEmail() {
  if(!r.ok) throw new Error('Registro email non disponibile');
  return r.json() as Promise<RichiestaEmail[]>;
 }
+export async function leggiRichiestaEmail(id:string):Promise<RichiestaEmail|null> {
+ if(!/^[0-9a-f-]{36}$/i.test(id)) return null;
+ const {url,headers}=connessioneGlsDb();
+ const r=await fetch(`${url}/rest/v1/richieste_email?id=eq.${encodeURIComponent(id)}&select=*&limit=1`,{headers,cache:'no-store'});
+ if(!r.ok) throw new Error('Registro email non disponibile');
+ const rows=await r.json() as RichiestaEmail[];
+ return rows[0]||null;
+}
 export async function processaRichiestaEmail(e:EmailOriginale) {
  const claim=await rpcEmail<RichiestaEmail>('registra_richiesta_email',{p_dati:e});
  if(!claim.token) return {ok:!['errore','in_elaborazione'].includes(claim.stato),esito:claim.stato,id:claim.id,pratica_id:claim.pratica_id};
