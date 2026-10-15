@@ -47,33 +47,37 @@ export async function importaDocumentoAmministrativo(_state: EsitoCorrezioneScel
   }
 }
 
-export async function registraAlternativeOfferta(formData: FormData) {
-  await richiediOperatoreAttivo();
-  const praticaId = uuidFlusso(formData.get("pratica_id")), preventivoId = uuidFlusso(formData.get("preventivo_id"));
-  const pratica = await leggiPratica(praticaId);
-  const { url, secretKey } = getSupabase();
-  const response = await fetch(`${url}/rest/v1/preventivi?id=eq.${preventivoId}&pratica_id=eq.${praticaId}&select=id`, {
-    headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}` }, cache: "no-store",
-  });
-  if (!response.ok || !(await response.json()).length) throw new Error("Preventivo estraneo alla pratica");
-  const file = formData.get("pdf");
+export async function registraAlternativeOfferta(_state: EsitoCorrezioneScelta, formData: FormData): Promise<EsitoCorrezioneScelta> {
+ let operatore;
+ try { operatore=await richiediOperatoreAttivo(); }
+ catch { return {ok:false,messaggio:"Sessione scaduta: torna alla Dashboard ed effettua l’accesso."}; }
+ try {
+  const praticaId=uuidFlusso(formData.get("pratica_id"));
+  const preventivoId=formData.get("preventivo_id")?uuidFlusso(formData.get("preventivo_id")):null;
+  const pratica=await leggiPratica(praticaId);
+  const file=formData.get("pdf");
   let contenuto;
-  if (file instanceof File && file.size > 0) {
-    contenuto = await leggiOffertaDaPdf(new Uint8Array(await file.arrayBuffer()), String(pratica.targa || ""));
+  if(file instanceof File && file.size>0) {
+   contenuto=await leggiOffertaDaPdf(new Uint8Array(await file.arrayBuffer()),String(pratica.targa||""));
+   if(contenuto.errore) return {ok:false,messaggio:contenuto.errore};
   } else {
-    const opzioni = normalizzaOpzioni(Array.from({ length: 8 }, (_, i) => {
-      const numero = i + 1;
-      const servizio = String(formData.get(`servizio_${numero}`) || "");
-      return { numero, numero_esplicito: true, servizio, importo: String(formData.get(`importo_${numero}`) || "").replace(",", "."),
-        iva_inclusa: formData.get(`iva_${numero}`) === "inclusa" ? true : formData.get(`iva_${numero}`) === "esclusa" ? false : null,
-        condizioni: String(formData.get("nota") || ""), reso_vecchio: null };
-    }).filter(o => o.servizio));
-    contenuto = { opzioni, impronta: createHash("sha256").update(JSON.stringify(opzioni)).digest("hex"), testo: "", errore: null, validita_giorni: null };
+   const opzioni=normalizzaOpzioni(Array.from({length:8},(_,i)=>{
+    const numero=i+1;
+    return {numero,numero_esplicito:true,servizio:String(formData.get(`servizio_${numero}`)||""),
+     importo:String(formData.get(`importo_${numero}`)||"").replace(",","."),
+     iva_inclusa:formData.get(`iva_${numero}`)==="inclusa"?true:formData.get(`iva_${numero}`)==="esclusa"?false:null,
+     condizioni:String(formData.get("nota")||""),reso_vecchio:null};
+   }).filter(o=>o.servizio));
+   contenuto={opzioni,impronta:createHash("sha256").update(JSON.stringify(opzioni)).digest("hex"),testo:"",errore:null,validita_giorni:null};
   }
-  await chiamaRpc("registra_opzioni_offerta", { p_preventivo_id: preventivoId, p_opzioni: contenuto.opzioni,
-    p_impronta: contenuto.impronta, p_testo: contenuto.testo, p_errore: contenuto.errore,
-    p_fonte: `operatore:${await richiediOperatoreAttivo()}`, p_validita_giorni: contenuto.validita_giorni });
-  revalidatePath(`/pratica/${praticaId}`); revalidatePath("/");
+  const r=await chiamaRpc("registra_alternative_offerta_operatore",{p_pratica_id:praticaId,p_preventivo_id:preventivoId,p_contenuto:contenuto,p_operatore:operatore}) as {ok?:boolean;duplicato?:boolean};
+  if(r?.ok!==true) return {ok:false,messaggio:"Salvataggio non confermato: ricarica la pratica per verificarlo."};
+  revalidatePath(`/pratica/${praticaId}`);revalidatePath("/");
+  return {ok:true,messaggio:r.duplicato?"Alternative già registrate: nessun duplicato creato.":"Alternative registrate e collegate al preventivo."};
+ }catch(error){
+  const m=error instanceof Error?error.message:"";
+  return {ok:false,messaggio:/^(Da 1 a 8|Alternativa|Servizio|Importo|Valuta|PDF |Il PDF |La targa)/.test(m)?m:"Registrazione non completata. Verifica le alternative, la data di invio e il preventivo selezionato; poi riprova."};
+ }
 }
 
 export async function correggiSceltaCliente(_state: EsitoCorrezioneScelta, formData: FormData): Promise<EsitoCorrezioneScelta> {
