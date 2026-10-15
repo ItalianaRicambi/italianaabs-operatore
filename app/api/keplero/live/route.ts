@@ -13,6 +13,7 @@ import {
 } from "./decisioneEvento";
 import { messaggioRaccoltaKeplero } from "./indicazioniRaccolta";
 import { diagnosiSenzaErroriDichiarata } from "./esitoDiagnosi";
+import { classificaRichiesta } from "./classificazioneRichiesta";
 import { leggiOrdineContestuale } from "./ordineContestuale";
 
 export const runtime = "nodejs";
@@ -448,39 +449,7 @@ export async function POST(request: NextRequest) {
      * ============================================================
      */
 
-    let tipoFlusso = testo(
-      primo(
-        body,
-        "tipo_flusso",
-        "flusso",
-        "request_type"
-      )
-    ).toLowerCase();
-
-    if (
-      !["commerciale", "assistenza"].includes(tipoFlusso)
-    ) {
-      const assistenzaHint = [
-        testo(primo(body, "tipo_assistenza")),
-        testo(primo(body, "descrizione_guasto")),
-        testo(
-          primo(
-            body,
-            "ultimo_messaggio_cliente",
-            "messaggio"
-          )
-        ),
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      tipoFlusso =
-        /(garanzia|post[- ]?vendita|post[- ]?riparazione|post[- ]?scambio|problema dopo|assistenza|rientro|reso|codifica|montaggio)/i.test(
-          assistenzaHint
-        )
-          ? "assistenza"
-          : "commerciale";
-    }
+    let tipoFlusso = classificaRichiesta(body);
 
     const tipoAssistenza =
       testo(primo(body, "tipo_assistenza")) ||
@@ -1348,13 +1317,17 @@ export async function POST(request: NextRequest) {
       ? " Il ritiro è registrato da classificare: chiedere se il pacco contiene il vecchio dispositivo da restituire per lo scambio o quello ricevuto da noi che presenta il problema."
       : ritiro?.stato === "programmata" ? " Il ritiro è già programmato: non creare una seconda prenotazione."
       : ritiro ? " La richiesta di ritiro è registrata. La prenotazione del corriere deve essere verificata dall’operatore." : "";
+    const istruzioneAssistenza = tipoFlusso === "assistenza"
+      ? " Richiesta di assistenza registrata per verifica dell’operatore. I dati mancanti per un nuovo preventivo non bloccano la presa in carico tecnica. Non dichiarare risolto il problema, accettata la garanzia o prenotato il ritiro."
+      : "";
     return NextResponse.json({
       ok: true,
 
-      message: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini) + istruzioneFlusso + istruzioneRitiro,
+      message: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini) + istruzioneFlusso + istruzioneRitiro + istruzioneAssistenza,
 
       contesto_offerta: contestoOfferta,
       contesto_ritiro: contestoRientro,
+      classificazione_richiesta: tipoFlusso,
 
       contesto_cliente: contestoCliente,
 
