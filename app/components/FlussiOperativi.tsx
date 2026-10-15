@@ -1,4 +1,5 @@
-import { gestisciRitiroAssistenza, registraAlternativeOfferta } from "../pratica/[id]/actions";
+import { gestisciRitiroAssistenza } from "../pratica/[id]/actions";
+import { RegistrazioneAlternativeOfferta } from "./RegistrazioneAlternativeOfferta";
 import { CorrezioneSceltaCliente } from "./CorrezioneSceltaCliente";
 import { NOMI_ASSISTENZA, NOMI_RITIRO, NOMI_SCELTA, type AlternativaOfferta, type AssistenzaRientro, type OffertaVersione, type SceltaCliente } from "../lib/flussiOperativi";
 import { PrenotazionePresa } from "./PrenotazionePresa";
@@ -10,9 +11,9 @@ const euro = (value: number) => new Intl.NumberFormat("it-IT", { style: "currenc
 const input = "w-full rounded-lg border border-slate-300 bg-white p-2 text-sm";
 const button = "rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white";
 
-export function OfferteEScelta({ praticaId, scelta, offerte, opzioni, preventivi, solaLettura }: {
+export function OfferteEScelta({ praticaId, scelta, offerte, opzioni, preventivi, solaLettura, dataInvio }: {
  praticaId: string; scelta: SceltaCliente | null; offerte: OffertaVersione[]; opzioni: AlternativaOfferta[];
- preventivi: { id: string; file_url: string | null; inviato_at: string | null }[]; solaLettura: boolean;
+ preventivi: { id: string; file_url: string | null; inviato_at: string | null }[]; solaLettura: boolean; dataInvio: string | null;
 }) {
  const ultima = offerte[0];
  return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -33,22 +34,8 @@ export function OfferteEScelta({ praticaId, scelta, offerte, opzioni, preventivi
     <p className="mt-2 whitespace-pre-wrap text-xs text-slate-600">{o.condizioni || o.descrizione}</p>
    </details>)}</div>
   </div> : <p className="mt-4 text-sm text-slate-600">Alternative del preventivo ancora da registrare.</p>}
+  {!solaLettura && <RegistrazioneAlternativeOfferta praticaId={praticaId} preventivi={preventivi} dataInvio={dataInvio} />}
   {!solaLettura && preventivi.length > 0 && <>
-   <details className="mt-4"><summary className="cursor-pointer text-sm font-bold text-blue-800">Leggi un PDF o registra le alternative</summary>
-    <form action={registraAlternativeOfferta} className="mt-3 space-y-3">
-     <input type="hidden" name="pratica_id" value={praticaId} />
-     <label className="block text-sm">Preventivo<select className={input} name="preventivo_id" required>{preventivi.map(p => <option key={p.id} value={p.id}>{p.inviato_at ? data(p.inviato_at) : "Preventivo"} · {p.id.slice(0, 8)}</option>)}</select></label>
-     <label className="block text-sm">PDF originale, massimo 3 MB<input className={input} type="file" name="pdf" accept="application/pdf" /></label>
-     <p className="text-xs text-slate-500">Per l’inserimento manuale, riporta numero e prezzo delle alternative del documento.</p>
-     {Array.from({ length: 4 }, (_, i) => <div key={i} className="grid grid-cols-3 gap-2">
-      <select className={input} name={`servizio_${i + 1}`} aria-label={`Servizio opzione ${i + 1}`}><option value="">Opzione {i + 1}</option>{["RI", "RE", "PS", "PSMI"].map(s => <option key={s}>{s}</option>)}</select>
-      <input className={input} name={`importo_${i + 1}`} placeholder="Importo €" inputMode="decimal" aria-label={`Prezzo opzione ${i + 1}`} />
-      <select className={input} name={`iva_${i + 1}`} aria-label={`IVA opzione ${i + 1}`}><option value="">IVA da verificare</option><option value="inclusa">IVA inclusa</option><option value="esclusa">IVA esclusa</option></select>
-     </div>)}
-     <textarea className={input} name="nota" placeholder="Condizioni o annotazioni del preventivo" />
-     <button className={button}>Registra alternative</button>
-    </form>
-   </details>
    <details className="mt-4"><summary className="cursor-pointer text-sm font-bold text-blue-800">Correggi la scelta del cliente</summary>
     <CorrezioneSceltaCliente praticaId={praticaId} scelta={scelta} offerte={offerte} opzioni={opzioni} />
    </details>
