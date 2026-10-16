@@ -4,6 +4,11 @@ export function esitoRegistrazionePreventivo(result: unknown) {
   }
 
   const esito = result as Record<string, unknown>;
+  // Acquisizione durabile anche quando abbinamento o invio sono da verificare.
+  // Il chiamante Drive può confermare la consegna, senza dichiarare il PDF inviato.
+  if (esito.acquisito === true && typeof esito.documento_id === "string") {
+    return { ok: true, status: 200 };
+  }
   const registrato =
     (esito.aggiornato === true || esito.esito === "gia_registrato") &&
     typeof esito.preventivo_id === "string" &&

@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const response = await fetch(
-      `${url}/rest/v1/rpc/registra_preventivo_con_offerta`,
+      `${url}/rest/v1/rpc/registra_documento_preventivo_auto`,
       {
         method: "POST",
         headers: {
@@ -80,13 +80,14 @@ export async function POST(request: NextRequest) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          p_external_id: evento.externalId,
-          p_nome_file: evento.nomeFile,
-          p_targa: evento.targa,
-          p_file_url: evento.fileUrl,
-          p_data_offerta: evento.dataOfferta,
-          p_inviato_at: evento.inviatoAt,
-          p_contenuto: { ...lettura, fonte },
+          p_dati: {
+            external_id: evento.externalId, nome_file: evento.nomeFile,
+            targa: evento.targa, file_url: evento.fileUrl, data_offerta: evento.dataOfferta,
+            // La data comunicata da Drive non è una prova d'invio al cliente.
+            contenuto: { ...lettura, fonte },
+            sha256_pdf: typeof payload.pdf_base64 === "string"
+              ? createHash("sha256").update(Buffer.from(payload.pdf_base64, "base64")).digest("hex") : null,
+          },
         }),
         cache: "no-store",
       }
@@ -97,7 +98,6 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       console.error("ERRORE REGISTRAZIONE PREVENTIVO EMESSO", {
         supabase_status: response.status,
-        supabase_response: raw,
         external_id: evento.externalId,
         targa: evento.targa,
       });
@@ -106,7 +106,6 @@ export async function POST(request: NextRequest) {
         {
           ok: false,
           error: `Registrazione Supabase ${response.status}`,
-          detail: raw,
         },
         { status: 500 }
       );

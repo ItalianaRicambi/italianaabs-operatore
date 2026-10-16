@@ -56,8 +56,9 @@ export function normalizzaEventoPreventivo(
     throw new Error("nome_file deve identificare un PDF");
   }
 
+  // Il suffisso di una copia Drive non fa parte della targa.
   const targaDaNome = normalizzaTargaPreventivo(
-    nomeFile.replace(/\.pdf$/i, "")
+    nomeFile.replace(/\.pdf$/i, "").replace(/\s*\(\d+\)$/, "")
   );
   const targaDichiarata = normalizzaTargaPreventivo(
     primo(payload, "targa", "plate")
