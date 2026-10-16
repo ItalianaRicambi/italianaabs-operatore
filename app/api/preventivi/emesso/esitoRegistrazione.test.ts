@@ -26,3 +26,8 @@ test("un collegamento verificabile e una data invalida ricevono esiti distinti",
   assert.equal(esitoRegistrazionePreventivo({ aggiornato: true, esito: "preventivo_inviato", preventivo_id: "preventivo", pratica_id: "pratica" }).ok, true);
   assert.equal(esitoRegistrazionePreventivo({ aggiornato: false, esito: "data_offerta_futura" }).status, 422);
 });
+
+test('documento acquisito in attesa di invio non richiede un retry del mittente',()=>{
+ assert.deepEqual(esitoRegistrazionePreventivo({acquisito:true,documento_id:'documento',esito:'pronto',pratica_id:'pratica'}),{ok:true,status:200});
+ assert.equal(esitoRegistrazionePreventivo({acquisito:true,esito:'pronto'}).ok,false);
+});

@@ -1,3 +1,5 @@
+import { leggiDocumentiPreventivo } from "../../lib/documentiPreventivoServer";
+import { DocumentiPreventivoAutomatici } from "../../components/DocumentiPreventivoAutomatici";
 import { AssistenzeRientro, GestioneRitiro, OfferteEScelta } from "../../components/FlussiOperativi";
 import { ImportazioneDocumentoAmministrativo } from "../../components/DocumentoAmministrativo";
 import { AnagraficaFiscale } from "../../components/AnagraficaFiscale";
@@ -616,6 +618,7 @@ export default async function PraticaPage({
   } = await getPratica(id, ricercaCliente.trim());
 
   const esitiGls = await leggiEsitiGls(id);
+  const documentiPreventivo = await leggiDocumentiPreventivo(id).catch(() => null);
   const provenienza = provenienzaPratica(pratica.dati_raw);
   const noteInterne = annotazioniOperatore;
   const ultimaNotaOperatore = noteInterne[0] || null;
@@ -904,6 +907,7 @@ export default async function PraticaPage({
         <div className="grid gap-6 xl:grid-cols-3">
           <section className="space-y-6 xl:col-span-2">
             <AssistenzeRientro praticaId={pratica.id} assistenze={assistenzeRientro} solaLettura={String(navigazione.filtro || "").includes("mese_precedente")} />
+            {documentiPreventivo === null ? <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4">Acquisizione automatica preventivi da verificare: registro non disponibile.</p> : <DocumentiPreventivoAutomatici documenti={documentiPreventivo} />}
             <OfferteEScelta dataInvio={pratica.preventivo_inviato_at || null} praticaId={pratica.id} scelta={sceltaCliente} offerte={offerte} opzioni={opzioniOfferta} preventivi={preventiviOfferta} solaLettura={String(navigazione.filtro || "").includes("mese_precedente")} />
             <Card titolo="Cliente e veicolo">
               <div className="grid gap-4 sm:grid-cols-2">

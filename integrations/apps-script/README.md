@@ -18,3 +18,5 @@ La modifica usa l'accesso Drive già autorizzato nel progetto. URL, chiave priva
 Verificare su un PDF della cartella già elaborata: il webhook conserva l'id del preventivo e restituisce `lettura_offerta.stato: "letta"`. Un secondo invio dello stesso documento deve restituire `duplicato: true`. Un documento scansionato o con alternative incoerenti deve restituire `da_verificare` e comparire nella dashboard, anche se il preventivo è già stato contabilizzato.
 
 Il webhook accetta anche `testo_pdf` o un array `opzioni` con numero, servizio, prezzo, IVA e condizioni. I dati vengono conservati anche se il PDF non è ancora abbinato alla pratica; il recupero del collegamento gira ogni cinque minuti.
+
+Dal 16 ottobre il backend distingue l'acquisizione dall'invio: il PDF viene letto e collegato senza premere «Preventivo inviato», ma la presenza nella cartella non prova l'invio al cliente. L'HTTP 200 attesta l'acquisizione durabile. Le proposte e i casi da verificare sono visibili nella pratica e nel registro `/preventivi`. Vedere `docs/preventivi-automatici.md` per il contratto della prova d'invio e il blocco attuale dell'accesso Keplero.
