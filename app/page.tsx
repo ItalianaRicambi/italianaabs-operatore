@@ -1159,6 +1159,7 @@ export default async function Home({
           </div>
         </header>
 
+        <div className="mb-4"><Link href="/mbe" className="font-bold text-blue-800 underline">Spedizioni MBE · tracking e abbinamenti</Link></div>
         <div className="mb-4"><Link href="/preventivi" className="font-bold text-blue-800 underline">Preventivi acquisiti automaticamente · invii da verificare</Link></div>
         <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-blue-950">Richieste email · info@italianaabs.com</h2><Link href="/email" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Apri richieste email</Link></div>
