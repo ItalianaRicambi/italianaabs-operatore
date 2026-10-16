@@ -54,6 +54,8 @@ begin
  insert into public.pratiche(targa,nome_cliente,tipo_flusso,stato_commerciale,created_at)
  values('TSTMAN26','Test conferma operatore','commerciale','da_preventivare',now()-interval '1 day') returning id into p2;
  r:=public.registra_documento_preventivo_auto(jsonb_build_object('external_id','test:manuale:26','nome_file','TSTMAN26.pdf','targa','TSTMAN26','data_offerta',now()-interval '1 hour','contenuto',c));
+ insert into public.azioni_operatore(pratica_id,azione,nota,operatore) values(p2,'commerciale_preventivo_inviato','Vecchia azione senza identità',null);
+ if exists(select 1 from public.documenti_preventivo_auto where pratica_id=p2 and stato='inviato') then raise exception 'Azione senza operatore usata come prova'; end if;
  update public.pratiche set stato_commerciale='preventivo_inviato',preventivo_inviato_at=now() where id=p2;
  insert into public.azioni_operatore(pratica_id,azione,nota,operatore) values(p2,'commerciale_preventivo_inviato','Collaudo','Operatore 1');
  if not exists(select 1 from public.documenti_preventivo_auto where pratica_id=p2 and stato='inviato' and prova_invio->>'fonte'='operatore') then raise exception 'Conferma manuale non collega documento'; end if;
