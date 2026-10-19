@@ -22,7 +22,7 @@ export function CorrezioneSceltaCliente({ praticaId, scelta, offerte, opzioni }:
       <select className={input} name="opzione_id" value={opzione} onChange={e => setOpzione(e.target.value)} disabled={pending}>
         <option value="">Soluzione da chiarire</option>
         {opzioni.map(o => <option key={o.id} value={o.id} disabled={!verificate.some(v => v.id === o.id)}>
-          {o.servizio} · {euro(o.importo)} · versione {offerte.find(q => q.id === o.offerta_id)?.versione} · opzione {o.numero}
+          {o.descrizione || o.servizio} · {euro(o.importo)} · versione {offerte.find(q => q.id === o.offerta_id)?.versione}{o.numero_esplicito ? ` · opzione ${o.numero}` : ''}
         </option>)}
       </select>
     </label>
