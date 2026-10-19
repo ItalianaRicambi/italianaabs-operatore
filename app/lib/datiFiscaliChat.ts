@@ -10,7 +10,7 @@ export function datiFiscaliDaChat(messaggi: { id: number; testo: string | null }
   for (const messaggio of messaggi) {
     const testo = (messaggio.testo || '').replace(/\\+n/g, '\n').replace(/\r/g, '');
     const cf = /\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b/i.exec(testo)?.[0];
-    const iva = /(?:P\.?\s*IVA|partita\s+iva)\s*[:;]?\s*(\d{11})\b/i.exec(testo)?.[1];
+    const iva = /(?:P\.?\s*IVA|partita\s+iva)\s*[:;]?\s*(?:IT\s*)?(\d{11})\b/i.exec(testo)?.[1];
     if (!cf && !iva && !/indirizzo di fatturazione|\b(?:email|e-mail|PEC)\s*:/i.test(testo)) continue;
     fonti.push({ id: messaggio.id, testo });
     aggiungi('codice_fiscale', cf?.toUpperCase()); aggiungi('partita_iva', iva);

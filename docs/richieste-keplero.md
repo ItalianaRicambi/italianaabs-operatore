@@ -40,3 +40,26 @@ esistenti. `supabase/tests/recupero_richieste_keplero.sql` usa una transazione
 annullata per verificare replay, chiusure, dati mancanti, errore in una fase
 successiva, recupero e intake con il ruolo effettivo `service_role`.
 Le funzioni di manutenzione restano private e non eseguibili dai ruoli pubblici.
+
+## Scelte concluse e anagrafica fiscale
+
+«Il cliente ha scelto per il Programma Scambio Made in Italy» esprime una
+decisione conclusa, anche quando K la riporta in terza persona e il flag ordine
+è rimasto falso. Webhook e recupero SQL riconoscono la stessa formulazione;
+la scelta viene collegata alle alternative dell'offerta. Domande, negazioni,
+semplici preferenze e scelte subordinate a disponibilità o verifiche non
+acquisiscono l'ordine, neppure con un flag AI positivo. La data dell'ordine
+recuperato resta quella dell'evento originale.
+
+Gli identificativi italiani `IT` + 11 cifre vengono confrontati e registrati
+nel formato nazionale, preservando il testo fiscale originale. Il confronto
+normalizza anche i dati già acquisiti: il prefisso o gli spazi non generano
+conflitti fittizi. Numeri diversi rimangono discordanti e i prefissi esteri
+vengono conservati. La creazione del cliente richiede sempre tutti i dati
+fiscali necessari, rispetta i blocchi dell'operatore e riusa gli identificativi
+univoci esistenti; la presenza di dati fiscali da sola non conferma un ordine.
+
+`supabase/tests/scelta_conclusa_e_prefissi_fiscali.sql` verifica con rollback e
+con il ruolo `service_role` l'intero passaggio da offerta a scelta PSMI e coda
+fatturazione, le condizioni, i dati discordanti, i replay e la conservazione
+di fatture e scelte protette dall'operatore.

@@ -52,6 +52,10 @@ function normalizzaFrase(value: string) {
 }
 
 function contieneNegazioneODubbio(frase: string) {
+  if (/\bnon\b.{0,50}\b(?:scelt[oa]|decis[oa])\b/.test(frase)) return true;
+  if (SCELTA_CONCLUSA_TERZA_PERSONA.test(frase) &&
+      (/\b(?:se|qualora|altrimenti|forse|eventualmente)\b/.test(frase) ||
+       /ha\s+scelto[^.!]*\?/.test(frase))) return true;
   if (/\b(?:preferisco|preferiamo|preferirei|preferiremmo|sceglierei|sceglieremmo)\b/.test(frase) &&
       !/\b(?:accetto|accettiamo|confermo|confermiamo|procedete|procediamo)\b|pratica confermata/.test(frase)) return true;
   // Chiedere come accettare non costituisce un'accettazione, anche se
@@ -75,6 +79,10 @@ function contieneNegazioneODubbio(frase: string) {
     /\b(?:se|qualora)\b.{0,60}\b(?:scegli|scelg|opzione|proposta|riparabile|possibile)/,
   ].some((regola) => regola.test(frase));
 }
+
+// K può riportare la decisione dell'officina in terza persona. Una scelta
+// conclusa non è una preferenza; condizioni e verifiche restano bloccanti.
+const SCELTA_CONCLUSA_TERZA_PERSONA = /\b(?:il\s+)?(?:cliente|proprietario|officina)\s+ha\s+scelto\s+(?:per\s+)?(?:il\s+|la\s+|l')?(?:programma\s+scambio|riparazione|revisione|lavorazione|opzione|proposta|offerta)\b/;
 
 export function riconosciConfermaOrdine(
   payload: PayloadKeplero
@@ -112,6 +120,7 @@ export function riconosciConfermaOrdine(
   }
 
   const confermaEsplicita = [
+    SCELTA_CONCLUSA_TERZA_PERSONA,
     /\b(?:mi|ci)\s+sta\s+bene\b.{0,55}\b(?:proposta|offerta|opzione|preventivo)\b/,
     /\b(?:scelgo|scegliamo|ho scelto|abbiamo scelto|ho deciso per|abbiamo deciso per|preferisco|preferiamo)\b.{0,65}\b(?:opzione|proposta|offerta|preventivo|revisione|riparazione|programma scambio)\b/,
     /\bpratica\s+confermata\b/,

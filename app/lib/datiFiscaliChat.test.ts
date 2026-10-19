@@ -21,3 +21,10 @@ test('messaggi successivi non cancellano i dati e valori discordanti non vengono
   assert.equal(r.dati.codice_fiscale, 'TSTFSC80A01F952A'); assert.equal(r.dati.email, undefined);
   assert.ok(r.conflitti.includes('email'));
 });
+test('partita IVA italiana con prefisso IT, anche separato da spazi',()=>{
+ const r=datiFiscaliDaChat([{id:1,testo:'Ragione sociale: Officina di prova\nP. IVA: IT 12345678903\nEmail: prova@example.test'},
+  {id:2,testo:'Partita IVA: 12345678903'}]);
+ assert.equal(r.dati.partita_iva,'12345678903');assert.deepEqual(r.conflitti,[]);
+ const estera=datiFiscaliDaChat([{id:3,testo:'Partita IVA: DE12345678903'}]);
+ assert.equal(estera.dati.partita_iva,undefined);
+});
