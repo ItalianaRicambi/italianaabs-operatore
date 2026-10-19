@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
-export const SERVIZI = { RI: "Riparazione idraulica", RE: "Riparazione elettronica", PS: "Programma Scambio", PSMI: "Programma Scambio Made in Italy" } as const;
-export type Servizio = keyof typeof SERVIZI;
+import { SERVIZI, type Servizio } from "./serviziOfferta.ts";
+export { SERVIZI, type Servizio } from "./serviziOfferta.ts";
 export type OpzioneOfferta = {
   numero: number; numero_esplicito: boolean; servizio: Servizio; descrizione: string;
   importo: number; iva_inclusa: boolean | null; valuta: string;
@@ -13,6 +13,9 @@ export function servizioDaTesto(value: string): Servizio | null {
   const t = value.toUpperCase().replace(/\s+/g, " ");
   if (/\bPSMI\b|PROGRAMMA SCAMBIO MADE IN ITALY/.test(t)) return "PSMI";
   if (/\bPS\b|PROGRAMMA SCAMBIO/.test(t)) return "PS";
+  // Una revisione completa non va trasformata in sola idraulica o elettronica.
+  // Solo una voce commerciale: un costo di test che la cita non è un'offerta RC.
+  if (/^(?:(?:OPZIONE|OFFERTA)\s+[1-8]\s*[-–:]?\s*)?(?:RC\b|REVISIONE COMPLETA\b)/.test(t.trim())) return "RC";
   if (/\bRI\b|(?:LAVORAZIONE|RIPARAZIONE|REVISIONE) (?:DELLA PARTE |DELLA SEZIONE )?IDRAULICA/.test(t)) return "RI";
   if (/\bRE\b|(?:LAVORAZIONE|RIPARAZIONE|REVISIONE) (?:DELLA PARTE |DELLA SEZIONE )?ELETTRONICA/.test(t)) return "RE";
   return null;
@@ -61,31 +64,57 @@ export function leggiOffertaDaTesto(raw: string, targa: string): LetturaOfferta 
   }
   const opzioni: OpzioneOfferta[] = [];
   const righe = testo.split("\n");
+  // Alcuni preventivi a soluzione unica dichiarano il servizio nel titolo e
+  // riportano soltanto «Prezzo: € ...» nella sezione economica.
+  const titoliTecnici = righe.filter(r => /^\s*Offerta tecnica\b/i.test(r))
+    .map(r => r.replace(/^\s*Offerta tecnica\s*(?:per\s+)?/i, "").trim());
+  const serviziNelDocumento = new Set(righe.map(r => servizioDaTesto(r.trim())).filter(Boolean));
+  const prezziGenerici = righe.filter(r => /^\s*Prezzo\s*:\s*(?:€|[\d.,]+\s*(?:€|euro))/i.test(r));
+  const servizioTitolo = titoliTecnici.length === 1 ? servizioDaTesto(titoliTecnici[0]) : null;
+  const titoloUnico = servizioTitolo && intestazioni.length === 0 && serviziNelDocumento.size <= 1
+    && [...serviziNelDocumento].every(s => s === servizioTitolo) && prezziGenerici.length === 1 ? titoliTecnici[0] : null;
+  let prezzoDaTitolo = false;
   for (let i = 0; i < righe.length; i++) {
     let riga = righe[i].trim();
+    if (titoloUnico && /^Prezzo\s*:/i.test(riga)) {
+      riga = titoloUnico + ": " + riga.replace(/^Prezzo\s*:\s*/i, "");
+      prezzoDaTitolo = true;
+    }
     // Consente titoli e importi su due righe, senza attraversare sezioni lunghe.
     if (!riga.includes("€") && servizioDaTesto(riga) && /^\s*(?:€|[0-9]+[,.][0-9]{2}\s*€)/.test(righe[i + 1] || "")) riga += " " + righe[++i].trim();
-    const prezzo = /€\s*([\d.]+(?:,\d{2})?)|([\d.]+(?:,\d{2})?)\s*(?:€|euro)/i.exec(riga);
+    const prezzi = [...riga.matchAll(/€\s*([\d.]+(?:,\d{2})?)|([\d.]+(?:,\d{2})?)\s*(?:€|euro)/gi)];
+    const prezzo = prezzi[0];
     if (!prezzo) continue;
     const servizio = servizioDaTesto(riga.slice(0, prezzo.index));
     if (!servizio) continue;
+    if (prezzi.length !== 1) return errore("Più importi nella stessa voce: verifica richiesta");
     const valore = prezzo[1] || prezzo[2];
     const importo = Number(valore.includes(",") ? valore.replace(/\./g, "").replace(",", ".") : valore);
     const gia = opzioni.find(o => o.servizio === servizio);
     if (gia) {
       if (gia.importo !== importo) return errore("Più prezzi per lo stesso servizio: verifica richiesta");
+      if ((gia.iva_inclusa === true && /(?:oltre|esclusa)\s*IVA|IVA\s*esclusa/i.test(riga)) ||
+        (gia.iva_inclusa === false && /IVA\s*(?:inclusa|compresa)/i.test(riga))) return errore("Indicazioni IVA contraddittorie: verifica richiesta");
       continue;
     }
     const numeroDiretto = /\b(?:Offerta|Opzione)\s+(\d+)/i.exec(riga);
     const numero = numeroDiretto ? Number(numeroDiretto[1]) : ordinali.get(servizio) ?? opzioni.length + 1;
     const posizioneTitolo = compatto.search(new RegExp("(?:Opzione|Offerta)\\s+" + numero + "\\b", "i"));
     const sezione = posizioneTitolo >= 0 ? compatto.slice(posizioneTitolo).split(/\b(?:Opzione|Offerta)\s+\d+\b/i).slice(1, 2).join("") : riga;
-    opzioni.push({ numero, numero_esplicito: !!numeroDiretto || ordinali.has(servizio), servizio, descrizione: SERVIZI[servizio], importo,
+    opzioni.push({ numero, numero_esplicito: !!numeroDiretto || ordinali.has(servizio), servizio,
+      descrizione: servizio === "RC" ? riga.slice(0, prezzo.index).replace(/^\s*(?:Offerta|Opzione)\s+[1-8]\s*[-–:]?\s*/i, "").replace(/[:\s]+$/, "") : SERVIZI[servizio], importo,
       iva_inclusa: /IVA\s*(?:inclusa|compresa)/i.test(riga) ? true : /(?:oltre|esclusa)\s*IVA|IVA\s*esclusa/i.test(riga) ? false : null,
       valuta: "EUR", condizioni: (sezione || riga).slice(0, 6000),
-      reso_vecchio: servizio === "RI" || servizio === "RE" ? false : /(?:reso|rientro|restitu).{0,80}vecchio|vecchio.{0,80}(?:reso|rientro|restitu)/i.test(sezione) ? true : null });
+      reso_vecchio: servizio === "RI" || servizio === "RE" || servizio === "RC" ? false : /(?:reso|rientro|restitu).{0,80}vecchio|vecchio.{0,80}(?:reso|rientro|restitu)/i.test(sezione) ? true : null });
   }
   if (!opzioni.length) return errore("Alternative e prezzi non identificati nel PDF");
+  if (opzioni.length === 1 && (opzioni[0].servizio === "RC" || prezzoDaTitolo)) {
+    // Le limitazioni alla garanzia possono seguire il prezzo, anche in altre pagine.
+    const inizio = testo.search(/Importo dell[’']intervento/i);
+    const condizioni = inizio >= 0 ? testo.slice(inizio) : testo;
+    if (condizioni.length > 6000) return errore("Condizioni dell’offerta da verificare nel PDF");
+    opzioni[0].condizioni = condizioni;
+  }
   if ([...ordinali.keys()].some(s => !opzioni.some(o => o.servizio === s))) return errore("Manca il prezzo di una delle alternative proposte");
   try {
     const validita = /Validit[àa]\s*(?:offerta)?\s*:\s*(\d+)\s*giorni/i.exec(testo);

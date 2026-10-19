@@ -1,5 +1,6 @@
 'use client';
 import {useActionState} from 'react';
+import {SERVIZI} from '../lib/serviziOfferta';
 import {registraAlternativeOfferta} from '../pratica/[id]/actions';
 const input='w-full rounded-lg border border-slate-300 bg-white p-2 text-sm';
 export function RegistrazioneAlternativeOfferta({praticaId,preventivi,dataInvio}:{praticaId:string;preventivi:{id:string;inviato_at:string|null}[];dataInvio:string|null}){
@@ -12,7 +13,7 @@ export function RegistrazioneAlternativeOfferta({praticaId,preventivi,dataInvio}
  <fieldset disabled={pending||!abilitato} className="space-y-3 disabled:opacity-60">
  <label className="block text-sm">PDF originale, massimo 3 MB<input className={input} type="file" name="pdf" accept="application/pdf"/></label>
  <p className="text-xs text-slate-500">In alternativa al PDF, trascrivi servizio, prezzo e IVA delle soluzioni realmente offerte.</p>
- {Array.from({length:4},(_,i)=><div key={i} className="grid grid-cols-3 gap-2"><select className={input} name={`servizio_${i+1}`} aria-label={`Servizio opzione ${i+1}`}><option value="">Opzione {i+1}</option>{['RI','RE','PS','PSMI'].map(s=><option key={s}>{s}</option>)}</select><input className={input} name={`importo_${i+1}`} placeholder="Importo €" inputMode="decimal" aria-label={`Prezzo opzione ${i+1}`}/><select className={input} name={`iva_${i+1}`} aria-label={`IVA opzione ${i+1}`}><option value="">IVA da verificare</option><option value="inclusa">IVA inclusa</option><option value="esclusa">IVA esclusa</option></select></div>)}
+ {Array.from({length:4},(_,i)=><div key={i} className="grid grid-cols-3 gap-2"><select className={input} name={`servizio_${i+1}`} aria-label={`Servizio opzione ${i+1}`}><option value="">Opzione {i+1}</option>{Object.entries(SERVIZI).map(([s,nome])=><option key={s} value={s}>{nome}</option>)}</select><input className={input} name={`importo_${i+1}`} placeholder="Importo €" inputMode="decimal" aria-label={`Prezzo opzione ${i+1}`}/><select className={input} name={`iva_${i+1}`} aria-label={`IVA opzione ${i+1}`}><option value="">IVA da verificare</option><option value="inclusa">IVA inclusa</option><option value="esclusa">IVA esclusa</option></select></div>)}
  <textarea className={input} name="nota" placeholder="Condizioni o annotazioni del preventivo"/>
  <button className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">{pending?'Salvataggio…':'Registra alternative'}</button></fieldset></form></details>
  {esito.messaggio&&<p role="status" aria-live="polite" className={`mt-3 rounded-lg p-3 text-sm font-semibold ${esito.ok?'bg-green-50 text-green-800':'bg-amber-50 text-amber-950'}`}>{esito.messaggio}</p>}
