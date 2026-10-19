@@ -5,6 +5,7 @@ import { NOMI_ASSISTENZA, NOMI_RITIRO, NOMI_SCELTA, type AlternativaOfferta, typ
 import { PrenotazionePresa } from "./PrenotazionePresa";
 import { dataPresaIt } from "../lib/prenotazioniPrese";
 import { etichettaPresa, presaPrenotata, type MetadatiGls } from "../lib/esitiGls";
+import { SERVIZI } from "../lib/serviziOfferta";
 
 const data = (value: string) => new Date(value).toLocaleString("it-IT", { timeZone: "Europe/Rome" });
 const euro = (value: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
@@ -19,7 +20,7 @@ export function OfferteEScelta({ praticaId, scelta, offerte, opzioni, preventivi
  return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
   <h2 className="text-lg font-bold text-slate-950">Offerta e scelta del cliente</h2>
   {scelta ? <div className={`mt-3 rounded-xl p-3 ${scelta.stato === "confermata" ? "bg-green-100 text-green-950" : "bg-amber-100 text-amber-950"}`}>
-   <p className="font-bold">{NOMI_SCELTA[scelta.stato] || scelta.stato}{scelta.servizio ? ` · ${scelta.servizio}` : ""}{scelta.importo != null ? ` · ${euro(scelta.importo)}` : ""}</p>
+   <p className="font-bold">{NOMI_SCELTA[scelta.stato] || scelta.stato}{scelta.servizio ? ` · ${SERVIZI[scelta.servizio as keyof typeof SERVIZI] || scelta.servizio}` : ""}{scelta.importo != null ? ` · ${euro(scelta.importo)}` : ""}</p>
    <blockquote className="mt-2 text-sm">“{scelta.evidenza}”</blockquote>
    <p className="mt-2 text-xs">{data(scelta.richiesta_at)} · {scelta.fonte === "operatore" ? `Operatore ${scelta.operatore || ""}` : "Messaggio cliente tramite K"} · {scelta.versione ? `versione ${scelta.versione}` : "offerta da collegare"}</p>
    {scelta.protetta_operatore && <p className="mt-1 text-xs font-bold">Correzione operatore protetta</p>}
@@ -30,7 +31,7 @@ export function OfferteEScelta({ praticaId, scelta, offerte, opzioni, preventivi
    <p className="text-sm font-semibold">Ultima offerta · versione {ultima.versione} · {data(ultima.inviato_at)} {ultima.file_url && <a className="text-blue-700 underline" href={ultima.file_url} target="_blank" rel="noreferrer">Apri PDF</a>}</p>
    {ultima.stato === "da_verificare" && <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">Offerta da verificare: {ultima.errore}</p>}
    <div className="mt-2 space-y-2">{opzioni.filter(o => o.offerta_id === ultima.id).map(o => <details key={o.id} className="rounded-lg border border-slate-200 p-3">
-    <summary className="cursor-pointer text-sm font-bold">{o.numero_esplicito ? `Opzione ${o.numero} · ` : ""}{o.servizio} · {euro(o.importo)}{o.iva_inclusa === true ? " IVA inclusa" : o.iva_inclusa === false ? " + IVA" : " · IVA da verificare"}</summary>
+    <summary className="cursor-pointer text-sm font-bold">{o.numero_esplicito ? `Opzione ${o.numero} · ` : ""}{o.descrizione || o.servizio} · {euro(o.importo)}{o.iva_inclusa === true ? " IVA inclusa" : o.iva_inclusa === false ? " + IVA" : " · IVA da verificare"}</summary>
     <p className="mt-2 whitespace-pre-wrap text-xs text-slate-600">{o.condizioni || o.descrizione}</p>
    </details>)}</div>
   </div> : <p className="mt-4 text-sm text-slate-600">Alternative del preventivo ancora da registrare.</p>}
