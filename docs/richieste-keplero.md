@@ -63,3 +63,19 @@ univoci esistenti; la presenza di dati fiscali da sola non conferma un ordine.
 con il ruolo `service_role` l'intero passaggio da offerta a scelta PSMI e coda
 fatturazione, le condizioni, i dati discordanti, i replay e la conservazione
 di fatture e scelte protette dall'operatore.
+
+## Conversazione originale e riparazione del proprio dispositivo
+
+Il webhook autenticato legge anche `X-Keplero-SessionId`, intestazione documentata
+da K, conservando gli identificativi espliciti nel payload e le intestazioni
+precedenti. Il numero del canale non viene usato come identificativo della chat
+o come telefono del cliente. La cattura del riferimento non attiva da sola il
+recupero API dei messaggi: quel collegamento richiede ancora un collaudo con
+credenziale valida e con il formato originale dei messaggi.
+
+«Ripariamo la nostra» seleziona soltanto un'alternativa verificata RI, RE o RC
+del preventivo già inviato. Con più lavorazioni originali, una sola proposta
+di scambio o assenza del preventivo resta da chiarire; domande e condizioni
+non confermano un ordine. Un PDF recente già acquisito può essere collegato
+alla pratica registrata successivamente entro la finestra lavorativa prevista.
+Questo collegamento non prova l'invio e non promuove la pratica a ordine.

@@ -52,6 +52,8 @@ function normalizzaFrase(value: string) {
 }
 
 function contieneNegazioneODubbio(frase: string) {
+  if (/\b(?:ripariamo|riparate|revisioniamo|revisionate)\b/.test(frase) &&
+      /[?]|\b(?:se|qualora|altrimenti|forse|eventualmente)\b/.test(frase)) return true;
   if (/\bnon\b.{0,50}\b(?:scelt[oa]|decis[oa])\b/.test(frase)) return true;
   if (SCELTA_CONCLUSA_TERZA_PERSONA.test(frase) &&
       (/\b(?:se|qualora|altrimenti|forse|eventualmente)\b/.test(frase) ||
@@ -120,6 +122,9 @@ export function riconosciConfermaOrdine(
   }
 
   const confermaEsplicita = [
+    // Il database collega questa direttiva soltanto a un'alternativa verificata
+    // di lavorazione del dispositivo originale, mai a PS/PSMI.
+    /^(?:(?:ok|va bene|bene|allora|buongiorno|buonasera)[,!. ]*)?(?:ripariamo|riparate|revisioniamo|revisionate)\s+(?:il\s+(?:mio|nostro)(?:\s+(?:abs|modulo|dispositivo))?|la\s+(?:mia|nostra)(?:\s+(?:centralina|pompa|unita))?)[.! ]*$/,
     SCELTA_CONCLUSA_TERZA_PERSONA,
     /\b(?:mi|ci)\s+sta\s+bene\b.{0,55}\b(?:proposta|offerta|opzione|preventivo)\b/,
     /\b(?:scelgo|scegliamo|ho scelto|abbiamo scelto|ho deciso per|abbiamo deciso per|preferisco|preferiamo)\b.{0,65}\b(?:opzione|proposta|offerta|preventivo|revisione|riparazione|programma scambio)\b/,
