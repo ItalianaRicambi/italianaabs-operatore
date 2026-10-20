@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { leggiIdConversazioneKeplero } from "./identitaConversazione";
 
 import {
   estraiCodiciIdentificativi,
@@ -331,25 +332,7 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as Body;
 
-    const conversationId =
-      testo(
-        primo(
-          body,
-          "conversation_id",
-          "keplero_conversation_id",
-          "session_id",
-          "conversationId",
-          "chat_id",
-          "chatId",
-          "thread_id",
-          "threadId"
-        )
-      ) ||
-      testo(
-        request.headers.get("x-keplero-conversation-id") ||
-        request.headers.get("x-conversation-id") ||
-        request.headers.get("x-session-id")
-      );
+    const conversationId = leggiIdConversazioneKeplero(body, request.headers);
 
     const targa = normalizzaTarga(
       primo(body, "targa", "plate")

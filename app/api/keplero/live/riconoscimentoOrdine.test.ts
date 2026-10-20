@@ -3,6 +3,14 @@ import test from "node:test";
 
 import { riconosciConfermaOrdine } from "./riconoscimentoOrdine.ts";
 
+test("la direttiva di riparare il proprio dispositivo è distinta dalle domande e dalle ipotesi",()=>{
+ for(const frase of ["Ripariamo la nostra","Ok, riparate il nostro ABS.","Revisionate la mia centralina"])
+  assert.equal(riconosciConfermaOrdine({ultimo_messaggio_cliente:frase}).confermato,true,frase);
+ for(const frase of ["Ripariamo la nostra?","Non ripariamo la nostra","Ripariamo la nostra se possibile",
+  "Forse ripariamo la nostra","Ripariamo la nostra, ma prima di procedere verifica con il meccanico"])
+  assert.equal(riconosciConfermaOrdine({ultimo_messaggio_cliente:frase,ordine_confermato:true}).confermato,false,frase);
+});
+
 test("la sola preferenza non conferma un ordine neppure con flag errato", () => {
  for(const ultimo_messaggio_cliente of ["Preferisco il programma scambio","Preferiamo RI","Preferirei l’opzione 2"]) {
   assert.equal(riconosciConfermaOrdine({ultimo_messaggio_cliente,ordine_confermato:true,riepilogo_operativo:"Il cliente ha accettato il preventivo"}).confermato,false);
