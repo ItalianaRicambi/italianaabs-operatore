@@ -10,7 +10,8 @@ import {leggiOffertaDaPdf} from './offerte';
 export async function rpcOriginaliK<T>(nome:string,dati:Record<string,unknown>={}):Promise<T>{
  const {url,headers}=connessioneGlsDb();
  const r=await fetch(`${url}/rest/v1/rpc/${nome}`,{method:'POST',headers,body:JSON.stringify(dati),cache:'no-store',signal:AbortSignal.timeout(20000)});
- if(!r.ok)throw new Error('Registro originali K non disponibile');return r.json();
+ if(!r.ok)throw new Error('Registro originali K non disponibile');
+ const body=await r.text();return (body?JSON.parse(body):null) as T;
 }
 export async function recuperaOriginaliK(){
  // Il lease copre anche l'elenco, impedendo due discovery concorrenti.
