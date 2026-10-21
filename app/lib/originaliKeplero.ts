@@ -47,7 +47,7 @@ export async function leggiPdfOriginaleK(testo:string, richiedi:typeof fetch=fet
   const chunks:Buffer[]=[];let totale=0;let testa=Buffer.alloc(0);
   try{while(true){const v=await reader.read();if(v.done)break;totale+=v.value.length;if(totale>3*1024*1024){await reader.cancel();return null;}if(testa.length<5)testa=Buffer.concat([testa,Buffer.from(v.value)]).subarray(0,5);chunks.push(Buffer.from(v.value));}}
   finally{reader.releaseLock();}
-  return testa.toString()==='%PDF-'?Buffer.concat(chunks):null;
+  return testa.toString()==='%PDF-'?new Uint8Array(Buffer.concat(chunks)):null;
  }catch{return null;}
 }
 
