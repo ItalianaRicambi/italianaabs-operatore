@@ -21,3 +21,16 @@ Gli snapshot rifiutati dal normalizzatore vengono conservati senza interpretarli
 - Migrazione non applicata: il connettore ha restituito `Invalid or expired requestState` anche sul tentativo ridotto. Nessuna nuova tabella/funzione risultava creata dopo i tentativi.
 - Prima di pubblicare il pannello: applicare la migrazione; eseguire i casi SQL di consegna fallita, consegna successiva, risposta manuale, nuovo messaggio, revisione, permessi e isolamento delle sessioni.
 - Nessun messaggio inviato ai clienti e nessuna segnalazione inviata al fornitore durante questa verifica.
+
+## Preparazione dell’attivazione
+
+Il 21 ottobre è stato riprovato il collegamento: lettura SQL disponibile, applicazione migrazione ancora respinta con `Invalid or expired requestState`. Il plugin risulta installato/attivo e il servizio MCP è raggiungibile (401 senza autenticazione, come previsto); il percorso CLI non dispone di un accesso configurato. Nessuna nuova tabella/funzione del controllo risulta creata.
+
+Prima dell’attivazione sono stati aggiunti:
+
+- Verifica dell’impronta letta dall’operatore: una pagina precedente alla revisione del cliente non può archiviare il nuovo testo.
+- Revisione cliente sempre sottoposta a verifica esplicita, perché l’orario dell’edit non è documentato dalla sorgente e una vecchia risposta non ne dimostra la gestione.
+- Ricontrollo delle consegne delle chat ancora in attesa anche senza nuovi messaggi, rispettando il ritardo tra i tentativi.
+- Registrazione motivata dell’esito delle segnalazioni esterne, conservando testo e nota iniziali.
+
+226 test Node e build Next superati sulla versione aggiornata. I nuovi casi SQL sono predisposti per revisione, pagina obsoleta, consegna e gestione esterna; devono essere eseguiti nel database prima del merge e della pubblicazione.

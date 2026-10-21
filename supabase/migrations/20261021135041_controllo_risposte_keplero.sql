@@ -14,7 +14,7 @@ create table public.keplero_segnalazioni_esterne (
  id uuid primary key default gen_random_uuid(),nome text not null,telefono text not null,
  testo text not null check(length(testo) between 1 and 30000),data_messaggio timestamptz not null,
  fonte text not null,nota text not null,esito text not null default 'aperta' check(esito in ('aperta','verificata')),
- operatore text,verificata_at timestamptz,creata_at timestamptz not null default now()
+ operatore text,motivo_verifica text,verificata_at timestamptz,creata_at timestamptz not null default now()
 );
 alter table public.keplero_snapshot_invalidi enable row level security;
 alter table public.keplero_risposte_verificate enable row level security;
@@ -43,16 +43,16 @@ with clienti as (
  select distinct on(o.sessione) o.* from public.keplero_originali o
  where o.direzione='entrata' order by o.sessione,o.data_messaggio desc,length(o.messaggio_id) desc,o.messaggio_id desc
 )
-select c.sessione,c.messaggio_id,c.data_messaggio,coalesce(c.revisione->>'testo',c.testo) as testo,s.assistente,
- case when exists(select 1 from public.keplero_originali f where f.sessione=c.sessione and f.direzione='uscita' and f.data_messaggio>=c.data_messaggio and f.consegna#>>'{whatsapp_message,status}'='failed')
+select c.sessione,c.messaggio_id,c.data_messaggio,coalesce(c.revisione->>'testo',c.testo) as testo,coalesce(c.revisione->>'impronta',c.impronta) as impronta,s.assistente,
+ case when c.modificato then 'Messaggio aggiornato: verificare la revisione del cliente prima di chiudere l’attesa.' when exists(select 1 from public.keplero_originali f where f.sessione=c.sessione and f.direzione='uscita' and f.data_messaggio>=c.data_messaggio and f.consegna#>>'{whatsapp_message,status}'='failed')
  then 'Invio fallito: verificare e rispondere al cliente.' else 'Messaggio cliente senza risposta verificabile: controllare la chat, anche se assegnata a un operatore.' end as motivo,
  p.id as pratica_id,p.nome_cliente,p.telefono,p.numero_pratica
 from clienti c join public.keplero_sessioni_originali s using(sessione)
 left join lateral(select p1.id,p1.nome_cliente,p1.telefono,p1.numero_pratica from public.pratiche p1 where p1.keplero_conversation_id=c.sessione::text order by p1.updated_at desc limit 1)p on true
 where c.data_messaggio>=private.inizio_finestra_controllo_keplero(now(),48) and c.data_messaggio<now()-interval '15 minutes'
  and not exists(select 1 from public.keplero_risposte_verificate v where v.sessione=c.sessione and v.messaggio_id=c.messaggio_id and v.impronta_verificata=coalesce(c.revisione->>'impronta',c.impronta))
- and not exists(select 1 from public.keplero_originali r where r.sessione=c.sessione and r.direzione='uscita'
- and (r.data_messaggio>c.data_messaggio or (r.data_messaggio=c.data_messaggio and length(r.messaggio_id)=length(c.messaggio_id) and r.messaggio_id>c.messaggio_id))
+ and not exists(select 1 from public.keplero_originali r where not c.modificato and r.sessione=c.sessione and r.direzione='uscita'
+ and (r.data_messaggio>c.data_messaggio or (r.data_messaggio=c.data_messaggio and (length(r.messaggio_id)>length(c.messaggio_id) or (length(r.messaggio_id)=length(c.messaggio_id) and r.messaggio_id>c.messaggio_id))))
  and not r.modificato and length(trim(r.testo))>0
  and (case when s.assistente='2aef20d3-5ef8-4c81-8f21-bd450f22960c' or s.assistente is null then
  (r.consegna#>>'{whatsapp_message,status}' in ('delivered','read') or r.consegna#>>'{metadata,origin}'='whatsapp_coexistence')
@@ -70,16 +70,19 @@ select jsonb_build_object(
  'esterne',(select coalesce(jsonb_agg(x),'[]') from(select * from public.keplero_segnalazioni_esterne where esito='aperta' order by data_messaggio limit 200)x),
  'errori',(select coalesce(jsonb_agg(x),'[]') from(select sessione,attivita_at,errore from public.keplero_sessioni_originali where errore is not null order by attivita_at desc limit 50)x));
 $$;
-create function public.verifica_risposta_k(p_sessione uuid,p_messaggio_id text,p_motivo text,p_operatore text)
+create function public.verifica_risposta_k(p_sessione uuid,p_messaggio_id text,p_motivo text,p_operatore text,p_impronta text)
 returns void language plpgsql set search_path='' as $$
+declare attuale text;
 begin
  if p_operatore not in ('Operatore 1','Operatore 2','Operatore 3','Operatore 4') or p_operatore is null then raise exception 'Operatore non valido';end if;
+ select coalesce(revisione->>'impronta',impronta) into attuale from public.keplero_originali where sessione=p_sessione and messaggio_id=p_messaggio_id for update;
+ if attuale is null or p_impronta is distinct from attuale then raise exception 'Messaggio aggiornato: ricaricare la chat e verificare di nuovo';end if;
  insert into public.keplero_risposte_verificate(sessione,messaggio_id,motivo,operatore,impronta_verificata)
  select p_sessione,p_messaggio_id,p_motivo,p_operatore,coalesce(revisione->>'impronta',impronta) from public.keplero_originali where sessione=p_sessione and messaggio_id=p_messaggio_id
  on conflict(sessione,messaggio_id) do update set motivo=excluded.motivo,operatore=excluded.operatore,impronta_verificata=excluded.impronta_verificata,verificata_at=now();
 end; $$;
-revoke all on function public.conserva_snapshot_invalido_k(uuid,uuid,jsonb),public.controllo_risposte_k(),public.verifica_risposta_k(uuid,text,text,text) from public,anon,authenticated;
-grant execute on function public.conserva_snapshot_invalido_k(uuid,uuid,jsonb),public.controllo_risposte_k(),public.verifica_risposta_k(uuid,text,text,text) to service_role;
+revoke all on function public.conserva_snapshot_invalido_k(uuid,uuid,jsonb),public.controllo_risposte_k(),public.verifica_risposta_k(uuid,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.conserva_snapshot_invalido_k(uuid,uuid,jsonb),public.controllo_risposte_k(),public.verifica_risposta_k(uuid,text,text,text,text) to service_role;
 
 create or replace function public.registra_originali_k(p_lease uuid,p_sessione uuid,p_messaggi jsonb)
 returns jsonb language plpgsql security invoker set search_path='' as $$
@@ -141,4 +144,36 @@ begin
  return public.conferma_invio_documento_preventivo(d.id,jsonb_build_object('fonte','keplero_originale_verificato',
   'fonte_id','keplero:'||p_sessione||':'||p_messaggio_id,'direzione','uscita','esito','inviato','impronta_documento',d.impronta,
   'messaggio_id',p_messaggio_id,'conversazione_id',p_sessione,'verificata_originale',true,'inviato_at',m.data_messaggio));
+end; $$;
+
+create function public.verifica_segnalazione_esterna_k(p_id uuid,p_motivo text,p_operatore text)
+returns void language plpgsql set search_path='' as $$
+begin
+ if p_operatore is null or p_operatore not in ('Operatore 1','Operatore 2','Operatore 3','Operatore 4')
+ or p_motivo is null or length(trim(p_motivo)) not between 5 and 1000 then raise exception 'Verifica non valida';end if;
+ update public.keplero_segnalazioni_esterne set esito='verificata',motivo_verifica=p_motivo,operatore=p_operatore,verificata_at=now() where id=p_id and esito='aperta';
+ if not found then raise exception 'Segnalazione non aperta';end if;
+end; $$;
+revoke all on function public.verifica_segnalazione_esterna_k(uuid,text,text) from public,anon,authenticated;
+grant execute on function public.verifica_segnalazione_esterna_k(uuid,text,text) to service_role;
+notify pgrst,'reload schema';
+
+-- Ricontrolla anche la consegna, che può cambiare senza nuovi messaggi.
+create or replace function public.seleziona_sessioni_originali_k(p_lease uuid)
+returns jsonb language plpgsql security invoker set search_path='' as $$
+declare ids uuid[];
+begin
+ perform 1 from public.keplero_recupero_originali where lease=p_lease and scade_at>now() for update;
+ if not found then raise exception 'Lotto scaduto';end if;
+ insert into public.keplero_sessioni_originali(sessione,attivita_at)
+ select keplero_conversation_id::uuid,max(updated_at) from public.pratiche
+ where keplero_conversation_id~*'^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$' and updated_at>now()-interval '30 days'
+ group by keplero_conversation_id on conflict do nothing;
+ select array_agg(sessione) into ids from (
+ select s.sessione from public.keplero_sessioni_originali s
+ where (s.ultimo_successo_at is null or s.ultimo_successo_at<s.attivita_at or s.errore is not null or exists(select 1 from public.keplero_risposte_in_attesa a where a.sessione=s.sessione))
+ and (s.ultimo_tentativo_at is null or s.ultimo_tentativo_at<now()-interval '5 minutes')
+ order by s.attivita_at desc nulls last,s.ultimo_tentativo_at nulls first,s.sessione limit 8) x;
+ update public.keplero_sessioni_originali set lease=p_lease,ultimo_tentativo_at=now() where sessione=any(ids);
+ return coalesce(to_jsonb(ids),'[]');
 end; $$;
