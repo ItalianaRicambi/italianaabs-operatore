@@ -34,3 +34,11 @@ Prima dell’attivazione sono stati aggiunti:
 - Registrazione motivata dell’esito delle segnalazioni esterne, conservando testo e nota iniziali.
 
 226 test Node e build Next superati sulla versione aggiornata. I nuovi casi SQL sono predisposti per revisione, pagina obsoleta, consegna e gestione esterna; devono essere eseguiti nel database prima del merge e della pubblicazione.
+
+## Applicazione dalla console in caso di blocco degli strumenti
+
+La console è stata autenticata, ma il controllo del browser ha successivamente restituito `native credential state cannot be safely resumed`. Il tentativo diretto di applicazione è stato interrotto; la verifica SQL successiva ha confermato che tabella, funzione e voce di migrazione sono ancora assenti.
+
+Lo script `supabase/manual/attiva_controllo_risposte_keplero.sql` esegue, in un'unica transazione, la migrazione e il collaudo già predisposto. Usa un savepoint per eliminare i soli dati di prova, registra la versione della migrazione e conferma la modifica solo se il collaudo passa. Non invia messaggi e non pubblica il pannello.
+
+Dopo l'esecuzione, verificare tabella/funzione/storico tramite SQL, eseguire il controllo con il ruolo di servizio, poi completare PR 29 e verificare la distribuzione di produzione.
