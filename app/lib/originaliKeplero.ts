@@ -34,7 +34,9 @@ export function pdfOriginaleK(testo:string):{url:string;targa:string}|null {
   const u=new URL(testo.slice(11));
   if(u.protocol!=='https:'||u.hostname!=='v2.api.keplero.ai'||u.port||u.username||u.password||u.search||u.hash||!u.pathname.startsWith('/v2/session-attachments/'))return null;
   const nome=decodeURIComponent(u.pathname.split('/').at(-1)||'').split('$$name$$-').at(-1)||'';
-  const m=/^([A-Z]{2}\d{3}[A-Z]{2}|[A-Z]{2}\d{5})\.pdf$/i.exec(nome);
+  // Drive/WhatsApp rinomina le copie come «TARGA (1)» o «TARGA _1_».
+  // Il nome serve solo a individuare il PDF: targa interna e byte restano verificati.
+  const m=/^([A-Z]{2}\d{3}[A-Z]{2}|[A-Z]{2}\d{5})(?:[ ]*\([1-9]\d{0,2}\)|[ ]+_[1-9]\d{0,2}_)?\.pdf$/i.exec(nome);
   return m?{url:u.href,targa:m[1].toUpperCase()}:null;
  }catch{return null;}
 }

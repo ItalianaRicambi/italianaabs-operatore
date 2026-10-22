@@ -13,3 +13,5 @@ L'ordine viene recuperato solo con PDF originale e offerta collegata univocament
 La dashboard mostra lo stato del controllo e un accesso alle verifiche. Un controllo fermo o un elenco in errore è visibile. Archiviare una verifica non modifica la pratica. I ruoli pubblici non accedono a originali, ticket o funzioni di elaborazione.
 
 La migrazione parte con automatico=false. Attivazione solo dopo test SQL in rollback, compilazione, pubblicazione, 401 senza ticket e lettura reale verificata. Test: originaliKeplero.test.ts, conversazioniKeplero.test.ts, supabase/tests/recupero_originali_keplero.sql.
+
+Dal 22 ottobre il riconoscimento del nome accetta anche le copie numerate `TARGA (1).pdf` e `TARGA _1_.pdf`, prodotte da Drive e WhatsApp. Restano obbligatorie le verifiche della targa interna, dei byte e dell’invio nella conversazione corretta. I nomi di fatture/proforme e quelli con più targhe non vengono interpretati come offerte. Le copie già conservate con targa nulla richiedono il riallineamento del solo campo derivato prima della rilettura; il testo originale e la sua impronta restano immutati.

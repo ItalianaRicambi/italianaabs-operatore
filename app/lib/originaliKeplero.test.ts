@@ -36,3 +36,14 @@ test('download limitato e senza redirect; nessun segreto inviato al PDF',async()
  assert.equal(await improntaPdfOriginaleK(link,(async()=>new Response('HTML')) as typeof fetch),null);
  assert.equal(await improntaPdfOriginaleK(link,(async()=>new Response('%PDF-',{headers:{'content-length':String(4*1024*1024)}})) as typeof fetch),null);
 });
+test('le copie numerate mantengono la targa, senza accettare altri documenti o nomi ambigui',()=>{
+ const prefix='attachment:https://v2.api.keplero.ai/v2/session-attachments/uuid-%24%24name%24%24-';
+ for(const nome of ['ZZ001AA%20_1_.pdf','ZZ001AA%20(1).pdf','ZZ001AA(12).pdf']){
+  const content=prefix+nome;
+  assert.equal(pdfOriginaleK(content)?.targa,'ZZ001AA');
+  const file={...base,sender:'assistant',sender_type:'user',type:'file',content,metadata:{origin:'whatsapp_coexistence'}};
+  assert.equal(normalizzaOriginaliK(sessione,[file],ora)[0].targa_pdf,'ZZ001AA');
+  assert.equal(normalizzaOriginaliK(sessione,[{...file,metadata:{}}],ora)[0].targa_pdf,null);
+ }
+ for(const nome of ['ZZ001AA _0_.pdf','ZZ001AA _1000_.pdf','ZZ001AA _1_ ZZ002AA.pdf','Pro-Forma-123_2026-Cliente-Test.pdf','ZZ001AA (1) (2).pdf','ZZ001AA _1_.pdf?token=x'])assert.equal(pdfOriginaleK(prefix+nome),null);
+});
