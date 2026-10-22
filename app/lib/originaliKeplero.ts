@@ -17,7 +17,7 @@ export function normalizzaOriginaliK(sessione:string, messaggi:MessaggioKeplero[
   const direzione=m.sender==='user'?'entrata':m.sender==='assistant'?'uscita':'ignota';
   const t=m.content.toLowerCase();
   const revoca=direzione==='entrata'&&/\b(annull|revoc|non voglio|non vogliamo|non confermo|cambio|cambiamo|ripensat)/.test(t);
-  let candidato=revoca||(direzione==='entrata'&&m.type==='text'&&/\b(accett|conferm|proced|scelg|scelt|ripariamo|riparate|revisioniamo|revisionate|vorrei fare|rigenerat|bonifico|pagamento eseguito)/.test(t))||(direzione==='uscita'&&m.type==='file'&&/(fattura|proforma|pro-forma)/i.test(m.content));
+  let candidato=revoca||(direzione==='entrata'&&m.type==='text'&&/\b(accett|conferm|proced|scelg|scelt|ripariamo|riparate|revisioniamo|revisionate|vorrei fare|(?:voglio|vogliamo|desidero|desideriamo)\s+fare\s+(?:il\s+)?(?:programma\s+scambio|scambio|psmi\b|ps\b|ri\b|re\b|rc\b)|rigenerat|bonifico|pagamento eseguito)/.test(t))||(direzione==='uscita'&&m.type==='file'&&/(fattura|proforma|pro-forma)/i.test(m.content));
   const targa=pdfOriginaleK(m.content)?.targa||null;
   const metadata=m.metadata&&typeof m.metadata==='object'?m.metadata as Record<string,unknown>:{};
   const wa=m.whatsapp_message&&typeof m.whatsapp_message==='object'?m.whatsapp_message as Record<string,unknown>:{};
