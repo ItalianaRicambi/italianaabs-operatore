@@ -1,6 +1,6 @@
 # Controllo delle chat in attesa
 
-Stato al 21 ottobre 2026: il solo miglioramento del worker per isolare gli errori di abbinamento dei PDF è pubblicato. La pagina `/keplero/risposte` e la migrazione `controllo_risposte_keplero` sono una proposta ancora da applicare e collaudare nel database. Non pubblicare la pagina prima del collaudo SQL.
+Stato al 22 ottobre 2026: migrazione `20261021135041_controllo_risposte_keplero` applicata dalla console del progetto di produzione e collaudo SQL superato. La pagina `/keplero/risposte` è pronta per la pubblicazione con PR 29.
 
 Il caso osservato su WhatsApp non compare nella ricerca della console K per numero o nome. Le impostazioni mostrano canale connesso, nessun numero in lista nera e recupero AI dopo 15 minuti. Questo non dimostra perché il messaggio non sia stato acquisito: la riconciliazione con la casella WhatsApp e la verifica del fornitore restano necessarie. Il polling K non può scoprire messaggi assenti dal servizio.
 
@@ -42,3 +42,11 @@ La console è stata autenticata, ma il controllo del browser ha successivamente 
 Lo script `supabase/manual/attiva_controllo_risposte_keplero.sql` esegue, in un'unica transazione, la migrazione e il collaudo già predisposto. Usa un savepoint per eliminare i soli dati di prova, registra la versione della migrazione e conferma la modifica solo se il collaudo passa. Non invia messaggi e non pubblica il pannello.
 
 Dopo l'esecuzione, verificare tabella/funzione/storico tramite SQL, eseguire il controllo con il ruolo di servizio, poi completare PR 29 e verificare la distribuzione di produzione.
+
+## Attivazione del 22 ottobre 2026
+
+Il connettore `apply_migration` continua a restituire `Invalid or expired requestState`. Dopo il rinnovo dell’accesso autorizzato, la console web ha applicato la migrazione e i collaudi nella stessa transazione, registrando la versione `20261021135041`. Esito visibile: `COLLAUDO SUPERATO - MIGRAZIONE APPLICATA`.
+
+Superati i casi SQL con il ruolo `service_role`: isolamento tra chat, invio fallito/non consegnato, consegna successiva, risposta dalla coesistenza WhatsApp, verifica operatore, revisione del cliente, pagina obsoleta, nuovo messaggio e conservazione dell’evidenza esterna. I dati sintetici sono stati annullati al savepoint. Lettura anonima ed esecuzione autenticata del controllo restano negate.
+
+Prima lettura reale dopo il collaudo: 114 conversazioni recenti, zero letture incomplete nella finestra, 11 chat da verificare. I 12 errori storici `non_disponibile` sono precedenti alla finestra recente e rimangono visibili nei dettagli. Il recupero automatico risulta già attivo. Il conteggio indica messaggi senza risposta verificabile e richiede valutazione dell’operatore; può includere ringraziamenti. Il caso Roberto Calabrò resta distinto: non è stato dimostrato il ripristino dell’acquisizione da WhatsApp in K.
