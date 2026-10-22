@@ -23,6 +23,15 @@ test('rileva intenzioni, revoche, fatture e pagamento senza trasformarli in cons
  const r=normalizzaOriginaliK(sessione,[{...base,content:'Vorrei fare lo scambio con uno rigenerato'},{...base,id:2,content:'Non confermo, annullo'},{...base,id:3,content:'Pagamento eseguito'},{...base,id:4,sender:'assistant',sender_type:'user',type:'file',content:'attachment:https://v2.api.keplero.ai/v2/session-attachments/a-Fattura-530.pdf'}],ora);
  assert.ok(r.every(m=>m.candidato));assert.equal(r.find(m=>m.id==='2')?.revoca,true);
 });
+test('la scelta colloquiale dello scambio viene segnalata senza acquisire un ordine',()=>{
+ for(const content of ['Voglio fare programma scambio','Vogliamo fare il programma scambio','Desidero fare PS','Non voglio fare programma scambio','Voglio fare programma scambio se disponibile']){
+  const [m]=normalizzaOriginaliK(sessione,[{...base,content}],ora);
+  assert.equal(m.candidato,true,content);
+  assert.equal(m.testo,content);
+  assert.equal('ordine_confermato' in m,false);
+ }
+ assert.equal(normalizzaOriginaliK(sessione,[{...base,content:'Voglio fare una domanda'}],ora)[0].candidato,false);
+});
 test('PDF nome-targa solo su host e percorso fissi, senza query, credenziali o istruzioni',()=>{
  const buono='attachment:https://v2.api.keplero.ai/v2/session-attachments/uuid-%24%24name%24%24-ZZ001AA.pdf';
  assert.equal(pdfOriginaleK(buono)?.targa,'ZZ001AA');
