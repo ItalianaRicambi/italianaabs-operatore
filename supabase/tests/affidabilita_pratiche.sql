@@ -104,6 +104,26 @@ begin
  if private.pratica_nella_conversazione_k((x->>'pratica')::uuid,s) then raise exception 'Conversazione estranea accettata';end if;
  insert into risultati_affidabilita values('Conversazioni estranee restano separate');
 
+ -- Lo stesso PDF gia inviato, copiato in un'altra chat, non viene riassegnato
+ -- e non genera un errore tecnico ripetuto nel recupero generale.
+ x:=pg_temp.caso_k('ZZ140AA');p:=(x->>'pratica')::uuid;
+ perform private.riprova_pdf_originale_letto_k((x->>'sessione')::uuid,x->>'messaggio');
+ s:=gen_random_uuid();
+ insert into public.keplero_originali(sessione,messaggio_id,data_messaggio,data_originale,direzione,tipo,testo,impronta,candidato,revoca,targa_pdf,sha256_pdf)
+ select s,'copia-chat-distinta',data_messaggio,data_originale,direzione,tipo,testo,impronta,candidato,revoca,targa_pdf,sha256_pdf
+ from public.keplero_originali where sessione=(x->>'sessione')::uuid and messaggio_id=x->>'messaggio';
+ for i in 1..2 loop
+  r:=private.riprova_pdf_originale_letto_k(s,'copia-chat-distinta');
+  if r->>'esito' is distinct from 'conversazione_da_verificare' then raise exception 'Copia in altra chat non trattenuta: %',r;end if;
+  perform private.valuta_fonte_commerciale_k('originale',s||':copia-chat-distinta');
+ end loop;
+ if not exists(select 1 from public.keplero_esiti_fonti where fonte='originale' and chiave=s||':copia-chat-distinta'
+  and stato='da_verificare' and codice='pdf_inviato_non_collegato' and errore is null)
+  or not exists(select 1 from public.documenti_preventivo_auto where id=(x->>'documento')::uuid and pratica_id=p and stato='inviato')
+  or (select count(*) from public.preventivi where pratica_id=p)<>1
+  or private.pratica_nella_conversazione_k(p,s) then raise exception 'Copia in altra chat: prova, collegamento o stato alterati';end if;
+ insert into risultati_affidabilita values('PDF copiato in altra chat: verifica visibile, nessuna riassegnazione o errore al replay');
+
  -- Scelta di alternativa, condizioni, revoca, numeri economici.
  for i in 1..7 loop
   x:=pg_temp.caso_k('ZZ'||(110+i)::text||'AA',gen_random_uuid(),false,false,2);p:=(x->>'pratica')::uuid;s:=(x->>'sessione')::uuid;

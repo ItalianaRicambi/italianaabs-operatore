@@ -1,5 +1,12 @@
 # Stato del rilascio — 23 ottobre 2026
 
+**Aggiornamento del 24 ottobre:** recupero iniziale completato, zero ingressi
+da elaborare e zero errori tecnici. Il confronto sulle 1.733 pratiche preserva
+fatturazione, clienti e assistenze; la 2115 avanza con prova PDF verificata.
+Dettagli, correzione dei PDF tra chat e verifiche in
+[`chiusura-recupero-commerciale-20261024.md`](chiusura-recupero-commerciale-20261024.md).
+Le sezioni successive documentano le fasi precedenti.
+
 **Verifica della Dashboard autenticata e correzione del conteggio preventivi.**
 Le schermate dell’utente delle 23:39/23:43 confermano accesso e nuovi conteggi
 569/1.487. Evidenziano però un problema distinto: “Da preventivare: 109”
