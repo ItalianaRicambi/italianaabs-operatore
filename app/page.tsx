@@ -22,12 +22,15 @@ import {
   mesiDashboard,
 } from "./lib/dashboardMensile";
 import { fetchTutteLePagine } from "./lib/supabaseRest";
+import { correggiCodaOperativa } from "./lib/codeOperative";
 import { ordineConfermatoAperto, ordineDaCompletare, prontaPerFatturazione } from "./lib/fatturazione";
 import { rpcEmail } from './lib/emailLogisticaServer';
 import { StatoRisposteK } from './components/StatoRisposteK';
 import { StatoOriginaliK } from './components/StatoOriginaliK';
+import { StatoLavoriK } from './components/StatoLavoriK';
 
 type Pratica = {
+  verifica_tecnica_necessaria?: boolean;
   id: string;
   codice_pratica: string;
   created_at: string;
@@ -155,62 +158,6 @@ async function getControlloK(): Promise<{
   }
 }
 
-function correggiCodaOperativa(pratica: Pratica): Pratica {
-  // Le code assistenza sono già corrette nella view e restano intatte.
-  if (pratica.tipo_flusso === "assistenza") {
-    return pratica;
-  }
-
-  let coda = pratica.coda;
-  let priorita = pratica.priorita;
-
-  // Gli stati terminali prevalgono su qualunque dato storico di completezza.
-  if (pratica.stato_commerciale === "rifiutato") {
-    coda = "RIFIUTATA";
-    priorita = 99;
-  } else if (pratica.stato_commerciale === "chiuso") {
-    coda = "CHIUSA";
-    priorita = 99;
-  } else if (pratica.stato_fatturazione === "fatturato") {
-    // Una pratica fatturata non deve competere con attività ancora da svolgere.
-    coda = "FATTURATA";
-    priorita = 10;
-  } else if (pratica.stato_fatturazione === "da_fatturare") {
-    coda = prontaPerFatturazione(pratica)
-      ? "ORDINE ACQUISITO - DA FATTURARE"
-      : "ORDINE ACQUISITO - IN ATTESA DATI CLIENTE";
-    priorita = prontaPerFatturazione(pratica) ? 3 : 4;
-  } else if (pratica.stato_commerciale === "preventivo_inviato") {
-    coda = "PREVENTIVO INVIATO";
-    priorita = 9;
-  } else if (pratica.stato_commerciale === "richiesta_verifica") {
-    // L'operatore ha chiesto verifiche al cliente: la pratica resta in attesa
-    // e NON deve competere con le vere pratiche "Da verificare".
-    coda = "RICHIESTE VERIFICHE - ATTESA CLIENTE";
-    priorita = 7;
-  } else if (
-    ["nuova", "raccolta_dati", "da_preventivare"].includes(
-      pratica.stato_commerciale
-    ) &&
-    pratica.stato_completezza === "completa_da_preventivare"
-  ) {
-    // Solo una pratica commerciale ancora aperta può entrare nella coda preventivi.
-    coda = "DA PREVENTIVARE";
-    priorita = 2;
-  } else if (pratica.stato_completezza === "dati_integrati_da_verificare") {
-    coda = "DATI INTEGRATI - DA VERIFICARE";
-    priorita = 6;
-  } else if (pratica.stato_completezza === "dati_mancanti") {
-    coda = "DATI MANCANTI";
-    priorita = 8;
-  }
-
-  return {
-    ...pratica,
-    coda,
-    priorita,
-  };
-}
 
 function timestampOrdineCoda(pratica: Pratica) {
   if (pratica.coda === "DA PREVENTIVARE" && pratica.da_preventivare_at) {
@@ -348,12 +295,25 @@ async function getPratiche(): Promise<{
       console.error("Tempi lavorativi dashboard non disponibili:", error);
     }
 
+    let lavoriTecnici: { pratica_id: string }[] = [];
+    let erroreLavoriTecnici: string | null = null;
+    try {
+      lavoriTecnici = await fetchTutteLePagine<{ pratica_id: string }>(
+        `${url}/rest/v1/keplero_lavori_pratiche_elenco?select=pratica_id&stato=neq.risolta&verifica_tecnica_necessaria=eq.true&order=chiave.asc`,
+        { headers }
+      );
+    } catch {
+      erroreLavoriTecnici = "Richieste con verifiche tecniche non disponibili: controllare la coda Pratiche da completare o allineare.";
+    }
+    const praticheDaVerificareTecnicamente = new Set(lavoriTecnici.map(l => l.pratica_id));
+
     const praticheComplete = praticheBase.map((pratica) => {
       const meta = metadatiPerId.get(pratica.id);
       const tempi = tempiPerId.get(pratica.id);
 
       return {
         ...pratica,
+        verifica_tecnica_necessaria: praticheDaVerificareTecnicamente.has(pratica.id),
         ...(meta
           ? {
               fonte_completezza: meta.fonte_completezza,
@@ -424,7 +384,7 @@ async function getPratiche(): Promise<{
         offerta_da_verificare: ultimeOfferte.get(pratica.id)?.stato === "da_verificare",
       })),
       attivita,
-      errore: null,
+      errore: erroreLavoriTecnici,
     };
   } catch (error) {
     return {
@@ -706,6 +666,8 @@ function badgeClass(coda: string) {
       return "bg-amber-100 text-amber-800";
     case "DA PREVENTIVARE":
       return "bg-orange-100 text-orange-800";
+    case "PREVENTIVO - VERIFICA TECNICA":
+      return "bg-amber-100 text-amber-900";
     case "DATI INTEGRATI - DA VERIFICARE":
       return "bg-yellow-100 text-yellow-800";
     case "RICHIESTE VERIFICHE - ATTESA CLIENTE":
@@ -817,6 +779,9 @@ function filtraPratiche(
     case "da_preventivare":
       return pratiche.filter((pratica) => pratica.coda === "DA PREVENTIVARE");
 
+    case "verifica_tecnica_preventivo":
+      return pratiche.filter((pratica) => pratica.coda === "PREVENTIVO - VERIFICA TECNICA");
+
     case "preventivi_in_attesa":
       return pratiche.filter((pratica) => pratica.coda === "PREVENTIVO INVIATO");
 
@@ -925,7 +890,9 @@ function labelFiltro(
     case "richieste_verifiche":
       return "Richieste verifiche / Attesa cliente";
     case "da_preventivare":
-      return "Da preventivare";
+      return "Da preventivare · Dati completi";
+    case "verifica_tecnica_preventivo":
+      return "Preventivi · Verifica tecnica necessaria";
     case "preventivi_inviati":
     case "preventivi_mese_corrente":
       return `Preventivi emessi · ${etichettaCorrente}`;
@@ -981,6 +948,7 @@ export default async function Home({
   let emailStato: {ricevute:number;da_classificare:number;errori:number;ultima_ricezione:string|null;allegati_da_verificare:number}|null=null;
   try {emailStato=await rpcEmail('stato_richieste_email');}catch{/* L'errore rimane visibile nel riquadro email. */}
   const controlloKInRitardo = !controlloK.stato?.ultima_esecuzione_at ||
+    // eslint-disable-next-line react-hooks/purity -- Pagina server dinamica: valuta il ritardo rispetto all'ora della richiesta.
     Date.now() - new Date(controlloK.stato.ultima_esecuzione_at).getTime() > 15 * 60_000;
   const params = await searchParams;
 
@@ -1074,6 +1042,7 @@ export default async function Home({
     return attesa?.livello === "attenzione";
   }).length;
   const daPreventivare = conta(pratiche, "DA PREVENTIVARE");
+  const preventiviDaVerificareTecnicamente = conta(pratiche, "PREVENTIVO - VERIFICA TECNICA");
   const preventiviUrgenti = pratiche.filter((pratica) => {
     const attesa = attesaDaPreventivare(pratica);
     return attesa?.livello === "urgente";
@@ -1163,7 +1132,7 @@ export default async function Home({
 
         <div className="mb-4"><Link href="/mbe" className="font-bold text-blue-800 underline">Spedizioni MBE · tracking e abbinamenti</Link></div>
         <div className="mb-4"><Link href="/preventivi" className="font-bold text-blue-800 underline">Preventivi acquisiti automaticamente · invii da verificare</Link></div>
-        <StatoRisposteK /><StatoOriginaliK />
+        <StatoLavoriK /><StatoRisposteK /><StatoOriginaliK />
         <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-blue-950">Richieste email · info@italianaabs.com</h2><Link href="/email" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Apri richieste email</Link></div>
           {emailStato ? <p className="mt-3 text-sm">Ricevute: {emailStato.ricevute} · Da classificare: {emailStato.da_classificare} · Errori: {emailStato.errori} · Allegati da verificare: {emailStato.allegati_da_verificare}<br/>Ultima acquisizione: {formattaData(emailStato.ultima_ricezione)}</p> : <p role="alert" className="mt-3 text-sm text-red-800">Registro email non disponibile: verificare l’acquisizione delle richieste.</p>}
@@ -1392,6 +1361,14 @@ export default async function Home({
               className={preventiviUrgenti > 0 ? "border-red-500" : "border-orange-300"}
               href={hrefConFiltro("da_preventivare")}
               attiva={filtroAttivo === "da_preventivare"}
+            />
+            <DashboardFilterCard
+              titolo="Preventivi · Verifica tecnica"
+              valore={errore ? null : preventiviDaVerificareTecnicamente}
+              descrizione="Richieste da esaminare: dati ancora da completare o verificare"
+              className="border-amber-400"
+              href={hrefConFiltro("verifica_tecnica_preventivo")}
+              attiva={filtroAttivo === "verifica_tecnica_preventivo"}
             />
             <DashboardFilterCard
               titolo="Preventivi in attesa"
@@ -1855,6 +1832,7 @@ export default async function Home({
                         ) : (
                           <div>
                             <div>{pratica.nota_incompletezza || "—"}</div>
+                            {pratica.verifica_tecnica_necessaria && <div className="mt-1 text-xs font-bold text-amber-800">Da preventivare · Verifica tecnica necessaria</div>}
 
                             {pratica.coda ===
                               "RICHIESTE VERIFICHE - ATTESA CLIENTE" && (

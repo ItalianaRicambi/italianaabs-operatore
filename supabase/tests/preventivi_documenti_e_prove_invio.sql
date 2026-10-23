@@ -13,6 +13,9 @@ begin
  if (select stato_commerciale from public.pratiche where id=p)<>'da_preventivare' or exists(select 1 from public.preventivi where pratica_id=p) then raise exception 'Drive trattato come invio'; end if;
  r:=public.registra_documento_preventivo_auto(jsonb_build_object('external_id','test:documento:26','nome_file','TSTD26 (1).pdf','targa','TSTD26','data_offerta',now()-interval '1 hour','contenuto',c));
  if (select count(*) from public.documenti_preventivo_auto where external_id='test:documento:26')<>1 then raise exception 'Retry duplicato'; end if;
+ update public.documenti_preventivo_auto set sha256_pdf=repeat('c',64) where id=d;
+ insert into public.keplero_originali(sessione,messaggio_id,data_messaggio,data_originale,direzione,tipo,testo,impronta,candidato,revoca,targa_pdf,sha256_pdf)
+ values('11111111-1111-4111-8111-111111111111','26',now()-interval '30 minutes',(now()-interval '30 minutes')::text,'uscita','file','attachment:https://example.invalid/test.pdf',repeat('d',64),true,false,'TSTD26',repeat('c',64));
  prova:=jsonb_build_object('fonte','keplero_originale_verificato','fonte_id','keplero:11111111-1111-4111-8111-111111111111:26','conversazione_id','11111111-1111-4111-8111-111111111111','messaggio_id','26','direzione','entrata','esito','inviato','verificata_originale',true,'impronta_documento',repeat('a',64),'inviato_at',now()-interval '30 minutes');
  begin
   perform public.conferma_invio_documento_preventivo(d,prova);

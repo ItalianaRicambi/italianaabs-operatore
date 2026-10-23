@@ -1,6 +1,18 @@
 -- Tutti i dati di prova sono annullati. Verifica il vero trigger dell'intake,
 -- il recupero cron, il controllo indipendente e la separazione fra le pratiche.
 begin;
+create function pg_temp.offerta_letta_test(p uuid, scelta boolean default false)
+returns void language plpgsql set search_path='' as $$
+declare q uuid; r jsonb;
+begin
+ insert into public.preventivi(pratica_id,stato,inviato_at,creato_at)
+ select id,'inviato',preventivo_inviato_at,preventivo_inviato_at from public.pratiche where id=p returning id into q;
+ r:=public.registra_opzioni_offerta(q,'[{"numero":1,"numero_esplicito":true,"servizio":"RI","importo":447,"iva_inclusa":true},{"numero":2,"numero_esplicito":true,"servizio":"PS","importo":597,"iva_inclusa":true}]','fixture-offerta:'||p);
+ if scelta then
+  insert into public.scelte_cliente(pratica_id,offerta_id,opzione_id,stato,evidenza,richiesta_at,fonte)
+  select p,o.offerta_id,o.id,'confermata','Confermo RI',now()-interval '1 hour','keplero_originale' from public.offerta_opzioni o where o.offerta_id=(r->>'offerta_id')::uuid and o.servizio='RI';
+ end if;
+end; $$;
 do $test$
 declare
  v_p uuid; v_altro uuid; v_event bigint; v_quote timestamptz:=now()-interval '2 hours';
@@ -31,6 +43,8 @@ begin
  values('TSTI001','Test rollback ordine','commerciale','preventivo_inviato',v_quote,
    v_quote-interval '1 hour') returning id into v_p;
  insert into public.keplero_live_links(external_key,pratica_id) values('test:ordine:fiscali',v_p);
+ -- Il riepilogo e i fiscali completano una scelta già verificata, non la inventano.
+ perform pg_temp.offerta_letta_test(v_p,true);
  v_payload:=jsonb_build_object('targa','TSTI001','tipo_flusso','commerciale',
    'ultimo_messaggio_cliente',v_testo,'descrizione_guasto',v_riepilogo,
    'decisione_sistema',jsonb_build_object('ordine',jsonb_build_object('confermato',false)));
@@ -114,6 +128,7 @@ begin
  insert into public.pratiche(targa,nome_cliente,tipo_flusso,stato_commerciale,preventivo_inviato_at)
  values('TSTI005','Test intake servizio','commerciale','preventivo_inviato',now()-interval '2 hours') returning id into v_id;
  insert into public.keplero_live_links(external_key,pratica_id) values('test:ordine:intake',v_id);
+ perform pg_temp.offerta_letta_test(v_id,true);
  perform public.upsert_keplero_live(p_external_key=>'test:ordine:intake',p_targa=>'TSTI005',
    p_nome_cliente=>'Cliente Test',p_ultimo_messaggio_cliente=>v_testo,
    p_descrizione_guasto=>v_riepilogo,p_payload=>jsonb_build_object('targa','TSTI005',
@@ -127,6 +142,7 @@ begin
  insert into public.pratiche(targa,nome_cliente,tipo_flusso,stato_commerciale,preventivo_inviato_at)
  values('TSTI006','Test scelta proprietario','commerciale','preventivo_inviato',now()-interval '2 hours') returning id into v_id;
  insert into public.keplero_live_links(external_key,pratica_id) values('test:ordine:proprietario',v_id);
+ perform pg_temp.offerta_letta_test(v_id);
  insert into public.keplero_live_events(external_key,pratica_id,payload)
  values('test:ordine:proprietario',v_id,jsonb_build_object('targa','TSTI006',
    'ultimo_messaggio_cliente','Il proprietario ha deciso per la prima opzione, la lavorazione sull''originale. Come dobbiamo procedere?'));
