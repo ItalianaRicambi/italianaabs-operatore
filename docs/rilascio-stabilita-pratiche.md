@@ -1,5 +1,26 @@
 # Stato del rilascio — 23 ottobre 2026
 
+**Verifica della Dashboard autenticata e correzione del conteggio preventivi.**
+Le schermate dell’utente delle 23:39/23:43 confermano accesso e nuovi conteggi
+569/1.487. Evidenziano però un problema distinto: “Da preventivare: 109”
+comprendeva due richieste complete e 107 ancora incomplete, rese lavorabili
+per verifica tecnica dalla proiezione V2. Di queste, 79 sono di settembre e
+28 di ottobre; nessuna ha data d’invio, preventivo o versione d’offerta collegati
+alla stessa pratica nelle tabelle consultate. Questo non esclude PDF nelle chat
+ancora da riconciliare, e non giustifica associazioni sulla sola targa.
+La Dashboard separa ora “Da preventivare” da “Preventivi · Verifica tecnica”,
+con filtri e badge distinti; lo stato commerciale e la completezza restano
+quelli registrati. L’invio già riconosciuto, la fatturazione e gli stati terminali
+prevalgono sempre su una segnalazione tecnica precedente.
+Il confronto locale prima/dopo usa 33 gruppi anonimi letti dalla stessa vista
+della Dashboard, pari a tutte le 1.733 pratiche: cambia solo la collocazione
+delle 107 richieste, nessuna pratica scompare e gli altri conteggi coincidono.
+I dieci ordini confermati si dividono correttamente in nove da completare e
+uno pronto da fatturare. Passati venti test mirati (classificazione, protezioni
+di fatturazione e mesi), compilazione Next/TypeScript e lint dei file modificati.
+La correzione richiede solo l’aggiornamento dell’anteprima; nessuna nuova
+migrazione o azione manuale SQL. Il recupero generale resta sospeso.
+
 **Correzione coda installata e verificata nel database reale alle 23:31, ora italiana.**
 Il pacchetto corretto ha completato anche le prove prima del commit. La lettura
 indipendente conferma migrazione `20261023205350`, nuova colonna, 569 schede
