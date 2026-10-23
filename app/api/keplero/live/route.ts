@@ -16,6 +16,7 @@ import { messaggioRaccoltaKeplero } from "./indicazioniRaccolta";
 import { diagnosiSenzaErroriDichiarata } from "./esitoDiagnosi";
 import { classificaRichiesta } from "./classificazioneRichiesta";
 import { leggiOrdineContestuale } from "./ordineContestuale";
+import { leggiEsitoRegistrazioneCommerciale } from "./esitoRegistrazioneCommerciale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -685,8 +686,17 @@ export async function POST(request: NextRequest) {
     ) as Record<string, unknown>;
 
     if (instradamento.richiedi_targa === true) {
+      const conservazione = await fetch(`${url}/rest/v1/rpc/conserva_richiesta_senza_pratica_k`, {
+        method: "POST",
+        headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ p_external_key: baseKey, p_sessione: uuidValido(conversationId) ? conversationId : null, p_payload: payloadNormalizzato }),
+        cache: "no-store", signal: AbortSignal.timeout(15000),
+      });
+      if (!conservazione.ok) throw new Error("Registrazione della richiesta senza targa non completata");
+      const richiestaConservata = await conservazione.json();
       return NextResponse.json({
         ok: true,
+        registrazione: richiestaConservata,
         message:
           "Nuova vettura riconosciuta: prima di creare la pratica serve la targa.",
         action_required: "richiedi_targa",
@@ -1303,10 +1313,21 @@ export async function POST(request: NextRequest) {
     const istruzioneAssistenza = tipoFlusso === "assistenza"
       ? " Richiesta di assistenza registrata per verifica dell’operatore. I dati mancanti per un nuovo preventivo non bloccano la presa in carico tecnica. Non dichiarare risolto il problema, accettata la garanzia o prenotato il ritiro."
       : "";
+    const ricevutaResponse = await fetch(`${url}/rest/v1/rpc/esito_registrazione_commerciale_k`, {
+      method: "POST",
+      headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_pratica_id: praticaIdContesto, p_external_key: key }),
+      cache: "no-store", signal: AbortSignal.timeout(15000),
+    });
+    if (!ricevutaResponse.ok) throw new Error("Verifica dell'esito commerciale non disponibile");
+    const registrazione = leggiEsitoRegistrazioneCommerciale(await ricevutaResponse.json(), praticaIdContesto);
+
     return NextResponse.json({
       ok: true,
 
-      message: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini) + istruzioneFlusso + istruzioneRitiro + istruzioneAssistenza,
+      message: registrazione.istruzione + istruzioneFlusso + istruzioneRitiro + istruzioneAssistenza,
+      registrazione,
+      indicazioni_dati: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini),
 
       contesto_offerta: contestoOfferta,
       contesto_ritiro: contestoRientro,
@@ -1318,7 +1339,9 @@ export async function POST(request: NextRequest) {
         data,
 
       riconoscimento_ordine: {
-        confermato: riconoscimentoOrdine.confermato,
+        rilevato: riconoscimentoOrdine.confermato,
+        confermato: registrazione.ordine_registrato,
+        registrato: registrazione.ordine_registrato,
         fonte: riconoscimentoOrdine.fonte,
         avanzamento: avanzamentoOrdine,
       },

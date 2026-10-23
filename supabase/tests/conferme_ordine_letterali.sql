@@ -1,5 +1,17 @@
--- Test sul vero intake e sul cron. Nessun dato di prova viene conservato.
+-- Test sul vero intake e sul cron con offerta letta e alternative verificabili. Nessun dato di prova viene conservato.
 begin;
+create function pg_temp.offerta_letta_test(p uuid, scelta boolean default false)
+returns void language plpgsql set search_path='' as $$
+declare q uuid; r jsonb;
+begin
+ insert into public.preventivi(pratica_id,stato,inviato_at,creato_at)
+ select id,'inviato',preventivo_inviato_at,preventivo_inviato_at from public.pratiche where id=p returning id into q;
+ r:=public.registra_opzioni_offerta(q,'[{"numero":1,"numero_esplicito":true,"servizio":"RI","importo":447,"iva_inclusa":true},{"numero":2,"numero_esplicito":true,"servizio":"PS","importo":597,"iva_inclusa":true}]','fixture-offerta:'||p);
+ if scelta then
+  insert into public.scelte_cliente(pratica_id,offerta_id,opzione_id,stato,evidenza,richiesta_at,fonte)
+  select p,o.offerta_id,o.id,'confermata','Confermo RI',now()-interval '1 hour','keplero_originale' from public.offerta_opzioni o where o.offerta_id=(r->>'offerta_id')::uuid and o.servizio='RI';
+ end if;
+end; $$;
 do $test$
 declare v_p uuid; v_event bigint; v_quote timestamptz:=now()-interval '2 hours';
  v_testo text; v_idx integer:=0; v_targa text; v_key text; v_result jsonb;
@@ -18,6 +30,7 @@ begin
     v_quote-interval '1 hour')
   returning id into v_p;
   insert into public.keplero_live_links(external_key,pratica_id) values(v_key,v_p);
+  perform pg_temp.offerta_letta_test(v_p);
   insert into public.keplero_live_events(external_key,pratica_id,payload,created_at)
   values(v_key,v_p,jsonb_build_object('targa',v_targa,'ultimo_messaggio_cliente',v_testo,
     'decisione_sistema',jsonb_build_object('ordine',jsonb_build_object('confermato',false))),
@@ -64,7 +77,9 @@ begin
  insert into public.keplero_live_events(external_key,pratica_id,payload)
  values('test:ordine:cron-letterale',v_p,'{"targa":"TSTL005","ultimo_messaggio_cliente":"Codice ritiro GLS?"}');
  update public.pratiche set stato_commerciale='preventivo_inviato',preventivo_inviato_at=v_quote where id=v_p;
- if not exists(select 1 from private.candidati_coerenza_keplero()
+ perform pg_temp.offerta_letta_test(v_p);
+ if not exists(select 1 from public.pratiche where id=v_p and stato_commerciale='ordine_acquisito')
+  and not exists(select 1 from private.candidati_coerenza_keplero()
    where pratica_id=v_p and regola='scelta_offerta_senza_ordine') then
   raise exception 'Il controllo indipendente non segnala la scelta'; end if;
  perform private.recupera_ordini_contestuali_keplero();
@@ -106,6 +121,7 @@ begin
  insert into public.pratiche(targa,nome_cliente,tipo_flusso,stato_commerciale,preventivo_inviato_at)
  values('TSTL007','Test intake scelta letterale','commerciale','preventivo_inviato',now()-interval '2 hours') returning id into v_p;
  insert into public.keplero_live_links(external_key,pratica_id) values('test:ordine:intake-letterale',v_p);
+ perform pg_temp.offerta_letta_test(v_p);
  perform public.upsert_keplero_live(p_external_key=>'test:ordine:intake-letterale',p_targa=>'TSTL007',
   p_nome_cliente=>'Test intake scelta letterale',p_ultimo_messaggio_cliente=>'ok mi sta bene la prima proposta quella di 447',
   p_payload=>'{"targa":"TSTL007","ultimo_messaggio_cliente":"ok mi sta bene la prima proposta quella di 447","ordine_confermato_rilevato":false}');

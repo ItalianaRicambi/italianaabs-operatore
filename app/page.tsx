@@ -26,8 +26,10 @@ import { ordineConfermatoAperto, ordineDaCompletare, prontaPerFatturazione } fro
 import { rpcEmail } from './lib/emailLogisticaServer';
 import { StatoRisposteK } from './components/StatoRisposteK';
 import { StatoOriginaliK } from './components/StatoOriginaliK';
+import { StatoLavoriK } from './components/StatoLavoriK';
 
 type Pratica = {
+  verifica_tecnica_necessaria?: boolean;
   id: string;
   codice_pratica: string;
   created_at: string;
@@ -189,6 +191,12 @@ function correggiCodaOperativa(pratica: Pratica): Pratica {
     coda = "RICHIESTE VERIFICHE - ATTESA CLIENTE";
     priorita = 7;
   } else if (
+    ["nuova", "raccolta_dati"].includes(pratica.stato_commerciale) &&
+    pratica.verifica_tecnica_necessaria
+  ) {
+    coda = "DA PREVENTIVARE";
+    priorita = 2;
+  } else if (
     ["nuova", "raccolta_dati", "da_preventivare"].includes(
       pratica.stato_commerciale
     ) &&
@@ -348,12 +356,25 @@ async function getPratiche(): Promise<{
       console.error("Tempi lavorativi dashboard non disponibili:", error);
     }
 
+    let lavoriTecnici: { pratica_id: string }[] = [];
+    let erroreLavoriTecnici: string | null = null;
+    try {
+      lavoriTecnici = await fetchTutteLePagine<{ pratica_id: string }>(
+        `${url}/rest/v1/keplero_lavori_pratiche_elenco?select=pratica_id&stato=neq.risolta&verifica_tecnica_necessaria=eq.true&order=chiave.asc`,
+        { headers }
+      );
+    } catch {
+      erroreLavoriTecnici = "Richieste con verifiche tecniche non disponibili: controllare la coda Pratiche da completare o allineare.";
+    }
+    const praticheDaVerificareTecnicamente = new Set(lavoriTecnici.map(l => l.pratica_id));
+
     const praticheComplete = praticheBase.map((pratica) => {
       const meta = metadatiPerId.get(pratica.id);
       const tempi = tempiPerId.get(pratica.id);
 
       return {
         ...pratica,
+        verifica_tecnica_necessaria: praticheDaVerificareTecnicamente.has(pratica.id),
         ...(meta
           ? {
               fonte_completezza: meta.fonte_completezza,
@@ -424,7 +445,7 @@ async function getPratiche(): Promise<{
         offerta_da_verificare: ultimeOfferte.get(pratica.id)?.stato === "da_verificare",
       })),
       attivita,
-      errore: null,
+      errore: erroreLavoriTecnici,
     };
   } catch (error) {
     return {
@@ -1163,7 +1184,7 @@ export default async function Home({
 
         <div className="mb-4"><Link href="/mbe" className="font-bold text-blue-800 underline">Spedizioni MBE · tracking e abbinamenti</Link></div>
         <div className="mb-4"><Link href="/preventivi" className="font-bold text-blue-800 underline">Preventivi acquisiti automaticamente · invii da verificare</Link></div>
-        <StatoRisposteK /><StatoOriginaliK />
+        <StatoLavoriK /><StatoRisposteK /><StatoOriginaliK />
         <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-blue-950">Richieste email · info@italianaabs.com</h2><Link href="/email" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Apri richieste email</Link></div>
           {emailStato ? <p className="mt-3 text-sm">Ricevute: {emailStato.ricevute} · Da classificare: {emailStato.da_classificare} · Errori: {emailStato.errori} · Allegati da verificare: {emailStato.allegati_da_verificare}<br/>Ultima acquisizione: {formattaData(emailStato.ultima_ricezione)}</p> : <p role="alert" className="mt-3 text-sm text-red-800">Registro email non disponibile: verificare l’acquisizione delle richieste.</p>}
@@ -1855,6 +1876,7 @@ export default async function Home({
                         ) : (
                           <div>
                             <div>{pratica.nota_incompletezza || "—"}</div>
+                            {pratica.verifica_tecnica_necessaria && <div className="mt-1 text-xs font-bold text-amber-800">Da preventivare · Verifica tecnica necessaria</div>}
 
                             {pratica.coda ===
                               "RICHIESTE VERIFICHE - ATTESA CLIENTE" && (

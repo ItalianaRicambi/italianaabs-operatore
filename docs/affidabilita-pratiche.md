@@ -1,9 +1,11 @@
 # Affidabilità del percorso richiesta → preventivo → ordine
 
-Analisi del 23 ottobre 2026. Stato: diagnosi verificata e due pratiche corrette;
-la sostituzione del motore descritta sotto è una specifica da implementare e
-collaudare, **non è attiva**. Nessuna nuova regola generale è stata distribuita
-con questa analisi. La routine email → WhatsApp resta in attesa.
+Analisi e implementazione del 23 ottobre 2026. Il motore è preparato nel ramo
+`codex/motore-pratiche-20261023`, con migrazione, coda e collaudi locali.
+**Non è attivo in produzione.** Il rilascio e il recupero generale richiedono
+ancora il collaudo su Supabase e la verifica del percorso con K.
+Stato, prove eseguite e procedura: [rilascio-stabilita-pratiche.md](rilascio-stabilita-pratiche.md).
+La routine email → WhatsApp resta in attesa.
 
 ## Risultato richiesto
 
