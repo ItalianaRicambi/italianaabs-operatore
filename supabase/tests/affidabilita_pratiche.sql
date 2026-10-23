@@ -36,7 +36,10 @@ begin
  if has_table_privilege('anon','public.keplero_esiti_fonti','select')
   or has_table_privilege('authenticated','public.keplero_lavori_pratiche','update')
   or has_function_privilege('anon','public.riconcilia_esiti_commerciali_k(integer,boolean)','execute')
-  or has_function_privilege('authenticated','public.esito_registrazione_commerciale_k(uuid,text)','execute') then raise exception 'Permessi pubblici non consentiti';end if;
+  or has_function_privilege('authenticated','public.esito_registrazione_commerciale_k(uuid,text)','execute')
+  or has_function_privilege('anon','private.leggi_esito_elaborazione_k(bigint)','execute')
+  or has_table_privilege('service_role','private.keplero_event_processing','select')
+  or has_table_privilege('service_role','private.keplero_event_processing','update') then raise exception 'Permessi pubblici non consentiti';end if;
  insert into risultati_affidabilita values('RLS e funzioni riservate al backend');
 
  -- BMW: l'assenza dei DTC mantiene un lavoro visibile, senza inventare la diagnosi.
@@ -161,7 +164,10 @@ begin
  values('conversation:'||s,p,jsonb_build_object('targa','ZZ130AA','ultimo_messaggio_cliente','Come si effettua il bonifico?','ordine_confermato_rilevato',true)) returning id into n;
  perform private.valuta_fonte_commerciale_k('live',n::text);
  if exists(select 1 from public.pratiche where id=p and stato_commerciale='ordine_acquisito')
-  or not exists(select 1 from public.keplero_esiti_fonti where fonte='live' and chiave=n::text and codice='consenso_non_registrato' and stato='da_verificare') then raise exception 'Flag AI acquisito o eccezione persa';end if;
+  or not exists(select 1 from public.keplero_esiti_fonti where fonte='live' and chiave=n::text and codice='consenso_non_registrato' and stato='da_verificare') then raise exception 'Flag AI: stato=%, registro=%, elaborazione=%',
+  (select stato_commerciale from public.pratiche where id=p),
+  (select jsonb_build_object('stato',stato,'codice',codice,'errore',errore) from public.keplero_esiti_fonti where fonte='live' and chiave=n::text),
+  private.leggi_esito_elaborazione_k(n);end if;
  insert into risultati_affidabilita values('Flag AI positivo senza prova: ordine trattenuto ed eccezione visibile');
 
  -- Doppio messaggio: consenso generico e poi scelta breve, con replay.
@@ -172,9 +178,14 @@ begin
  if exists(select 1 from public.pratiche where id=p and stato_commerciale='ordine_acquisito') then raise exception 'Scelta ambigua acquisita prima del chiarimento';end if;
  insert into public.keplero_live_events(external_key,pratica_id,payload,created_at)
  values('conversation:'||s,p,jsonb_build_object('targa','ZZ131AA','ultimo_messaggio_cliente','RI'),now()-interval '1 minute') returning id into n;
+ set local role postgres;
  perform private.riprocessa_evento_keplero(n);
+ set local role service_role;
  if not exists(select 1 from public.pratiche where id=p and stato_commerciale='ordine_acquisito' and ordine_acquisito_at=now()-interval '1 minute')
   or not exists(select 1 from public.scelte_cliente where pratica_id=p and stato='confermata') then raise exception 'Chiarimento breve o replay non corretti';end if;
+ insert into public.keplero_live_events(external_key,pratica_id,payload,created_at)
+ select external_key,pratica_id,payload,created_at from public.keplero_live_events where id=n;
+ if not exists(select 1 from public.scelte_cliente where pratica_id=p and stato='confermata') then raise exception 'Risposta breve duplicata ha modificato la scelta';end if;
  insert into risultati_affidabilita values('Consenso e scelta su due messaggi: ordine e data preservati al replay');
 
  -- Scadenza esplicita, documento illeggibile e correzioni operatore.
@@ -203,14 +214,31 @@ begin
  set local role service_role;
  perform private.valuta_fonte_commerciale_k('live',n::text);
  if not exists(select 1 from public.keplero_esiti_fonti where fonte='live' and chiave=n::text and codice='elaborazione_non_verificata' and stato='in_attesa') then raise exception 'Esito assente scambiato per successo';end if;
+ set local role postgres;
  perform private.elabora_evento_keplero(n);
  update private.keplero_event_processing set stato='da_verificare' where event_id=n;
+ set local role service_role;
  perform private.valuta_fonte_commerciale_k('live',n::text);
  if not exists(select 1 from public.keplero_esiti_fonti where fonte='live' and chiave=n::text and codice='ingresso_da_verificare' and stato='da_verificare') then raise exception 'Allegato da verificare scambiato per successo';end if;
+ set local role postgres;
  update private.keplero_event_processing set stato='errore',errore='Errore sintetico' where event_id=n;
+ set local role service_role;
  perform private.valuta_fonte_commerciale_k('live',n::text);
  if not exists(select 1 from public.keplero_esiti_fonti where fonte='live' and chiave=n::text and codice='errore_elaborazione' and stato='da_verificare') then raise exception 'Errore scambiato per successo';end if;
  insert into risultati_affidabilita values('Esito mancante, allegati da verificare ed errore restano visibili');
+ -- Anche la chiamata backend del riconciliatore usa i privilegi previsti,
+ -- senza allargare l’accesso diretto del servizio al registro interno.
+ x:=pg_temp.caso_k('ZZ136AA');p:=(x->>'pratica')::uuid;s:=(x->>'sessione')::uuid;
+ insert into public.keplero_live_events(external_key,pratica_id,payload)
+ values('conversation:'||s,p,jsonb_build_object('targa','ZZ136AA','ultimo_messaggio_cliente','Dati del componente ricevuti')) returning id into n;
+ update public.keplero_esiti_fonti set prossimo_tentativo_at=now()+interval '1 day' where fonte<>'live' or chiave<>n::text;
+ r:=public.riconcilia_esiti_commerciali_k(1,true);
+ if r->>'esito' is distinct from 'completato' or r->>'esiti_elaborati' is distinct from '1'
+  or not exists(select 1 from public.keplero_esiti_fonti where fonte='live' and chiave=n::text and stato='applicato' and errore is null)
+ then raise exception 'Riconciliazione backend non completa: %',r;end if;
+ r:=public.stato_esiti_commerciali_k();
+ if jsonb_typeof(r->'controllo') is distinct from 'object' then raise exception 'Stato controllo non leggibile dal backend';end if;
+ insert into risultati_affidabilita values('Permessi reali: riconciliazione e stato backend senza accesso diretto al registro');
  if public.riconcilia_esiti_commerciali_k()->>'esito'<>'sospeso' then raise exception 'Attivazione prematura';end if;
  insert into risultati_affidabilita values('Riconciliatore predisposto ma non attivo prima del collaudo');
 end; $test$;

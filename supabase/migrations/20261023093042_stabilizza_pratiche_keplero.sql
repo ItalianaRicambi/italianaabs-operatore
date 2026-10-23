@@ -528,6 +528,16 @@ begin perform private.aggiorna_lavoro_pratica_k(new.id);return new;end; $$;
 create trigger zzzz_ricalcola_lavoro_k after insert or update on public.pratiche
 for each row execute function private.ricalcola_lavoro_pratica_k();
 
+-- Espone al backend solo l’esito necessario, mantenendo privato il registro.
+-- Il servizio non riceve permessi diretti di lettura o scrittura sulla tabella.
+create function private.leggi_esito_elaborazione_k(p_evento bigint)
+returns jsonb language sql stable security definer set search_path='' as $$
+ select jsonb_build_object('stato',ep.stato,'decisione',jsonb_build_object('esito_ordine',ep.decisione->'esito_ordine'))
+ from private.keplero_event_processing ep where ep.event_id=p_evento;
+$$;
+revoke all on function private.leggi_esito_elaborazione_k(bigint) from public,anon,authenticated;
+grant execute on function private.leggi_esito_elaborazione_k(bigint) to service_role;
+
 create function private.valuta_fonte_commerciale_k(p_fonte text,p_chiave text)
 returns void language plpgsql security invoker set search_path='' as $$
 declare e public.keplero_esiti_fonti%rowtype; m public.keplero_originali%rowtype;
@@ -540,7 +550,7 @@ begin
  if p_fonte='live' then
   select * into p from public.pratiche where id=e.pratica_id;
   if p.id is not null then
-   select to_jsonb(ep) into risultato from private.keplero_event_processing ep where event_id=p_chiave::bigint;
+   risultato:=private.leggi_esito_elaborazione_k(p_chiave::bigint);
    if risultato is null then v_stato:='in_attesa';v_codice:='elaborazione_non_verificata';v_motivo:='Webhook ricevuto; verificare il risultato del motore prima di dichiararlo elaborato.';
    elsif risultato->>'stato'='errore' then v_stato:='da_verificare';v_codice:='errore_elaborazione';v_motivo:='Rielaborare il webhook: una fase ha restituito errore.';
    elsif risultato#>>'{decisione,esito_ordine,motivo}' in ('preventivo_non_registrato','collegamento_keplero_non_valido','stato_non_abilitato','dati_non_completi','consenso_da_verificare','offerta_non_letta','scelta_offerta_non_verificata','episodio_da_chiarire','offerta_scaduta_o_tempi_discordanti')
@@ -673,7 +683,7 @@ end; $$;
 -- Il coordinatore usa gli stessi verificatori del canale live e del recupero
 -- PDF. Non crea un secondo insieme di regole per accettare ordini.
 create function public.riconcilia_esiti_commerciali_k(p_limite integer default 250,p_forza boolean default false)
-returns jsonb language plpgsql security invoker set search_path='' as $$
+returns jsonb language plpgsql security definer set search_path='' as $$
 declare e record; p record; m public.keplero_originali%rowtype; n integer:=0;
 begin
  if not p_forza and not (select attivo from public.keplero_stato_riconciliazione where id) then
@@ -704,7 +714,7 @@ begin
   n:=n+1;
  end loop;
  for p in select id from public.pratiche where dati_raw->>'origine'='keplero_live'
-  and (tipo_flusso='commerciale' or exists(select 1 from public.keplero_esiti_fonti e where e.pratica_id=pratiche.id and e.stato in ('ricevuto','da_verificare','in_attesa')))
+  and (tipo_flusso='commerciale' or exists(select 1 from public.keplero_esiti_fonti fonte_pratica where fonte_pratica.pratica_id=pratiche.id and fonte_pratica.stato in ('ricevuto','da_verificare','in_attesa')))
  loop perform private.aggiorna_lavoro_pratica_k(p.id);end loop;
  perform private.aggiorna_lavori_senza_pratica_k();
  update public.keplero_stato_riconciliazione set ultimo_successo_at=now(),errore=null,esiti_elaborati=n where id;
@@ -1355,6 +1365,10 @@ begin
    and private.conferma_letterale_offerta(s.evidenza) and not private.preferenza_senza_conferma(s.evidenza)
    and not exists(select 1 from public.keplero_live_events r where r.pratica_id=p.id and r.id>s.evento_id and r.id<e.id
     and private.revoca_scelta_cliente(coalesce(r.payload->>'ultimo_messaggio_cliente',''))) then v_conferma:=true; end if;
+  if v_risposta_breve and s.stato='confermata' and s.offerta_id=q.id and cardinality(v_ids)=1
+   and s.opzione_id=v_ids[1] and not private.preferenza_senza_conferma(t)
+   and not private.rinvio_conferma_per_verifiche(t) and t !~ '\m(se|qualora|altrimenti|eventualmente|forse)\M'
+  then return jsonb_build_object('esito','conferma_preservata');end if;
   v_stato:=case when t~'\m(se|qualora|altrimenti)\M' then 'condizionata'
    when v_conferma and v_count=1 and q.stato='letta' then 'confermata'
    when v_conferma or v_count<>1 then 'da_chiarire' else 'preferenza' end;

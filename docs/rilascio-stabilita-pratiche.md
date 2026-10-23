@@ -1,11 +1,14 @@
 # Stato del rilascio — 23 ottobre 2026
 
-Implementazione preparata, **non distribuita né attivata**. Le due tabelle
-principali non risultano presenti nel database reale nella verifica finale.
-Il tentativo di migrazione attraverso il connettore è fallito con
-`Invalid or expired requestState`; anche l'editor del browser ha restituito
-`credential_observation_restricted`. Nessun comando Run è stato eseguito nel
-browser per questa migrazione. Il rilascio resta fermo prima delle scritture.
+Implementazione preparata, **non distribuita né attivata**. Il primo tentativo
+manuale con il file completo è stato fermato dal collaudo dei permessi: tabelle,
+funzioni nuove e cronologia di migrazione risultano assenti nella rilettura.
+La transazione non è stata salvata. Il connettore continua a restituire
+`Invalid or expired requestState` e il browser automatico segnala
+`credential_observation_restricted`; per il prossimo tentativo manuale usare
+il pacchetto **VERSIONE 2** generato da `scripts/prepara_installazione_pratiche.py`.
+Il generatore unisce precontrollo delle sette funzioni precedenti, migrazione,
+19 gruppi di prove e 11 regressioni: il commit avviene dopo tutti i collaudi.
 
 ## Cosa cambia
 
@@ -32,8 +35,17 @@ La routine email → WhatsApp resta sospesa. Non sono introdotti invii al client
 
 La struttura del database reale è stata letta da catalogo, senza importare dati
 dei clienti: 51 tabelle, 181 funzioni, vincoli, 73 indici aggiuntivi e 9 viste.
-La migrazione è stata eseguita in un PostgreSQL isolato tramite PGlite; cron e
-identità del servizio sono predisposti solo per il collaudo locale. Questo
+Il primo tentativo nel database reale è stato annullato dal test del flag AI:
+la valutazione tentava di leggere direttamente un registro privato. La correzione
+espone solo stato ed esito mediante una funzione riservata al backend, senza
+concedere accesso diretto alla tabella. Il riconciliatore esegue i recuperi come
+proprietario, tramite la sola RPC riservata.
+
+La migrazione è stata nuovamente eseguita con le ACL effettive di 180 coppie
+relazione/ruolo, 543 coppie funzione/ruolo e le colonne identity reali,
+in un PostgreSQL isolato tramite PGlite; cron è predisposto solo per il collaudo locale. Il precedente ambiente
+locale aveva permessi più ampi sul registro privato; questo limite è corretto
+e la suite ora verifica anche il divieto di accesso diretto del servizio. Questo
 verifica SQL, trigger e comportamento, ma non sostituisce il collaudo nella
 versione PostgreSQL gestita da Supabase, il funzionamento del cron remoto,
 la concorrenza reale o il percorso HTTP e K.
@@ -43,7 +55,7 @@ Superati:
 - 127 test TypeScript del canale live, compresa la ricevuta di registrazione;
 - compilazione Next e controllo TypeScript;
 - lint dei nuovi moduli;
-- 18 gruppi di prove in `supabase/tests/affidabilita_pratiche.sql`;
+- 19 gruppi di prove in `supabase/tests/affidabilita_pratiche.sql`;
 - 11 suite SQL precedenti: conferme letterali, plico e instradamento,
   consenso originale e PDF tardivi, guardie delle offerte, ingresso PDF,
   scelte e ritiri, intenzione e fiscali, documenti e prove d'invio,
