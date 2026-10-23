@@ -46,9 +46,23 @@ La correzione e verificata sui due casi reali e con replay sintetico.
 
 ## Rilascio e continuita
 
-Il recupero manuale e completato. Restano in corso il rilascio della PR 32 tramite
-GitHub/Vercel e la successiva attivazione del controllo periodico, da verificare
-con un'esecuzione autonoma e una nuova lettura del registro. Il collegamento
-Vercel continua a rispondere 403; l'integrazione GitHub e il canale di rilascio.
+La PR 32 e stata unita in main al commit
+`9cfe35d38499ef68dfb0554c288c3b5cb544115a`. La distribuzione Production
+`GyhB1REzV14Xa7BmFFKDnzp4i6pJ` risulta riuscita per quel commit.
+Il nuovo test di concorrenza PostgreSQL 17 e passato anche sul commit finale
+`a06943d30cdbb5f83cf623bd746bf32254122f27` (run `40040435028`).
+
+Il controllo e attivo (`attivo=true`), cron ogni minuto. Primo ciclo autonomo
+verificato nel database: run 46655, inizio 2026-10-23 23:36:00 UTC, completato
+alle 23:36:04 UTC; 250 esiti elaborati, nessun errore. Rilettura indipendente:
+zero ingressi ricevuti, zero ritardi e zero errori. Restano le stesse 1.683
+schede operative: le prove mancanti non diventano conferme per effetto del retry.
+
+La pagina Production `/keplero/pratiche` richiede l'accesso operatore e riporta
+al login in assenza di sessione, verificato anche nel browser. La sessione
+autenticata dell'utente non e disponibile nel browser di collaudo: questa
+verifica non certifica una nuova navigazione autenticata in produzione, ne
+un invio dal vero strumento K. Il collegamento Vercel continua a rispondere
+403; l'integrazione GitHub e stata il canale di rilascio.
 Non sono introdotti invii ai clienti e la routine email verso WhatsApp rimane
 sospesa. La sincronizzazione oraria delle fatture resta un processo separato.
