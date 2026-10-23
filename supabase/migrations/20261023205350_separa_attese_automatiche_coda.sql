@@ -2,7 +2,7 @@
 -- Richieste esplicite, anomalie gia valutate e schede assegnate restano operative.
 do $preflight$
 begin
- if (select encode(sha256(convert_to(btrim(prosrc,E' \t\r\n'),'UTF8')),'hex') from pg_proc
+ if (select encode(sha256(convert_to(btrim(replace(prosrc,E'\r\n',E'\n'),E' \t\r\n'),'UTF8')),'hex') from pg_proc
   where oid='public.stato_esiti_commerciali_k()'::regprocedure)
   is distinct from '62e54f9bf46edfba6ebe25a3a5c3935f45ffa09f8c52799c2b0b40e7b7234d1f' then
   raise exception 'Definizione del controllo cambiata: rivalutare la migrazione';

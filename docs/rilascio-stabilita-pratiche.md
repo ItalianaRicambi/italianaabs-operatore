@@ -37,7 +37,18 @@ La proiezione aggrega le fonti una sola volta; la lettura sullo storico reale
 restituisce gli stessi conteggi senza le ripetute ricerche per singola scheda.
 
 **Correzione coda pronta, non ancora installata né distribuita.**
-`patch_coda_operatore.txt` esegue la migrazione, collauda le varianti con ACL
+Il primo tentativo remoto è stato fermato dal precontrollo: il file non
+normalizzava i ritorni a capo CRLF presenti nella funzione installata tramite
+Windows. Il database conferma migrazione assente, vista precedente, nessuna
+fixture e riconciliatore sospeso. La versione corretta normalizza soltanto CRLF
+in LF prima dell'impronta, mantenendo il confronto esatto del resto del codice.
+La stessa espressione verificata in sola lettura sul database remoto coincide
+con l'impronta attesa. Il pacchetto completo passa in locale sia LF sia CRLF;
+una modifica reale al predicato della funzione viene ancora rifiutata e annulla
+la transazione senza modifiche a vista o storico migrazioni. Usare il pacchetto
+corretto `patch_coda_operatore_v2.txt`, che sostituisce il precedente.
+
+`patch_coda_operatore_v2.txt` esegue la migrazione, collauda le varianti con ACL
 reali dentro un savepoint, annulla tutte le fixture e conserva la patch.
 Il pacchetto completo e il ripristino passano nel database locale isolato;
 passano nuovamente i 19 gruppi e le 11 regressioni, oltre alla nuova suite
