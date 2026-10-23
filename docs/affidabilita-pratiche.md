@@ -1,9 +1,10 @@
 # Affidabilità del percorso richiesta → preventivo → ordine
 
-Analisi e implementazione del 23 ottobre 2026. Il motore è preparato nel ramo
-`codex/motore-pratiche-20261023`, con migrazione, coda e collaudi locali.
-**Non è attivo in produzione.** Il rilascio e il recupero generale richiedono
-ancora il collaudo su Supabase e la verifica del percorso con K.
+Analisi e implementazione del 23 ottobre 2026, ramo `codex/motore-pratiche-20261023`.
+La migrazione V2 e i suoi collaudi sono stati eseguiti in produzione e verificati
+con una lettura indipendente. **La nuova applicazione non è ancora distribuita
+e il riconciliatore resta sospeso.** Restano la correzione della contesa nel
+recupero originali e il collaudo del percorso completo con K.
 Stato, prove eseguite e procedura: [rilascio-stabilita-pratiche.md](rilascio-stabilita-pratiche.md).
 La routine email → WhatsApp resta in attesa.
 

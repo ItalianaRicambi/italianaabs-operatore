@@ -1,14 +1,50 @@
 # Stato del rilascio — 23 ottobre 2026
 
-Implementazione preparata, **non distribuita né attivata**. Il primo tentativo
-manuale con il file completo è stato fermato dal collaudo dei permessi: tabelle,
-funzioni nuove e cronologia di migrazione risultano assenti nella rilettura.
-La transazione non è stata salvata. Il connettore continua a restituire
-`Invalid or expired requestState` e il browser automatico segnala
-`credential_observation_restricted`; per il prossimo tentativo manuale usare
-il pacchetto **VERSIONE 2** generato da `scripts/prepara_installazione_pratiche.py`.
-Il generatore unisce precontrollo delle sette funzioni precedenti, migrazione,
-19 gruppi di prove e 11 regressioni: il commit avviene dopo tutti i collaudi.
+**Migrazione V2 installata in produzione alle 16:36 circa, ora italiana.**
+L'esito finale e una lettura indipendente confermano la versione `20261023093042`,
+le nuove tabelle, le funzioni e l'assenza delle fixture `test_affidabilita`.
+I 19 gruppi e le 11 regressioni sono passati prima del commit remoto.
+Il riconciliatore resta `attivo=false`; il cron è predisposto e quattro esecuzioni
+di controllo sono riuscite senza avviare la riconciliazione.
+**La nuova applicazione non è distribuita e il recupero generale non è attivo.**
+Non rieseguire l'installer V2: sostituisce funzioni e crea tabelle già presenti.
+
+Il primo tentativo completo era stato annullato dal collaudo dei permessi.
+Rimane indisponibile il canale di scrittura automatica Supabase
+(`Invalid or expired requestState`). Il browser automatico restituisce ancora
+`credential_observation_restricted`, anche aprendo la Dashboard in una nuova
+scheda. Vercel restituisce 403 per il team `italiana-ricambi` e l'elenco dei team
+autorizzati è vuoto. Il plugin risulta installato: manca l'accesso del collegamento
+al team, non un'ulteriore autorizzazione dell'utente a svolgere il progetto.
+
+## Controlli successivi all'installazione
+
+- RPC e helper nuovi non eseguibili da `anon` o `authenticated`; search path
+  fissato; registro privato non esposto direttamente al servizio.
+- Nessun nuovo avviso di sicurezza sulle funzioni introdotte. Gli avvisi su RLS
+  senza policy sono attesi per queste tabelle riservate al backend; gli avvisi
+  sulle funzioni precedenti rimangono da trattare separatamente.
+- Circa 12.009 fonti nel registro, ancora da elaborare; zero errori nel nuovo
+  registro. Questo non significa che siano già state riconciliate.
+- Pratiche 1684, 1960 e 2108 fatturate; 2087, 2168 e 2170 con offerta letta e
+  preventivo inviato; 2196 ordine acquisito/da fatturare con fiscali incompleti.
+- Il recupero originali preesistente segnala 12 sessioni `non_disponibile` e
+  otto `registro_57014`. Nei log delle 16:37, tre richieste scadono mentre attendono
+  il lock esclusivo della stessa riga `keplero_recupero_originali`; altre scadono
+  poco dopo averlo ottenuto. Il client avvia otto sessioni in parallelo, ma la
+  registrazione le serializza sul controllo globale. Non è ancora dimostrato
+  che questa contesa sia l'unica causa dei timeout.
+
+La correzione `20261023144505_parallelizza_registro_originali.sql` è preparata,
+**non applicata**. Usa un lock condiviso sul lotto e un lock esclusivo sulla
+singola chat: chat diverse possono registrare insieme, la stessa chat non può
+essere registrata due volte contemporaneamente e il lotto non può essere
+modificato durante la registrazione. La suite commerciale con ACL reali passa
+anche dopo questa correzione. La prova su PostgreSQL nativo è definita in
+`scripts/test_concorrenza_originali.py` e nel workflow dedicato: deve passare
+prima dell'applicazione. Verifica anche che la versione precedente riproduca
+il blocco, otto transazioni aperte insieme, il vincolo sulla stessa chat,
+la protezione del lotto, i lease invalidi e il replay senza duplicati.
 
 ## Cosa cambia
 
@@ -73,20 +109,18 @@ confronto delle classificazioni reali e verifica delle risposte effettive di K.
 
 ## Sequenza di rilascio
 
-1. Ripristinare un canale autorizzato di scrittura su Supabase. Rileggere le
-   definizioni delle sette funzioni sostituite e fermarsi se sono cambiate
-   rispetto allo snapshot di questa lavorazione.
-2. Su un ambiente Supabase di prova, applicare atomicamente
-   `20261023093042_stabilizza_pratiche_keplero.sql`, con riconciliatore sospeso.
-   Eseguire la nuova suite e le 11 regressioni in transazioni annullate,
-   controllare ACL, RLS, advisor e cron. Nessun invio esterno nei test.
+1. Ripristinare l'accesso al team Vercel e il canale di scrittura Supabase.
+   La migrazione V2 è già applicata e riletta: non rieseguirla.
+2. Completare il test nativo dei lock, poi applicare la correzione del registro
+   originali con precontrollo della funzione precedente. Verificare il recupero
+   delle otto sessioni e distinguere ancora gli errori della fonte K.
 3. Verificare anteprima autenticata, webhook con ricevuta, una richiesta
    incompleta, un PDF storico e due veicoli nella stessa chat. Provare anche
    errore del registro e worker fermo. La pagina non deve indicare tutto regolare.
 4. Rivedere le classificazioni sulle pratiche attive, senza promuovere in massa
    flag AI. Verificare le varianti e il carico della coda; conservare le differenze
    come eccezioni motivate. Esaminare i casi già recuperati senza sovrascriverli.
-5. Applicare la migrazione di produzione, quindi distribuire l'applicazione.
+5. Con le migrazioni installate e verificate, distribuire l'applicazione.
    L'app nuova richiede le nuove RPC: **non distribuirla prima dello schema**.
 6. Verificare il contratto dal vero strumento usato da K: `ricevuta` conferma
    la registrazione dell'ingresso; solo `ordine_registrato` autorizza a dire che
@@ -102,6 +136,8 @@ selezionato per le pratiche rilevanti. Gli ingressi futuri non hanno quel taglio
 
 ## Ripristino
 
+Se applicata la correzione della concorrenza, ripristinare prima
+`supabase/rollback/parallelizza_registro_originali.sql`.
 `supabase/rollback/stabilizza_pratiche_keplero.sql` sospende il nuovo controllo,
 rimuove il suo cron e i nuovi trigger, ripristina le sette funzioni precedenti
 e conserva tabelle, prove e storico per l'analisi. È da applicare come
