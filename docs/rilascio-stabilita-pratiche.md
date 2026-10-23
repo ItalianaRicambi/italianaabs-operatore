@@ -1,5 +1,15 @@
 # Stato del rilascio — 23 ottobre 2026
 
+**Correzione coda installata e verificata nel database reale alle 23:31, ora italiana.**
+Il pacchetto corretto ha completato anche le prove prima del commit. La lettura
+indipendente conferma migrazione `20261023205350`, nuova colonna, 569 schede
+operative e 1.487 attese automatiche, totale invariato di 2.056. Nessuna fixture
+residua; accessi anon/authenticated negati e servizio autorizzato. Il registro
+commerciale conserva zero errori e dieci esiti elaborati; recupero generale
+ancora sospeso. Il timeout transitorio degli originali si è recuperato; restano
+dodici sessioni non disponibili dalla fonte K. Si procede a pubblicare il codice
+della coda in anteprima mediante l’integrazione GitHub → Vercel.
+
 **Anteprima autenticata verificata alle 22:26 circa, ora italiana.**
 Il commit `9b7a0f0b80594842a127a047a72155127cd9b374` ha ricreato l'anteprima
 tramite l'integrazione GitHub dopo la configurazione delle variabili Preview.
@@ -36,7 +46,7 @@ i motivi nuovi restano operativi. L'applicazione aggiunge due elenchi distinti.
 La proiezione aggrega le fonti una sola volta; la lettura sullo storico reale
 restituisce gli stessi conteggi senza le ripetute ricerche per singola scheda.
 
-**Correzione coda pronta, non ancora installata né distribuita.**
+**Correzione coda installata; verifica della nuova anteprima in corso.**
 Il primo tentativo remoto è stato fermato dal precontrollo: il file non
 normalizzava i ritorni a capo CRLF presenti nella funzione installata tramite
 Windows. Il database conferma migrazione assente, vista precedente, nessuna
@@ -55,8 +65,8 @@ passano nuovamente i 19 gruppi e le 11 regressioni, oltre alla nuova suite
 `attese_automatiche_coda.sql`. Compilazione Next/TypeScript e lint dei tre file
 applicativi modificati passano. Queste prove non sostituiscono la verifica
 successiva sul database gestito e sull'anteprima autenticata.
-Prima si installa la nuova vista nel database, poi si pubblica il codice app
-che la interroga. Nessun altro lotto viene eseguito prima di questa verifica.
+La nuova vista è ora installata e riletta nel database; si pubblica il codice
+app che la interroga. Nessun altro lotto viene eseguito prima di questa verifica.
 
 **Migrazione V2 installata in produzione alle 16:36 circa, ora italiana.**
 L'esito finale e una lettura indipendente confermano la versione `20261023093042`,
