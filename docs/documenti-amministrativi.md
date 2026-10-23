@@ -12,6 +12,47 @@ Il documento verificato usa la RPC `registra_documento_amministrativo_verificato
 - Una **pro-forma** completa i dati amministrativi e mantiene Da fatturare; non equivale a una fattura o a un pagamento.
 - Ricezione, lavorazione, assistenza e ritiri restano flussi distinti e non vengono chiusi da questa operazione.
 
-I documenti registrati, con numero e data, sono visibili nella scheda. Il testo del PDF, l’impronta e i riferimenti della fonte vengono conservati; un collegamento al PDF è mostrato quando disponibile. Il caricamento manuale non crea un nuovo servizio di sincronizzazione automatica con Fatture in Cloud o Drive.
+I documenti registrati, con numero e data, sono visibili nella scheda. Il testo del PDF, l’impronta e i riferimenti della fonte vengono conservati; un collegamento al PDF è mostrato quando disponibile. Il caricamento manuale resta distinto dal controllo automatico Drive descritto sotto; non è un collegamento diretto a Fatture in Cloud.
 
 Validazione: test del lettore PDF e delle bozze da chat, lettura di un PDF originale, build dell’applicazione e `supabase/tests/documenti_amministrativi_verificati.sql` eseguito con rollback. Il test SQL verifica fattura, pro-forma, sospensione, identità fiscale, idempotenza, targa errata, accesso limitato al backend e protezione dalle regressioni.
+
+
+## Controllo automatico della cartella Fatture
+
+Nella verifica notturna del 23–24 ottobre è emerso che il controllo Drive
+concordato non era attivo: il codice disponeva del caricamento manuale e della
+RPC di registrazione, ma non di un lettore periodico delle fatture. Il registro
+conteneva soltanto quattro fatture e tre proforme. Le pratiche segnalate non
+avevano alcun documento amministrativo collegato; il solo ricalcolo della coda
+non poteva correggerle. Questo limite è distinto dalla sospensione del recupero
+generale degli eventi commerciali.
+
+La lettura dei PDF originali in Fatture/2026/10 ha permesso di registrare quattro
+fatture già emesse e due proforme. Una lettura indipendente conferma quattro
+pratiche fatturate e due con amministrazione pronta ma ancora da fatturare.
+Un collegamento automatico a un vecchio cliente è stato corretto una tantum
+mediante il destinatario della fattura attuale, conservando l'anagrafica
+precedente e tracciando lo stato prima/dopo. Il rientro assistenza resta aperto.
+Restano tre ordini con amministrazione da completare: per uno è stato trovato
+solo un DDT, mentre per gli altri manca una fattura nella ricerca puntuale.
+La ricerca non equivale a un inventario completo di tutti i documenti.
+
+È stata creata e attivata l'automazione ChatGPT **Allinea fatture e pratiche**,
+con controllo orario tramite Google Drive e Supabase collegati e stato
+persistente con protezione di versione. Legge gli ordini aperti e i documenti
+originali nelle sottocartelle reali dell'anno; verifica tipo, emittente, targa,
+numero, data, totale, destinatario fiscale e cronologia dell'episodio.
+Registra soltanto documenti univoci attraverso la RPC riservata, rilegge ogni
+scrittura e conserva i riferimenti della prova. DDT, ricevute, note di credito,
+scansioni illeggibili, episodi multipli e identificativi fiscali discordanti
+rimangono da verificare. Il controllo periodico non sostituisce clienti già
+collegati e non modifica direttamente stati o anagrafiche; la correzione
+puntuale precedente non autorizza future sostituzioni automatiche.
+Non invia messaggi ai clienti e non deduce pagamenti o chiusure di assistenza.
+Segnala solo nuovi errori, conflitti o copertura incompleta, evitando duplicati.
+
+L'attivazione della pianificazione è confermata dal servizio. Il percorso
+lettura documento → RPC → rilettura è stato verificato sui sei documenti reali;
+la prima esecuzione autonoma pianificata rimane da osservare separatamente.
+Le scritture del connettore Supabase, prima bloccate da requestState, hanno
+funzionato in questa sessione. Il riconciliatore generale resta sospeso.
