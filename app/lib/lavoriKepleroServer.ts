@@ -6,6 +6,7 @@ export type StatoLavoriK = {
   controllo: { attivo: boolean; ultimo_tentativo_at: string | null; ultimo_successo_at: string | null; errore: string | null };
   controllo_in_ritardo: boolean; originali_in_ritardo: boolean;
   lavori_aperti: number; prioritari: number; da_associare: number;
+  lavori_in_attesa_automazione?: number; lavori_totali?: number;
   ingressi_in_elaborazione: number; ingressi_in_ritardo: number; errori: number;
 };
 export type LavoroK = {
@@ -15,6 +16,7 @@ export type LavoroK = {
   numero_pratica: number | null; nome_cliente: string | null; targa: string | null;
   assistente: string; verifica_tecnica_necessaria: boolean; azione_preventivo: string | null;
   dati_mancanti: string[] | null; fonti_aperte: number;
+  attesa_automazione: boolean;
 };
 export type FonteLavoroK = {
   fonte: string; chiave: string; stato: string; codice: string; motivo: string;
@@ -22,12 +24,13 @@ export type FonteLavoroK = {
 };
 export const leggiStatoLavoriK = () => rpcOriginaliK<StatoLavoriK>("stato_esiti_commerciali_k");
 
-export async function leggiLavoriK(pagina: number, filtro: { pratica?: string; sessione?: string; scheda?: string } = {}) {
+export async function leggiLavoriK(pagina: number, filtro: { pratica?: string; sessione?: string; scheda?: string; attesa?: boolean } = {}) {
   const { url, headers } = connessioneGlsDb();
   const query = new URLSearchParams({ select: "*", stato: "neq.risolta", order: "priorita.asc,prima_rilevazione_at.asc,chiave.asc", limit: "50", offset: String((pagina - 1) * 50) });
   if (filtro.scheda) query.set("chiave", `eq.${filtro.scheda}`);
   else if (filtro.pratica) query.set("pratica_id", `eq.${filtro.pratica}`);
   else if (filtro.sessione) { query.set("sessione", `eq.${filtro.sessione}`); query.set("pratica_id", "is.null"); }
+  else query.set("attesa_automazione", `eq.${filtro.attesa === true}`);
   const r = await fetch(`${url}/rest/v1/keplero_lavori_pratiche_elenco?${query}`, { headers: { ...headers, Prefer: "count=exact" }, cache: "no-store", signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error("Coda pratiche non disponibile");
   const totale = Number(r.headers.get("content-range")?.split("/")[1]);

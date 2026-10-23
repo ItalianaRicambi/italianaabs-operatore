@@ -11,16 +11,41 @@ Le letture indipendenti del database confermano questi conteggi. La pratica
 Le nuove credenziali Preview e la chiave Supabase separata sono state inserite
 dall'utente direttamente nelle rispettive impostazioni; nessun valore è nel repo.
 
-Preparato separatamente `patch_concorrenza_collaudo.sql`: verifica che V2 sia
-installata, che la funzione originali abbia ancora l'impronta attesa e che il
-recupero sia sospeso. Applica la sola correzione della concorrenza, simula al
-massimo dieci fonti tramite la RPC reale, annulla tutti gli effetti di quel
-lotto e conserva un resoconto. Errori nuovi o modifiche a pratiche fatturate
-interrompono l'intera transazione. Il riconciliatore non viene attivato.
-Il pacchetto è passato in PGlite con le ACL reali: effetto della patch conservato,
-effetti del lotto annullati, riesecuzione rifiutata e rollback dell'intera patch
-quando una fonte invalida produce un errore. Questo controllo del pacchetto
-non sostituisce l'esecuzione nel database gestito. **Patch ancora da applicare.**
+**Patch concorrenza installata e riletta nel database reale.**
+L'installer ha applicato la sola modifica dei lock, simulato dieci fonti e
+annullato gli effetti della simulazione. La migrazione `20261023144505` risulta
+installata; i lock condiviso sul lotto/esclusivo sulla chat e le ACL sono
+confermati dal catalogo. Il riconciliatore resta sospeso.
+
+**Primo lotto reale di dieci documenti completato alle 22:46, ora italiana.**
+La lettura indipendente conferma dieci esiti elaborati, nessun nuovo errore:
+un preventivo inviato riconosciuto (pratica 2191), sette PDF da associare e due
+documenti senza prova sufficiente dell'invio. I casi campione 1684, 1960, 2108,
+2087, 2168, 2170, 2196 e 2293 mantengono gli stati commerciali precedenti.
+Non si associano i sette PDF sulla sola coincidenza della targa.
+
+Il ricalcolo della coda ha evidenziato un difetto: anche gli ingressi ricevuti
+ma ancora da valutare diventavano schede apparentemente operative. Su 2.056
+schede, la nuova proiezione letta in sola lettura distingue 1.487 attese
+automatiche e 569 schede operative: 560 richieste di preventivo già presenti e
+nove documenti da associare. Nessuna scheda viene eliminata o risolta.
+La migrazione `20261023205350_separa_attese_automatiche_coda.sql` aggiunge
+`attesa_automazione` alla vista e separa i conteggi. Le richieste esplicite
+anche senza targa, le anomalie valutate, le priorità urgenti, le assegnazioni e
+i motivi nuovi restano operativi. L'applicazione aggiunge due elenchi distinti.
+La proiezione aggrega le fonti una sola volta; la lettura sullo storico reale
+restituisce gli stessi conteggi senza le ripetute ricerche per singola scheda.
+
+**Correzione coda pronta, non ancora installata né distribuita.**
+`patch_coda_operatore.txt` esegue la migrazione, collauda le varianti con ACL
+reali dentro un savepoint, annulla tutte le fixture e conserva la patch.
+Il pacchetto completo e il ripristino passano nel database locale isolato;
+passano nuovamente i 19 gruppi e le 11 regressioni, oltre alla nuova suite
+`attese_automatiche_coda.sql`. Compilazione Next/TypeScript e lint dei tre file
+applicativi modificati passano. Queste prove non sostituiscono la verifica
+successiva sul database gestito e sull'anteprima autenticata.
+Prima si installa la nuova vista nel database, poi si pubblica il codice app
+che la interroga. Nessun altro lotto viene eseguito prima di questa verifica.
 
 **Migrazione V2 installata in produzione alle 16:36 circa, ora italiana.**
 L'esito finale e una lettura indipendente confermano la versione `20261023093042`,
@@ -61,8 +86,8 @@ al team, non un'ulteriore autorizzazione dell'utente a svolgere il progetto.
   sovrapposti all'installazione e ai suoi test: non provano un guasto permanente
   introdotto dalla migrazione.
 
-La correzione `20261023144505_parallelizza_registro_originali.sql` è preparata,
-**non applicata**. Usa un lock condiviso sul lotto e un lock esclusivo sulla
+La correzione `20261023144505_parallelizza_registro_originali.sql` è
+**applicata e riletta**. Usa un lock condiviso sul lotto e un lock esclusivo sulla
 singola chat: chat diverse possono registrare insieme, la stessa chat non può
 essere registrata due volte contemporaneamente e il lotto non può essere
 modificato durante la registrazione. La suite commerciale con ACL reali passa
@@ -140,9 +165,10 @@ confronto delle classificazioni reali e verifica delle risposte effettive di K.
    Preview sono state completate manualmente e l'integrazione GitHub permette
    di distribuire l'anteprima anche mentre il collegamento Vercel restituisce 403.
    Il canale di scrittura Supabase automatico rimane indisponibile.
-2. Completare il test nativo dei lock, poi applicare la correzione del registro
-   originali con precontrollo della funzione precedente. Verificare il recupero
-   delle otto sessioni e distinguere ancora gli errori della fonte K.
+2. Il test nativo dei lock e la patch concorrenza sono completati. Installare
+   la correzione della coda con il pacchetto collaudato, rileggere i conteggi e
+   pubblicare la nuova anteprima. Restano dodici sessioni indisponibili dalla
+   fonte K, distinte dagli errori del nuovo registro.
 3. Accesso autenticato, Dashboard, coda e dettaglio eventi verificati
    nell'anteprima. Restano webhook con ricevuta, una richiesta
    incompleta, un PDF storico e due veicoli nella stessa chat. Provare anche
@@ -166,7 +192,10 @@ selezionato per le pratiche rilevanti. Gli ingressi futuri non hanno quel taglio
 
 ## Ripristino
 
-Se applicata la correzione della concorrenza, ripristinare prima
+Se installata la correzione della coda, ripristinare prima
+`supabase/rollback/separa_attese_automatiche_coda.sql`: mantiene la colonna
+aggiunta per la compatibilità dell'app e non elimina schede.
+Per annullare anche la correzione della concorrenza, applicare poi
 `supabase/rollback/parallelizza_registro_originali.sql`.
 `supabase/rollback/stabilizza_pratiche_keplero.sql` sospende il nuovo controllo,
 rimuove il suo cron e i nuovi trigger, ripristina le sette funzioni precedenti
