@@ -1,12 +1,34 @@
 # Stato del rilascio — 23 ottobre 2026
 
+**Anteprima autenticata verificata alle 22:26 circa, ora italiana.**
+Il commit `9b7a0f0b80594842a127a047a72155127cd9b374` ha ricreato l'anteprima
+tramite l'integrazione GitHub dopo la configurazione delle variabili Preview.
+Vercel segnala distribuzione riuscita. Le richieste senza sessione tornano al
+login; l'utente ha verificato accesso come Operatore 1, Dashboard collegata a
+Supabase, elenco di 14 schede e dettaglio dei 24 eventi della pratica 2293.
+Le letture indipendenti del database confermano questi conteggi. La pratica
+2293 risulta già `preventivo_inviato`; i suoi eventi attendono la riconciliazione.
+Le nuove credenziali Preview e la chiave Supabase separata sono state inserite
+dall'utente direttamente nelle rispettive impostazioni; nessun valore è nel repo.
+
+Preparato separatamente `patch_concorrenza_collaudo.sql`: verifica che V2 sia
+installata, che la funzione originali abbia ancora l'impronta attesa e che il
+recupero sia sospeso. Applica la sola correzione della concorrenza, simula al
+massimo dieci fonti tramite la RPC reale, annulla tutti gli effetti di quel
+lotto e conserva un resoconto. Errori nuovi o modifiche a pratiche fatturate
+interrompono l'intera transazione. Il riconciliatore non viene attivato.
+Il pacchetto è passato in PGlite con le ACL reali: effetto della patch conservato,
+effetti del lotto annullati, riesecuzione rifiutata e rollback dell'intera patch
+quando una fonte invalida produce un errore. Questo controllo del pacchetto
+non sostituisce l'esecuzione nel database gestito. **Patch ancora da applicare.**
+
 **Migrazione V2 installata in produzione alle 16:36 circa, ora italiana.**
 L'esito finale e una lettura indipendente confermano la versione `20261023093042`,
 le nuove tabelle, le funzioni e l'assenza delle fixture `test_affidabilita`.
 I 19 gruppi e le 11 regressioni sono passati prima del commit remoto.
 Il riconciliatore resta `attivo=false`; il cron è predisposto e quattro esecuzioni
 di controllo sono riuscite senza avviare la riconciliazione.
-**La nuova applicazione non è distribuita e il recupero generale non è attivo.**
+**La nuova applicazione non è in produzione e il recupero generale non è attivo.**
 Non rieseguire l'installer V2: sostituisce funzioni e crea tabelle già presenti.
 
 Il primo tentativo completo era stato annullato dal collaudo dei permessi.
@@ -114,12 +136,15 @@ confronto delle classificazioni reali e verifica delle risposte effettive di K.
 
 ## Sequenza di rilascio
 
-1. Ripristinare l'accesso al team Vercel e il canale di scrittura Supabase.
-   La migrazione V2 è già applicata e riletta: non rieseguirla.
+1. La migrazione V2 è già applicata e riletta: non rieseguirla. Le impostazioni
+   Preview sono state completate manualmente e l'integrazione GitHub permette
+   di distribuire l'anteprima anche mentre il collegamento Vercel restituisce 403.
+   Il canale di scrittura Supabase automatico rimane indisponibile.
 2. Completare il test nativo dei lock, poi applicare la correzione del registro
    originali con precontrollo della funzione precedente. Verificare il recupero
    delle otto sessioni e distinguere ancora gli errori della fonte K.
-3. Verificare anteprima autenticata, webhook con ricevuta, una richiesta
+3. Accesso autenticato, Dashboard, coda e dettaglio eventi verificati
+   nell'anteprima. Restano webhook con ricevuta, una richiesta
    incompleta, un PDF storico e due veicoli nella stessa chat. Provare anche
    errore del registro e worker fermo. La pagina non deve indicare tutto regolare.
 4. Rivedere le classificazioni sulle pratiche attive, senza promuovere in massa
