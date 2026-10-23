@@ -33,7 +33,11 @@ al team, non un'ulteriore autorizzazione dell'utente a svolgere il progetto.
   il lock esclusivo della stessa riga `keplero_recupero_originali`; altre scadono
   poco dopo averlo ottenuto. Il client avvia otto sessioni in parallelo, ma la
   registrazione le serializza sul controllo globale. Non è ancora dimostrato
-  che questa contesa sia l'unica causa dei timeout.
+  che questa contesa sia l'unica causa dei timeout. Alla rilettura delle 16:51,
+  le otto sessioni sono state recuperate automaticamente: nessun errore 57014
+  residuo. Restano le 12 sessioni non disponibili dalla fonte. I timeout erano
+  sovrapposti all'installazione e ai suoi test: non provano un guasto permanente
+  introdotto dalla migrazione.
 
 La correzione `20261023144505_parallelizza_registro_originali.sql` è preparata,
 **non applicata**. Usa un lock condiviso sul lotto e un lock esclusivo sulla
@@ -41,8 +45,9 @@ singola chat: chat diverse possono registrare insieme, la stessa chat non può
 essere registrata due volte contemporaneamente e il lotto non può essere
 modificato durante la registrazione. La suite commerciale con ACL reali passa
 anche dopo questa correzione. La prova su PostgreSQL nativo è definita in
-`scripts/test_concorrenza_originali.py` e nel workflow dedicato: deve passare
-prima dell'applicazione. Verifica anche che la versione precedente riproduca
+`scripts/test_concorrenza_originali.py` e nel workflow dedicato è **passata**
+su PostgreSQL 17 nativo (run `39973112806`, job `120480668678`, commit
+`fac600c55008ac21d56cbca8c73496a63f5424fb`). Verifica anche che la versione precedente riproduca
 il blocco, otto transazioni aperte insieme, il vincolo sulla stessa chat,
 la protezione del lotto, i lease invalidi e il replay senza duplicati.
 
