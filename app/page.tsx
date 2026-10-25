@@ -28,6 +28,7 @@ import { rpcEmail } from './lib/emailLogisticaServer';
 import { StatoRisposteK } from './components/StatoRisposteK';
 import { StatoOriginaliK } from './components/StatoOriginaliK';
 import { StatoLavoriK } from './components/StatoLavoriK';
+import { StatoOrdiniShopify } from './components/StatoOrdiniShopify';
 
 type Pratica = {
   verifica_tecnica_necessaria?: boolean;
@@ -1132,7 +1133,7 @@ export default async function Home({
 
         <div className="mb-4"><Link href="/mbe" className="font-bold text-blue-800 underline">Spedizioni MBE · tracking e abbinamenti</Link></div>
         <div className="mb-4"><Link href="/preventivi" className="font-bold text-blue-800 underline">Preventivi acquisiti automaticamente · invii da verificare</Link></div>
-        <StatoLavoriK /><StatoRisposteK /><StatoOriginaliK />
+        <StatoLavoriK /><StatoRisposteK /><StatoOriginaliK /><StatoOrdiniShopify />
         <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-blue-950">Richieste email · info@italianaabs.com</h2><Link href="/email" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Apri richieste email</Link></div>
           {emailStato ? <p className="mt-3 text-sm">Ricevute: {emailStato.ricevute} · Da classificare: {emailStato.da_classificare} · Errori: {emailStato.errori} · Allegati da verificare: {emailStato.allegati_da_verificare}<br/>Ultima acquisizione: {formattaData(emailStato.ultima_ricezione)}</p> : <p role="alert" className="mt-3 text-sm text-red-800">Registro email non disponibile: verificare l’acquisizione delle richieste.</p>}
