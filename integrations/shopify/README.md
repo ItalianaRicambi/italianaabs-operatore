@@ -1,7 +1,9 @@
 # Ordini Shopify e controllo IVA
 
-Shopify Tax esegue VIES e calcola l'IVA nel checkout nativo. Il campo Partita IVA
-del negozio è già facoltativo. Il mercato UE è stato configurato con
+La validazione VIES e il calcolo IVA restano affidati a Shopify Tax nel checkout
+nativo e devono essere collaudati. Il campo Partita IVA del negozio è già
+facoltativo: la sua presenza non certifica il funzionamento completo della
+routine fiscale. Il mercato UE è stato configurato con
 `INCLUDES_TAXES_IN_PRICE_BASED_ON_COUNTRY` il 25 ottobre 2026; la sede attiva di
 evasione è italiana. L'Italia conserva la configurazione ereditata.
 
@@ -37,8 +39,11 @@ originali e la chiave è esclusivamente lato server.
 
 La dashboard indica esplicitamente quando il collegamento non è configurato o
 non ha ancora ricevuto eventi. Non presentare la routine come attiva prima del
-collaudo di questo percorso. Vercel richiede attualmente una nuova concessione
-di accesso al team per ispezionare e pubblicare il progetto dalla connessione.
+collaudo di questo percorso. L'accesso al team Vercel è stato ripristinato e
+l'anteprima del codice è READY. La prova remota conferma il redirect operatore
+e la risposta 503 del ricevitore senza chiave. Il merge in produzione è stato
+fermato dalla revisione automatica, che richiede consenso esplicito alla
+pubblicazione mentre configurazione webhook e collaudo IVA UE sono aperti.
 
 ## Regole fiscali
 
@@ -57,6 +62,10 @@ di accesso al team per ispezionare e pubblicare il progetto dalla connessione.
   come privato verificato.
 - Nessuna modifica a fatture, customer.taxExempt o aliquote su iniziativa del
   bot. Nessuna integrazione Fatture in Cloud in questa fase.
+- La guida Shopify richiede di attivare anche le fatture IVA native quando si
+  attiva la validazione al checkout. Verificare questa impostazione con
+  l'operatore: non abilitarla tacitamente, dato che la fatturazione automatica
+  è stata rinviata. La validazione nativa resta da confermare.
 
 PS/PSMI richiedono `financial_status=paid`; RE/RI consentono la stesura prima
 del pagamento. Varianti non riconosciute, rimborsi parziali e aggiornamenti
