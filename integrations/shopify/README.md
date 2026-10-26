@@ -25,8 +25,9 @@ originali e la chiave è esclusivamente lato server.
 
 ## Attivazione ancora necessaria
 
-1. La migrazione `20261025222248_ordini_shopify_controllo_iva` è già applicata;
-   pubblicare il commit dell'applicazione.
+1. La migrazione `20261025222248_ordini_shopify_controllo_iva` è già applicata.
+   L'applicazione è pubblicata: PR #33, merge
+   `8a0609bd8d4c157a389710bd27cf8d3f59509c38`.
 2. Nelle impostazioni Notifiche/Webhook di Shopify, creare gli eventi indicati
    verso `https://italianaabs-operatore.vercel.app/api/shopify/ordini` in JSON.
 3. Salvare **direttamente in Vercel**, senza inviarla in chat, la chiave di firma
@@ -39,11 +40,11 @@ originali e la chiave è esclusivamente lato server.
 
 La dashboard indica esplicitamente quando il collegamento non è configurato o
 non ha ancora ricevuto eventi. Non presentare la routine come attiva prima del
-collaudo di questo percorso. L'accesso al team Vercel è stato ripristinato e
-l'anteprima del codice è READY. La prova remota conferma il redirect operatore
-e la risposta 503 del ricevitore senza chiave. Il merge in produzione è stato
-fermato dalla revisione automatica, che richiede consenso esplicito alla
-pubblicazione mentre configurazione webhook e collaudo IVA UE sono aperti.
+collaudo di questo percorso. Il merge in produzione è stato autorizzato ed
+eseguito. Il 26 ottobre il ricevitore pubblico risponde ancora 503 con
+"Collegamento Shopify non configurato": la chiave di firma resta da inserire.
+Italia è ACTIVE e Unione Europea è DRAFT; configurazione webhook e collaudo
+IVA UE sono ancora aperti.
 
 ## Regole fiscali
 
@@ -95,7 +96,7 @@ coprono accesso operatore, negozio/firma errati, payload incompleto, limite
 dimensione e risposta 503 quando il database non è disponibile. Nessun ordine
 operativo o pagamento è stato creato durante questi test.
 
-Ancora da collaudare: pubblicazione Vercel, chiave webhook, consegna firmata
+Ancora da collaudare: chiave webhook, consegna firmata
 Shopify → registro → dashboard e casi fiscali nel checkout nativo.
 
 Riferimenti:
