@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 export const CASELLA_INFO = 'info@italianaabs.com';
+export const CASELLA_ORDINI = 'ordini@italianaabs.com';
 export type EmailOriginale = { mailbox: string; sender: string; subject: string; content: string; conversation_id: string; fingerprint: string };
 export function autorizzazioneEmail(ricevuto: string | null, segreto: string | undefined) {
   if (!ricevuto || !segreto) return false;
@@ -13,7 +14,7 @@ export function normalizzaEmail(value: unknown): EmailOriginale {
   for (const k of ['mailbox','sender','subject','content','conversation_id']) if (typeof v[k] !== 'string' || (v[k] as string).includes('{{trigger.')) throw new Error('Dati originali email mancanti');
   const mailbox = (v.mailbox as string).trim().toLowerCase(), sender = (v.sender as string).trim().toLowerCase();
   const subject = (v.subject as string).trim(), content = v.content as string, conversation_id = (v.conversation_id as string).trim();
-  if (mailbox !== CASELLA_INFO || !/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(sender) || sender.length > 254) throw new Error('Casella o mittente non valido');
+  if (![CASELLA_INFO, CASELLA_ORDINI].includes(mailbox) || !/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(sender) || sender.length > 254) throw new Error('Casella o mittente non valido');
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(conversation_id)) throw new Error('Conversazione non valida');
   if (subject.length > 2000 || content.length > 250000) throw new Error('Email troppo grande');
   const fingerprint = createHash('sha256').update(JSON.stringify([mailbox,sender,conversation_id,subject,content])).digest('hex');
@@ -46,7 +47,9 @@ export function payloadEmail(e: EmailOriginale) {
   const testoConLink=testoEmail({...e,content:e.content.replace(/<(?:a|img)\b[^>]*\b(?:href|src)=["'](https:\/\/[^"']+)["'][^>]*>/gi,' $1 ')});
   const urls = [...new Set([...testoConLink.matchAll(/https:\/\/[^\s<>"']+/gi)].map(m=>m[0].replace(/[).,;]+$/,'')))].filter(u=>/\.(?:png|jpe?g|webp|pdf)(?:\?|$)/i.test(u));
   const allegatiIndicati = /\ballegat[oi]\b|\bin allegato\b|\bfoto\b/i.test(utile);
-  const operativo = !!text.trim() && /\b(?:abs|esp|ecu|tcu|centralina|preventivo|riparazione|garanzia|rientro|reso|ordine|confermo|confermiamo|accetto|accettiamo|ritiro|fattura|spedizione)\b/i.test(utile);
+  // La casella ordini contiene anche notifiche automatiche: una email non
+  // attesta pagamento né consenso cliente. Shopify alimenta la coda separata.
+  const operativo = e.mailbox === CASELLA_INFO && !!text.trim() && /\b(?:abs|esp|ecu|tcu|centralina|preventivo|riparazione|garanzia|rientro|reso|ordine|confermo|confermiamo|accetto|accettiamo|ritiro|fattura|spedizione)\b/i.test(utile);
   const garanzia = /\bgaranzia\b/i.test(utile), assistenza = garanzia || /\b(?:rientro|reso|assistenza|post[- ]?vendita|problema dopo|dopo (?:installazione|riparazione))\b/i.test(utile);
   return { operativo, allegatiIndicati, body: {
     channel:'email', conversation_id:e.conversation_id, email_mittente:e.sender,

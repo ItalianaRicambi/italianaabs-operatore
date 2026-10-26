@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { POST as sincronizzaLive } from '../api/keplero/live/route';
 import { rpcEmail } from './emailLogisticaServer';
 import { connessioneGlsDb } from './glsServer';
-import { esclusioneEmail, payloadEmail, praticaDaEsitoEmail, type EmailOriginale } from './richiesteEmail';
+import { CASELLA_ORDINI, esclusioneEmail, payloadEmail, praticaDaEsitoEmail, type EmailOriginale } from './richiesteEmail';
 
 export type RichiestaEmail = {id:string;sender:string;subject:string;content:string;conversation_id:string;fingerprint:string;mailbox:string;stato:string;motivo:string|null;pratica_id:string|null;created_at:string;updated_at:string;consegne:number;token?:string|null;allegati_da_verificare:boolean};
 export async function leggiRichiesteEmail() {
@@ -27,6 +27,7 @@ export async function processaRichiestaEmail(e:EmailOriginale) {
  try {
   const esclusione=esclusioneEmail(e), p=payloadEmail(e);
   let stato='da_classificare', motivo='Email ricevuta: classificazione da parte dell’operatore.', pratica:string|null=null;
+  if(e.mailbox===CASELLA_ORDINI) motivo='Email della casella ordini: verificare nella sezione Ordini Shopify se l’ordine è già presente. Il messaggio non conferma il pagamento e non crea una seconda pratica. Richieste o variazioni del cliente restano da verificare.';
   if(esclusione){stato='esclusa';motivo=esclusione;}
   else if(p.operativo){
    const secret=process.env.KEPLERO_WEBHOOK_SECRET;
