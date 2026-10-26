@@ -1,5 +1,15 @@
 # Richieste email da Keplero
 
+## Casella ordini
+
+Il ricevitore `/api/keplero/email` accetta anche `ordini@italianaabs.com`, con la stessa autorizzazione server. L'automazione dedicata deve selezionare esclusivamente quell'account e inviare `mailbox` fisso a `ordini@italianaabs.com`; le altre quattro variabili restano quelle del trigger email originale.
+
+Le email ordini vengono conservate nel registro e restano **da classificare**, con casella di destinazione visibile. Non vengono inoltrate al motore delle pratiche: il testo di una notifica non prova il pagamento, il consenso del cliente o l'identità dell'ordine. Il registro **Ordini Shopify**, alimentato dai webhook firmati, resta la fonte per gli ordini e i pagamenti del negozio. Richieste, variazioni e messaggi non Shopify restano visibili per la verifica dell'operatore. I test interni espliciti e le notifiche tecniche mantengono l'esclusione già prevista. Nessuna risposta email o WhatsApp viene inviata da questo flusso.
+
+L'attivazione in Keplero e la ricezione di un evento reale devono essere verificate separatamente dal rilascio del codice. Non ricollegare la casella a un secondo assistente per aggirare questa configurazione: il registro della Dashboard è condiviso dagli operatori.
+
+## Casella info
+
 L’automazione «Email info - Dashboard Operatore», assistente Italiana ABS, ascolta `email_received` della casella info@italianaabs.com e POSTa a `/api/keplero/email`. Usa l’autorizzazione già prevista per la Dashboard (`x-keplero-secret`). Body: mailbox fisso, sender=`{{trigger.sender_email}}`, subject=`{{trigger.subject}}`, content=`{{trigger.email_content}}`, conversation_id=`{{trigger.session_id}}`.
 
 Il registro `richieste_email` salva l’originale prima dell’elaborazione e mostra classificazione, pratica, errori e collegamento a K. Accesso DB esclusivo del servizio, RLS senza policy pubbliche. Operazioni UI solo con sessione operatore. Nessun invio email ai clienti.

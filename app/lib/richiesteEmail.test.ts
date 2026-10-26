@@ -2,6 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizzaEmail, payloadEmail, esclusioneEmail, autorizzazioneEmail, praticaDaEsitoEmail } from './richiesteEmail.ts';
 const originale = {mailbox:'info@italianaabs.com',sender:'officina@example.com',subject:'Richiesta ABS',content:'Buongiorno, targa AB123CD, errore C2200. Foto in allegato.',conversation_id:'b3be5f5b-ece5-4c5e-90be-e39d856fe12f'};
+test('la casella ordini conserva il messaggio senza generare pratiche o attestare pagamenti',()=>{
+ const ordini=normalizzaEmail({...originale,mailbox:' ORDINI@ITALIANAABS.COM ',subject:'Ordine #1003 pagato',content:'Confermo il preventivo PS. Pagamento completato. Targa AB123CD.'});
+ assert.equal(ordini.mailbox,'ordini@italianaabs.com');
+ assert.equal(payloadEmail(ordini).operativo,false);
+ assert.equal(payloadEmail(normalizzaEmail({...ordini,mailbox:'info@italianaabs.com'})).operativo,true);
+ assert.equal(ordini.content,'Confermo il preventivo PS. Pagamento completato. Targa AB123CD.');
+ assert.notEqual(ordini.fingerprint,normalizzaEmail({...ordini,mailbox:'info@italianaabs.com'}).fingerprint);
+ assert.equal(ordini.fingerprint,normalizzaEmail({...ordini}).fingerprint);
+});
 test('identità stabile sui retry; messaggi diversi nello stesso thread restano distinti',()=>{
  const e=normalizzaEmail(originale); assert.equal(e.fingerprint,normalizzaEmail({...originale}).fingerprint);
  assert.notEqual(e.fingerprint,normalizzaEmail({...originale,content:'Confermo il preventivo'}).fingerprint);
