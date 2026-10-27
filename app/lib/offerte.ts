@@ -76,6 +76,19 @@ export function leggiOffertaDaTesto(raw: string, targa: string): LetturaOfferta 
   const servizioTitolo = titoliTecnici.length === 1 ? servizioDaTesto(titoliTecnici[0]) : null;
   const titoloUnico = servizioTitolo && intestazioni.length === 0 && serviziNelDocumento.size <= 1
     && [...serviziNelDocumento].every(s => s === servizioTitolo) && prezziGenerici.length === 1 ? titoliTecnici[0] : null;
+  // Prezzo ordinario e speciale non sono due alternative. Accettiamo solo
+  // la dichiarazione completa, incondizionata e con la stessa IVA, sulla stessa riga.
+  // Il testo originale (e quindi entrambi gli importi) resta nelle condizioni.
+  const righeSpeciali = righe.filter(r => /\bprezzo speciale\b/i.test(r));
+  let rigaPrezzoSpeciale: string | null = null;
+  if (righeSpeciali.length) {
+    const m = titoloUnico && righeSpeciali.length === 1
+      ? /^\s*Prezzo\s*:\s*€\s*(\d+(?:[.,]\d{2})?)\s+IVA\s+(inclusa|compresa|esclusa)\s+Prezzo speciale\s*:?\s*€\s*(\d+(?:[.,]\d{2})?)\s+IVA\s+(inclusa|compresa|esclusa)\s*$/i.exec(righeSpeciali[0]) : null;
+    if (!m || (m[2].toLowerCase() === "esclusa") !== (m[4].toLowerCase() === "esclusa")
+      || Number(m[3].replace(",", ".")) >= Number(m[1].replace(",", ".")))
+      return errore("Prezzo speciale o condizioni da verificare nel PDF");
+    rigaPrezzoSpeciale = `Prezzo: € ${m[3]} IVA ${m[4]}`;
+  }
   // Il modello SBC descrive esplicitamente la fornitura europea con reso
   // obbligatorio, ma non usa la sigla PS nella voce economica.
   const fornituraSbc = titoliTecnici.length === 1 && /^complessivo SBC Mercedes-Benz\s*$/i.test(titoliTecnici[0])
@@ -86,6 +99,7 @@ export function leggiOffertaDaTesto(raw: string, targa: string): LetturaOfferta 
   let prezzoDaTitolo = false;
   for (let i = 0; i < righe.length; i++) {
     let riga = righe[i].trim();
+    if (rigaPrezzoSpeciale && /\bprezzo speciale\b/i.test(riga)) riga = rigaPrezzoSpeciale;
     if (titoloUnico && /^Prezzo\s*:/i.test(riga)) {
       riga = titoloUnico + ": " + riga.replace(/^Prezzo\s*:\s*/i, "");
       prezzoDaTitolo = true;

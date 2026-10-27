@@ -94,6 +94,37 @@ test("Prezzo generico non associa arbitrariamente titoli o alternative different
  ]) assert.ok(leggiOffertaDaTesto(t,"AB123CD").errore);
 });
 
+const offertaSpeciale = (prezzo: string) => `Offerta tecnica per revisione elettronica modulo ABS
+Targa: AB123CD
+Importo dell’intervento
+${prezzo}
+Garanzia: 2 anni
+Validità offerta: 15 giorni dalla data della presente`;
+
+test("il prezzo speciale esplicito sostituisce l'ordinario, conservando il documento",()=>{
+ for(const cifra of ["347.00", "347,00"]) {
+  const t=offertaSpeciale(`Prezzo: € 497,00 IVA inclusa Prezzo speciale € ${cifra} iva inclusa`);
+  const r=leggiOffertaDaTesto(t,"AB123CD");
+  assert.equal(r.errore,null);
+  assert.deepEqual(r.opzioni.map(o=>[o.servizio,o.importo,o.iva_inclusa]),[["RE",347,true]]);
+  assert.match(r.opzioni[0].condizioni,/497,00 IVA inclusa Prezzo speciale/);
+  assert.equal(r.testo,t); assert.equal(r.validita_giorni,15);
+ }
+});
+
+test("lo speciale condizionato, ambiguo o con IVA diversa resta da verificare",()=>{
+ for(const prezzo of [
+  "Prezzo: € 497,00 IVA inclusa oppure € 347,00 IVA inclusa",
+  "Prezzo: € 497,00 IVA inclusa Prezzo speciale € 347,00 IVA esclusa",
+  "Prezzo: € 497,00 IVA inclusa Prezzo speciale € 547,00 IVA inclusa",
+  "Prezzo: € 497,00 IVA inclusa Prezzo speciale € 0,00 IVA inclusa",
+  "Prezzo: € 497,00 IVA inclusa Prezzo speciale € 347,00 IVA inclusa se conferma oggi",
+  "Prezzo: € 497,00 IVA inclusa\nPrezzo speciale € 347,00 IVA inclusa",
+  "Prezzo: € 497,00 IVA inclusa Prezzo speciale € 347,00 IVA inclusa oppure € 297,00",
+  "Prezzo: € 497,00 IVA inclusa Prezzo speciale € 347,00 IVA inclusa\nOpzione 2 Programma Scambio",
+ ]) assert.ok(leggiOffertaDaTesto(offertaSpeciale(prezzo),"AB123CD").errore,prezzo);
+});
+
 test("titolo Programma Scambio su due righe: prezzo ECU e obbligo di restituzione",()=>{
  const t=`Offerta tecnica per fornitura ECU motore in Programma
 Scambio

@@ -4,6 +4,11 @@ set local role service_role;
 do $test$
 declare p uuid; assistenza uuid; storico jsonb;
 begin
+ if exists (
+  select 1 from private.candidati_flussi_offerta_rientro() c join public.pratiche p on p.id=c.pratica_id
+  where p.dati_raw#>>'{archiviazione_test,archiviata}'='true'
+   or p.dati_raw#>>'{pratica_duplicata,archiviata}'='true'
+ ) then raise exception 'Avvisi operativi su pratiche archiviate'; end if;
  -- Tutte e tre le categorie cessano sulle vendite concluse, anche reali.
  if exists (
    select 1 from private.candidati_flussi_offerta_rientro() c
@@ -37,6 +42,20 @@ begin
  values(p,'Rientro tecnico di collaudo',now()-interval '10 days') returning id into assistenza;
  if not exists(select 1 from private.candidati_flussi_offerta_rientro() where chiave='assistenza_non_assegnata:'||assistenza)
  then raise exception 'Assistenza urgente della pratica fatturata nascosta'; end if;
+
+ -- Archiviazione esplicita: spariscono gli avvisi, non lo storico sottostante.
+ update public.pratiche set dati_raw=jsonb_set(coalesce(dati_raw,'{}'),'{archiviazione_test}',
+  '{"archiviata":true}') where id=p;
+ if exists(select 1 from private.candidati_flussi_offerta_rientro() where pratica_id=p)
+ then raise exception 'Pratica di test archiviata ancora segnalata'; end if;
+ update public.pratiche set dati_raw=(dati_raw-'archiviazione_test') ||
+  '{"pratica_duplicata":{"archiviata":true}}'::jsonb where id=p;
+ if exists(select 1 from private.candidati_flussi_offerta_rientro() where pratica_id=p)
+ then raise exception 'Duplicato archiviato ancora segnalato'; end if;
+ update public.pratiche set dati_raw=dati_raw-'pratica_duplicata' where id=p;
+ -- I trigger di archiviazione possono chiudere l'episodio; non lo riapriamo.
+ if not exists(select 1 from public.assistenze_rientri where id=assistenza)
+ then raise exception 'Storico assistenza eliminato'; end if;
 
  update public.pratiche set stato_fatturazione='non_applicabile',stato_commerciale='chiuso' where id=p;
  if exists(select 1 from private.candidati_flussi_offerta_rientro() where pratica_id=p and regola='scelta_cliente_da_chiarire')
