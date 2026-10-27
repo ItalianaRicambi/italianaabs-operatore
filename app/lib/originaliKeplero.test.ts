@@ -37,6 +37,19 @@ test('PDF nome-targa solo su host e percorso fissi, senza query, credenziali o i
  assert.equal(pdfOriginaleK(buono)?.targa,'ZZ001AA');
  for(const value of [buono.replace('v2.api.keplero.ai','evil.test'),buono+'?token=x',buono.replace('/v2/session-attachments/','/v2/sessions/'),buono.replace('ZZ001AA.pdf','Fattura-530.pdf'),'testo '+buono])assert.equal(pdfOriginaleK(value),null);
 });
+test('originali esteri: Paese delimitato, targa con cifre e prova WhatsApp',()=>{
+ const prefix='attachment:https://v2.api.keplero.ai/v2/session-attachments/uuid-%24%24name%24%24-';
+ for(const [targa,paese] of [['LU71264','CH'],['CRQ5022','US'],['20NJ05','P'],['7741DNV','E'],['199TU6674','TN']]) {
+  for(const nome of [`${targa} (${paese}).pdf`,`${targa} _${paese}_.pdf`,`${targa} (${paese}) (2).pdf`]) {
+   const content=prefix+encodeURIComponent(nome);
+   assert.equal(pdfOriginaleK(content)?.targa,targa);
+   const file={...base,sender:'assistant',sender_type:'user',type:'file',content,metadata:{origin:'whatsapp_coexistence'}};
+   assert.equal(normalizzaOriginaliK(sessione,[file],ora)[0].targa_pdf,targa);
+   assert.equal(normalizzaOriginaliK(sessione,[{...file,metadata:{}}],ora)[0].targa_pdf,null);
+  }
+ }
+ for(const nome of ['MANUALE (CH).pdf','LU71264 (XX).pdf','LU71264CH.pdf','LU71264 (CH) (1) (2).pdf','Fattura-123 (CH).pdf']) assert.equal(pdfOriginaleK(prefix+encodeURIComponent(nome)),null);
+});
 test('download limitato e senza redirect; nessun segreto inviato al PDF',async()=>{
  const link='attachment:https://v2.api.keplero.ai/v2/session-attachments/uuid-%24%24name%24%24-ZZ001AA.pdf';
  let opt:RequestInit|undefined;

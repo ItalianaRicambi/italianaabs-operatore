@@ -37,7 +37,10 @@ export function pdfOriginaleK(testo:string):{url:string;targa:string}|null {
   // Drive/WhatsApp rinomina le copie come «TARGA (1)» o «TARGA _1_».
   // Il nome serve solo a individuare il PDF: targa interna e byte restano verificati.
   const m=/^([A-Z]{2}\d{3}[A-Z]{2}|[A-Z]{2}\d{5})(?:[ ]*\([1-9]\d{0,2}\)|[ ]+_[1-9]\d{0,2}_)?\.pdf$/i.exec(nome);
-  return m?{url:u.href,targa:m[1].toUpperCase()}:null;
+  // Le targhe estere richiedono una sigla Paese esplicita e delimitata.
+  const estera=/^([A-Z0-9]{4,12})[ ]+(?:\((?:CH|US|TN|E|P|IT|DE|FR|GB|ES|PT)\)|_(?:CH|US|TN|E|P|IT|DE|FR|GB|ES|PT)_)(?:[ ]*\([1-9]\d{0,2}\)|[ ]+_[1-9]\d{0,2}_)?\.pdf$/i.exec(nome);
+  const targa=m?.[1]||(estera&&/\d/.test(estera[1])?estera[1]:null);
+  return targa?{url:u.href,targa:targa.toUpperCase()}:null;
  }catch{return null;}
 }
 export async function leggiPdfOriginaleK(testo:string, richiedi:typeof fetch=fetch):Promise<Uint8Array|null>{
