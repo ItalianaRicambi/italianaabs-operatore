@@ -51,7 +51,7 @@ export function leggiOffertaDaTesto(raw: string, targa: string): LetturaOfferta 
   if (testo.length > 200000) return errore("Documento troppo lungo");
   const targhe = [...testo.matchAll(/\bTarga\s*:\s*([A-Z0-9 -]{4,14})/gi)].map(m => m[1].trim().toUpperCase().replace(/[^A-Z0-9]/g, ""));
   if (!targhe.length || targhe.some(t => t !== targa)) return errore("La targa nel PDF è assente o non coincide con la pratica");
-  const compatto = testo.replace(/\s*\n\s*/g, " ");
+  const compatto = testo.replace(/\s+/g, " ");
   const intestazioni = [...testo.matchAll(/\b(?:Opzione|Offerta)\s+(\d+)\s*[-–:]?\s*([^\n€]{5,130})/gi)];
   const ordinali = new Map<Servizio, number>();
   for (const m of intestazioni) {
@@ -66,13 +66,23 @@ export function leggiOffertaDaTesto(raw: string, targa: string): LetturaOfferta 
   const righe = testo.split("\n");
   // Alcuni preventivi a soluzione unica dichiarano il servizio nel titolo e
   // riportano soltanto «Prezzo: € ...» nella sezione economica.
-  const titoliTecnici = righe.filter(r => /^\s*Offerta tecnica\b/i.test(r))
+  // Un ritorno a capo tipografico non deve spezzare «Programma Scambio».
+  // Si ricompone solo questa continuazione esatta, non il paragrafo seguente.
+  const titoliTecnici = righe.flatMap((r, i) => /^\s*Offerta tecnica\b/i.test(r)
+    ? [r + (/\bProgramma\s*$/i.test(r) && /^\s*Scambio(?: Made in Italy)?\s*$/i.test(righe[i + 1] || "") ? " " + righe[i + 1].trim() : "")] : [])
     .map(r => r.replace(/^\s*Offerta tecnica\s*(?:per\s+)?/i, "").trim());
   const serviziNelDocumento = new Set(righe.map(r => servizioDaTesto(r.trim())).filter(Boolean));
   const prezziGenerici = righe.filter(r => /^\s*Prezzo\s*:\s*(?:€|[\d.,]+\s*(?:€|euro))/i.test(r));
   const servizioTitolo = titoliTecnici.length === 1 ? servizioDaTesto(titoliTecnici[0]) : null;
   const titoloUnico = servizioTitolo && intestazioni.length === 0 && serviziNelDocumento.size <= 1
     && [...serviziNelDocumento].every(s => s === servizioTitolo) && prezziGenerici.length === 1 ? titoliTecnici[0] : null;
+  // Il modello SBC descrive esplicitamente la fornitura europea con reso
+  // obbligatorio, ma non usa la sigla PS nella voce economica.
+  const fornituraSbc = titoliTecnici.length === 1 && /^complessivo SBC Mercedes-Benz\s*$/i.test(titoliTecnici[0])
+    && intestazioni.length === 0 && serviziNelDocumento.size === 0
+    && /fornitura di un dispositivo SBC revisionato.{0,80}magazzino centralizzato europeo/i.test(compatto)
+    && /Il reso del vecchio complessivo SBC è obbligatorio/i.test(compatto);
+  let prezzoSbc = false;
   let prezzoDaTitolo = false;
   for (let i = 0; i < righe.length; i++) {
     let riga = righe[i].trim();
@@ -85,11 +95,19 @@ export function leggiOffertaDaTesto(raw: string, targa: string): LetturaOfferta 
     const prezzi = [...riga.matchAll(/€\s*([\d.]+(?:,\d{2})?)|([\d.]+(?:,\d{2})?)\s*(?:€|euro)/gi)];
     const prezzo = prezzi[0];
     if (!prezzo) continue;
-    const servizio = servizioDaTesto(riga.slice(0, prezzo.index));
+    let servizio = servizioDaTesto(riga.slice(0, prezzo.index));
+    if (!servizio && fornituraSbc && /^Complessivo SBC revisionato con 1 anno di garanzia\s*:\s*$/i.test(riga.slice(0, prezzo.index).trim())) {
+      servizio = "PS";
+      prezzoSbc = true;
+    }
     if (!servizio) continue;
     if (prezzi.length !== 1) return errore("Più importi nella stessa voce: verifica richiesta");
     const valore = prezzo[1] || prezzo[2];
-    const importo = Number(valore.includes(",") ? valore.replace(/\./g, "").replace(",", ".") : valore);
+    // Alcuni modelli usano il punto sia per le migliaia sia per i centesimi.
+    // Accetta solo gruppi completi di tre cifre seguiti da due decimali.
+    const importo = Number(valore.includes(",") ? valore.replace(/\./g, "").replace(",", ".")
+      : /^\d{1,3}(?:\.\d{3})+\.\d{2}$/.test(valore)
+        ? valore.slice(0, -3).replace(/\./g, "") + valore.slice(-3) : valore);
     const gia = opzioni.find(o => o.servizio === servizio);
     if (gia) {
       if (gia.importo !== importo) return errore("Più prezzi per lo stesso servizio: verifica richiesta");
@@ -108,12 +126,21 @@ export function leggiOffertaDaTesto(raw: string, targa: string): LetturaOfferta 
       reso_vecchio: servizio === "RI" || servizio === "RE" || servizio === "RC" ? false : /(?:reso|rientro|restitu).{0,80}vecchio|vecchio.{0,80}(?:reso|rientro|restitu)/i.test(sezione) ? true : null });
   }
   if (!opzioni.length) return errore("Alternative e prezzi non identificati nel PDF");
-  if (opzioni.length === 1 && (opzioni[0].servizio === "RC" || prezzoDaTitolo)) {
+  if (opzioni.length === 1 && (opzioni[0].servizio === "RC" || prezzoDaTitolo || prezzoSbc)) {
     // Le limitazioni alla garanzia possono seguire il prezzo, anche in altre pagine.
-    const inizio = testo.search(/Importo dell[’']intervento/i);
+    const inizio = testo.search(/Importo (?:dell[’']intervento|della fornitura)/i);
     const condizioni = inizio >= 0 ? testo.slice(inizio) : testo;
     if (condizioni.length > 6000) return errore("Condizioni dell’offerta da verificare nel PDF");
     opzioni[0].condizioni = condizioni;
+    if (prezzoSbc) {
+      opzioni[0].descrizione = "Complessivo SBC revisionato con 1 anno di garanzia";
+      opzioni[0].reso_vecchio = true;
+      opzioni[0].condizioni = "Reso del vecchio complessivo SBC obbligatorio dopo la sostituzione.\n" + condizioni;
+    } else if (prezzoDaTitolo && /restituzione della ECU originale|restituzione della ECU originale completa/i.test(compatto)) {
+      opzioni[0].reso_vecchio = true;
+      opzioni[0].condizioni = "Restituzione della ECU originale completa e corrispondente obbligatoria; condizioni diverse da concordare prima dell’ordine.\n" + condizioni;
+    }
+    if (opzioni[0].condizioni.length > 6000) return errore("Condizioni dell’offerta da verificare nel PDF");
   }
   if ([...ordinali.keys()].some(s => !opzioni.some(o => o.servizio === s))) return errore("Manca il prezzo di una delle alternative proposte");
   try {
