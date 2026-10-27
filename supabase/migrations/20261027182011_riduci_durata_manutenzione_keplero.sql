@@ -180,7 +180,7 @@ union all select * from private.candidati_flussi_offerta_rientro()
 union all select * from private.candidati_errori_flussi()
 union all select * from private.candidati_richieste_keplero()
 ;
-$function$
+$function$;
 
 revoke all on function private.candidati_coerenza_keplero() from public,anon,authenticated;
 
