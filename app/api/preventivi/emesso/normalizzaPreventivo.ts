@@ -25,6 +25,8 @@ function primo(payload: Payload, ...chiavi: string[]) {
 export function normalizzaTargaPreventivo(value: unknown) {
   return testo(value)
     .toUpperCase()
+    // Solo sigle Paese esplicite e delimitate: le lettere della targa restano.
+    .replace(/\s*(?:\((?:CH|US|TN|E|P|IT|DE|FR|GB|ES|PT)\)|_(?:CH|US|TN|E|P|IT|DE|FR|GB|ES|PT)_)\s*$/, "")
     .replace(/[^A-Z0-9]/g, "");
 }
 
