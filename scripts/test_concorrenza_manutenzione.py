@@ -17,7 +17,7 @@ parsed = urlparse(URL)
 if parsed.hostname not in ('localhost', '127.0.0.1') or not parsed.path.startswith('/keplero_lock_test'):
     raise SystemExit('Usare soltanto un database locale di collaudo dedicato')
 CMD = ['psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', URL]
-MIGRATION = ROOT / 'supabase/migrations/20261027180812_serializza_documenti_e_misura_manutenzione.sql'
+MIGRATION = ROOT / 'supabase/migrations/20261027181132_serializza_documenti_e_misura_manutenzione.sql'
 PHASES = ['gestisci_code_automatiche', 'ritenta_preventivi_non_abbinati',
           'recupera_preventivi_gia_inviati', 'ritenta_letture_offerte',
           'recupera_ordini_contestuali_keplero', 'recupera_flussi_offerta_rientro',
