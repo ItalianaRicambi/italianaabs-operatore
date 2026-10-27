@@ -93,3 +93,46 @@ test("Prezzo generico non associa arbitrariamente titoli o alternative different
   offerta("Prezzo: € 597,00 IVA inclusa"),
  ]) assert.ok(leggiOffertaDaTesto(t,"AB123CD").errore);
 });
+
+test("titolo Programma Scambio su due righe: prezzo ECU e obbligo di restituzione",()=>{
+ const t=`Offerta tecnica per fornitura ECU motore in Programma
+Scambio
+Targa: AB123CD
+È richiesta la restituzione della ECU originale completa.
+Importo della fornitura
+Prezzo: € 397.00 IVA inclusa
+Validità offerta: 15 giorni dalla data della presente
+Eventuali condizioni diverse devono essere concordate prima dell'ordine.`;
+ const r=leggiOffertaDaTesto(t,"AB123CD");
+ assert.equal(r.errore,null);
+ assert.deepEqual(r.opzioni.map(o=>[o.servizio,o.importo,o.reso_vecchio]),[["PS",397,true]]);
+ assert.match(r.opzioni[0].condizioni,/condizioni diverse/);
+ assert.ok(leggiOffertaDaTesto(t.replace("Scambio\nTarga", "Scambio Made in Italy\nTarga")+"\nProgramma Scambio alternativo", "AB123CD").errore);
+});
+
+const sbc=()=>`Offerta tecnica per complessivo SBC Mercedes-Benz
+Targa: AB123CD
+La soluzione prevede la fornitura di un dispositivo SBC revisionato, disponibile tramite il
+nostro magazzino centralizzato europeo.
+Il reso del vecchio complessivo SBC è   obbligatorio   dopo la sostituzione.
+Importo dell’intervento
+Complessivo SBC revisionato con 1 anno di garanzia: € 1.197.00 IVA inclusa
+Validità offerta: 15 giorni dalla data della presente
+La disponibilità del dispositivo deve essere confermata al momento dell’ordine.`;
+
+test("fornitura SBC europea con reso: importo con doppio punto e condizioni conservate",()=>{
+ const r=leggiOffertaDaTesto(sbc(),"AB123CD");
+ assert.equal(r.errore,null);
+ assert.deepEqual(r.opzioni.map(o=>[o.servizio,o.importo,o.iva_inclusa,o.reso_vecchio]),[["PS",1197,true,true]]);
+ assert.match(r.opzioni[0].condizioni,/disponibilità/);
+ assert.equal(r.validita_giorni,15);
+});
+
+test("SBC incompleto, prezzi discordanti o numeri malformati richiedono verifica",()=>{
+ for(const t of [sbc().replace("è   obbligatorio", "non è obbligatorio"),
+ sbc().replace("magazzino centralizzato europeo","magazzino Italia"),
+ sbc().replace("1.197.00","11.97.00"),
+ sbc()+"\nComplessivo SBC revisionato con 1 anno di garanzia: € 1.297.00 IVA inclusa",
+ sbc()+"\nOpzione 2 Programma Scambio Made in Italy"])
+ assert.ok(leggiOffertaDaTesto(t,"AB123CD").errore);
+});
