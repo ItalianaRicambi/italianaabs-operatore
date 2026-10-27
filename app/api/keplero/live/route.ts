@@ -1054,57 +1054,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (instradamento.nuova_pratica === true) {
-      const risultato = data as Record<string, unknown> | null;
-      const nuovaPraticaId =
-        risultato && typeof risultato.pratica_id === "string"
-          ? risultato.pratica_id
-          : "";
-
-      if (!uuidValido(nuovaPraticaId)) {
-        throw new Error(
-          "Supabase non ha restituito un ID valido per la nuova pratica"
-        );
-      }
-
-      const attivazioneResponse = await fetch(
-        `${url}/rest/v1/rpc/attiva_pratica_conversazione_keplero`,
-        {
-          method: "POST",
-          headers: {
-            apikey: secretKey,
-            Authorization: `Bearer ${secretKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            p_external_key: baseKey,
-            p_pratica_id: nuovaPraticaId,
-          }),
-          cache: "no-store",
-        }
-      );
-
-      const attivazioneRaw = await attivazioneResponse.text();
-
-      if (!attivazioneResponse.ok) {
-        console.error("ERRORE ATTIVAZIONE NUOVA PRATICA", {
-          supabase_status: attivazioneResponse.status,
-          supabase_response: attivazioneRaw,
-          pratica_id: nuovaPraticaId,
-          external_key: baseKey,
-        });
-
-        return NextResponse.json(
-          {
-            ok: false,
-            error: `Attivazione nuova pratica Supabase ${attivazioneResponse.status}`,
-            detail: attivazioneRaw,
-          },
-          { status: 500 }
-        );
-      }
-    }
-
     let avanzamentoOrdine: unknown = {
       aggiornato: false,
       motivo: "nessuna_conferma_esplicita",
@@ -1322,6 +1271,65 @@ export async function POST(request: NextRequest) {
     if (!ricevutaResponse.ok) throw new Error("Verifica dell'esito commerciale non disponibile");
     const registrazione = leggiEsitoRegistrazioneCommerciale(await ricevutaResponse.json(), praticaIdContesto);
 
+    // Le verifiche precedenti usano la stessa chiave dell’evento registrato.
+    // Attivare prima cancellerebbe quel collegamento provvisorio, causando
+    // errori o impedendo di riconoscere la conferma relativa a questo evento.
+    if (instradamento.nuova_pratica === true) {
+      const risultato = data as Record<string, unknown> | null;
+      const nuovaPraticaId =
+        risultato && typeof risultato.pratica_id === "string"
+          ? risultato.pratica_id
+          : "";
+
+      if (!uuidValido(nuovaPraticaId)) {
+        throw new Error(
+          "Supabase non ha restituito un ID valido per la nuova pratica"
+        );
+      }
+
+      const attivazioneResponse = await fetch(
+        `${url}/rest/v1/rpc/attiva_pratica_conversazione_keplero`,
+        {
+          method: "POST",
+          headers: {
+            apikey: secretKey,
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            p_external_key: baseKey,
+            p_pratica_id: nuovaPraticaId,
+          }),
+          cache: "no-store",
+        }
+      );
+
+      const attivazioneRaw = await attivazioneResponse.text();
+
+      if (!attivazioneResponse.ok) {
+        console.error("ERRORE ATTIVAZIONE NUOVA PRATICA", {
+          supabase_status: attivazioneResponse.status,
+          supabase_response: attivazioneRaw,
+          pratica_id: nuovaPraticaId,
+          external_key: baseKey,
+        });
+
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Attivazione nuova pratica Supabase ${attivazioneResponse.status}`,
+            detail: attivazioneRaw,
+          },
+          { status: 500 }
+        );
+      }
+      const attivazione = JSON.parse(attivazioneRaw) as Record<string, unknown>;
+      if (attivazione.attiva !== true || attivazione.pratica_id !== nuovaPraticaId ||
+          attivazione.external_key !== baseKey) {
+        throw new Error("Attivazione della nuova pratica non verificata");
+      }
+    }
+
     return NextResponse.json({
       ok: true,
 
@@ -1359,7 +1367,7 @@ export async function POST(request: NextRequest) {
         richiestaDatiAmministrativi,
 
       external_key:
-        key,
+        instradamento.nuova_pratica === true ? baseKey : key,
 
       codici_accettati:
         codici.length,
