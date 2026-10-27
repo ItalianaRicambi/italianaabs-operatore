@@ -8,3 +8,12 @@ test('il suffisso copia Drive non modifica la targa',()=>{
 test('nome e targa discordanti restano errore',()=>{
  assert.throws(()=>normalizzaEventoPreventivo({...base,targa:'FV555PR'}));
 });
+test('sigla Paese delimitata separata dalla targa, anche nelle copie Drive',()=>{
+ for(const [targa,paese] of [['LU71264','CH'],['CRQ5022','US'],['20NJ05','P'],['7741DNV','E'],['199TU6674','TN']]) {
+  for(const nome_file of [`${targa} (${paese}).pdf`,`${targa} (${paese}) (2).pdf`,`${targa} _${paese}_.pdf`]) {
+   assert.equal(normalizzaEventoPreventivo({...base,nome_file,targa}).targa,targa);
+  }
+ }
+ assert.equal(normalizzaEventoPreventivo({...base,nome_file:'AB123CH.pdf',targa:'AB123CH'}).targa,'AB123CH');
+ assert.throws(()=>normalizzaEventoPreventivo({...base,nome_file:'LU71264 (CH).pdf',targa:'LU71265'}));
+});
