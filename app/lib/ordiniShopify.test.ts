@@ -85,3 +85,47 @@ test('varianti sconosciute e descrizioni che menzionano pagamento non attivano l
   assert.equal(servizioShopify('Programma Scambio Made in Italy'), 'PSMI');
   assert.equal(valutaOrdineShopify(normalizzaOrdineShopify({ ...originale, line_items: [{ title: 'Pagato PS', variant_title: '', quantity: 1 }] })).pronto_ordine, false);
 });
+
+const proprieta = (link: string, banco = false) => [
+  { name: '_IR_collegamento', value: link }, ...(banco ? [{ name: '_IR_scelta', value: 'banco' }] : []),
+];
+const dispositivoBanco = { ...originale.line_items[0], properties: proprieta('dispositivo-1', true) };
+const codifica = { title: 'Riprogrammazione a banco ABS ATE - PS / PSMI', variant_title: '', quantity: 1,
+  variant_id: 66275685761373, product_id: 16652980781405, properties: proprieta('dispositivo-1') };
+test('PS/PSMI e codifica identificata e abbinata sono pronti soltanto dopo il pagamento', () => {
+  for (const variant_title of ['Programma Scambio', 'Programma Scambio Made in Italy']) {
+    const o = normalizzaOrdineShopify({ ...originale, line_items: [{ ...dispositivoBanco, variant_title }, codifica] });
+    assert.ok(o.servizi.includes('CODIFICA'));
+    assert.equal(o.codifica_da_verificare, undefined);
+    assert.equal(valutaOrdineShopify(o).pronto_ordine, true);
+    assert.equal(valutaOrdineShopify({ ...o, stato_pagamento: 'pending' }).pronto_ordine, false);
+    assert.equal(valutaOrdineShopify({ ...o, test: true }).attivo, false);
+    assert.equal(valutaOrdineShopify({ ...o, annullato: true }).attivo, false);
+  }
+});
+test('codifica orfana, assente, duplicata, con quantità o collegamento errati richiede verifica', () => {
+  for (const line_items of [[codifica], [dispositivoBanco], [dispositivoBanco, { ...codifica, quantity: 2 }],
+    [dispositivoBanco, { ...codifica, properties: proprieta('altro') }],
+    [dispositivoBanco, dispositivoBanco, codifica], [dispositivoBanco, codifica, codifica],
+    [{ ...dispositivoBanco, variant_title: 'Riparazione Idraulica' }, codifica],
+    [dispositivoBanco, { ...codifica, properties: [...proprieta('dispositivo-1'), ...proprieta('altro')] }]]) {
+    const o = normalizzaOrdineShopify({ ...originale, line_items });
+    assert.equal(o.codifica_da_verificare, true);
+    assert.equal(valutaOrdineShopify(o).pronto_ordine, false);
+  }
+});
+test('titolo e SKU non bastano a riconoscere il servizio; richiede gli identificativi esatti', () => {
+  for (const delta of [{ variant_id: 123 }, { product_id: 123 }, { variant_id: undefined }, { product_id: undefined }]) {
+    const o = normalizzaOrdineShopify({ ...originale, line_items: [dispositivoBanco, { ...codifica, ...delta, sku: 'SERV-CODIFICA-ATE-BANCO' }] });
+    assert.ok(o.servizi.includes('da_verificare'));
+    assert.equal(valutaOrdineShopify(o).pronto_ordine, false);
+  }
+});
+test('due dispositivi distinti e quantità multiple conservano i rispettivi abbinamenti', () => {
+  const o = normalizzaOrdineShopify({ ...originale, line_items: [
+    { ...dispositivoBanco, quantity: 2 }, { ...codifica, quantity: 2 },
+    { ...dispositivoBanco, properties: proprieta('dispositivo-2', true) },
+    { ...codifica, variant_id: '66275685761373', product_id: '16652980781405', properties: proprieta('dispositivo-2') },
+  ] });
+  assert.equal(valutaOrdineShopify(o).pronto_ordine, true);
+});
