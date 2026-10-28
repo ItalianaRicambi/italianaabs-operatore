@@ -76,11 +76,27 @@ Shopify univoco possono essere mostrate senza alterarne lo stato.
 
 Le consegne duplicate sono idempotenti. Gli eventi più vecchi non sovrascrivono
 il registro. Due payload discordanti con la stessa data Shopify conservano
-il precedente e accendono un controllo; un evento successivo lo risolve.
+il precedente e accendono un controllo. Fa eccezione un annullamento certo:
+se cambiano soltanto il flag di annullamento e gli importi correnti, prevale
+l'annullamento anche quando arriva prima dell'evento precedente. Differenze
+di pagamento, valuta, righe o altri dati rimangono da verificare. Un evento
+successivo può risolvere il conflitto, ma non riattivare un ordine annullato.
+
+La codifica a banco è riconosciuta dalla coppia prodotto `16652980781405` e
+variante `66275685761373`, anche senza titolo variante. Richiede un dispositivo
+PS/PSMI con `_IR_scelta=banco`, lo stesso `_IR_collegamento` e quantità
+corrispondenti. Codifiche orfane o abbinamenti ambigui bloccano la preparazione.
+Gli ordini di prova e annullati restano esclusi dalla coda.
 
 ## Collaudo
 
 `node --experimental-strip-types --test app/lib/ordiniShopify.test.ts`
+
+La regressione degli annullamenti è in
+`supabase/tests/shopify_annullamenti_stesso_istante.sql`, da eseguire dopo la
+migrazione `20261028180620_shopify_annullamenti_stesso_istante` insieme a
+`integrations/shopify/test_registro.sql`. Entrambi usano rollback e non lasciano
+ordini di prova nel database.
 
 Eseguire anche TypeScript, lint sui file modificati e il test SQL transazionale
 prima della pubblicazione. Al checkout verificare azienda UE con Partita IVA

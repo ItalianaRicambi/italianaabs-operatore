@@ -4,7 +4,7 @@ export const NEGOZIO_SHOPIFY = 'j4mqgv-am.myshopify.com';
 const UE = new Set('AT BE BG CY CZ DE DK EE ES FI FR GR HR HU IE IT LT LU LV MT NL PL PT RO SE SI SK'.split(' '));
 type Oggetto = Record<string, unknown>;
 export type IndirizzoShopify = { nome: string; azienda: string; via: string; citta: string; cap: string; provincia: string; paese: string | null };
-export type ServizioShopify = 'PS' | 'PSMI' | 'RE' | 'RI' | 'da_verificare';
+export type ServizioShopify = 'PS' | 'PSMI' | 'RE' | 'RI' | 'CODIFICA' | 'da_verificare';
 export type OrdineShopify = {
   shop: string; ordine_id: string; numero: string; aggiornato_shopify_at: string;
   test: boolean; annullato: boolean; stato_pagamento: string;
@@ -12,6 +12,7 @@ export type OrdineShopify = {
   partita_iva_dichiarata: string | null; partita_iva_discordante: boolean; tipo_cliente: 'azienda_dichiarata' | 'non_dichiarato';
   totale: number; iva: number | null; valuta: string; esente_shopify: boolean | null;
   servizi: ServizioShopify[]; articoli: { titolo: string; variante: string; quantita: number }[];
+  codifica_da_verificare?: boolean;
 };
 export type ValutazioneShopify = {
   attivo: boolean; pronto_ordine: boolean; pagamento_richiesto: boolean;
@@ -45,6 +46,34 @@ export function servizioShopify(variante: unknown): ServizioShopify {
   if (v === 'ri' || /^riparazione idraulica\b/.test(v)) return 'RI';
   return 'da_verificare';
 }
+const VARIANTE_CODIFICA = '66275685761373';
+const PRODOTTO_CODIFICA = '16652980781405';
+function identificativo(v: unknown) {
+  return typeof v === 'number' && Number.isSafeInteger(v) ? String(v) : testo(v);
+}
+function servizioRiga(r: Oggetto): ServizioShopify {
+  if (identificativo(r.variant_id) === VARIANTE_CODIFICA && identificativo(r.product_id) === PRODOTTO_CODIFICA) return 'CODIFICA';
+  return servizioShopify(r.variant_title);
+}
+function proprietaRiga(r: Oggetto, nome: string) {
+  const valori = (Array.isArray(r.properties) ? r.properties.map(oggetto) : []).filter(p => p.name === nome);
+  return valori.length === 1 ? testo(valori[0].value) : '';
+}
+/** La sola presenza del servizio non prova un abbinamento valido al dispositivo. */
+function codificaDaVerificare(righe: Oggetto[]) {
+  const codifiche = righe.filter(r => servizioRiga(r) === 'CODIFICA');
+  const dispositivi = righe.filter(r => proprietaRiga(r, '_IR_scelta') === 'banco');
+  if (!codifiche.length && !dispositivi.length) return false;
+  const collegamenti = new Set<string>();
+  for (const r of dispositivi) {
+    const servizio = servizioRiga(r), link = proprietaRiga(r, '_IR_collegamento');
+    if (!['PS', 'PSMI'].includes(servizio) || !link || collegamenti.has(link)) return true;
+    collegamenti.add(link);
+    const abbinate = codifiche.filter(c => proprietaRiga(c, '_IR_collegamento') === link);
+    if (abbinate.reduce((n, c) => n + Number(c.quantity), 0) !== r.quantity) return true;
+  }
+  return codifiche.some(c => !collegamenti.has(proprietaRiga(c, '_IR_collegamento')));
+}
 /** Solo dopo la verifica della firma: non usare questo adattatore su email o testo del bot. */
 export function normalizzaOrdineShopify(value: unknown): OrdineShopify {
   const v = oggetto(value);
@@ -73,13 +102,14 @@ export function normalizzaOrdineShopify(value: unknown): OrdineShopify {
     fatturazione, spedizione, partita_iva_dichiarata: partitaIva, partita_iva_discordante: partiteIva.length > 1,
     tipo_cliente: fatturazione.azienda || partiteIva.length ? 'azienda_dichiarata' : 'non_dichiarato',
     totale, iva, valuta: testo(v.currency), esente_shopify: typeof v.tax_exempt === 'boolean' ? v.tax_exempt : null,
-    servizi: [...new Set(articoli.map(r => servizioShopify(r.variante)))], articoli };
+    servizi: [...new Set(v.line_items.map(r => servizioRiga(oggetto(r))))], articoli,
+    ...(codificaDaVerificare(v.line_items.map(oggetto)) ? { codifica_da_verificare: true } : {}) };
 }
 /** Esito dell'ordine, non prova VIES: Shopify non espone qui il motivo del controllo fallito. */
 export function valutaOrdineShopify(o: OrdineShopify): ValutazioneShopify {
   const attivo = !o.test && !o.annullato && !['refunded','voided','expired'].includes(o.stato_pagamento);
-  const pagamentoRichiesto = o.servizi.some(s => s === 'PS' || s === 'PSMI');
-  const servizioIncerto = o.servizi.includes('da_verificare');
+  const pagamentoRichiesto = o.servizi.some(s => s === 'PS' || s === 'PSMI' || s === 'CODIFICA');
+  const servizioIncerto = o.servizi.includes('da_verificare') || o.codifica_da_verificare === true;
   const pronto = attivo && !servizioIncerto && o.stato_pagamento !== 'partially_refunded' && (!pagamentoRichiesto || o.stato_pagamento === 'paid');
   let stato: ValutazioneShopify['stato_iva'] = 'da_verificare', messaggio = 'Dati IVA incompleti: aprire l’ordine Shopify prima di fatturare.', verifica = true;
   const estero = !!o.spedizione.paese && o.spedizione.paese !== 'IT';
@@ -102,7 +132,7 @@ export function valutaOrdineShopify(o: OrdineShopify): ValutazioneShopify {
   if (!attivo) { verifica = false; messaggio = 'Ordine di prova, annullato o chiuso: escluso dalla coda operativa.'; }
   return { attivo, pronto_ordine: pronto, pagamento_richiesto: pagamentoRichiesto, stato_iva: stato,
     verifica_iva: verifica, messaggio_iva: messaggio,
-    motivazione_ordine: !attivo ? 'Ordine escluso dalla coda operativa.' : servizioIncerto ? 'Soluzione da verificare prima della stesura dell’ordine.'
+    motivazione_ordine: !attivo ? 'Ordine escluso dalla coda operativa.' : o.codifica_da_verificare ? 'Abbinamento o quantità della codifica a banco da verificare prima della stesura dell’ordine.' : servizioIncerto ? 'Soluzione da verificare prima della stesura dell’ordine.'
       : o.stato_pagamento === 'partially_refunded' ? 'Rimborso parziale: verificare l’ordine.'
         : pagamentoRichiesto && o.stato_pagamento !== 'paid' ? 'PS/PSMI: attendere la conferma del pagamento completo da Shopify.'
           : pagamentoRichiesto ? 'Pagamento completo confermato da Shopify: l’operatore può preparare l’ordine.'
