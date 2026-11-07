@@ -1,0 +1,30 @@
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { clientFic } from '../lib/fattureInCloudServer';
+import { configMcpFic, autorizzaMcpFic, challengeMcpFic } from '../lib/ficMcpAuth';
+import { creaServerMcpFic } from '../lib/ficMcpServer';
+import { quotaMcpFic } from '../lib/ficRegistroServer';
+export const dynamic='force-dynamic';
+export const runtime='nodejs';
+export const maxDuration=60;
+const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'};
+async function gestisci(req: Request) {
+  const c=configMcpFic();
+  if(!c) return Response.json({errore:'Collegamento ChatGPT in configurazione.'},{status:503,headers});
+  if(req.headers.get('origin') && req.headers.get('origin')!==new URL(c.resource).origin)
+    return Response.json({errore:'Origin non autorizzata.'},{status:403,headers});
+  let userId:string;
+  try { const auth=req.headers.get('authorization')||''; if(!/^Bearer /i.test(auth)) throw new Error();
+    userId=await autorizzaMcpFic(auth.slice(7),c);
+  } catch { return Response.json({errore:'Autenticazione richiesta.'},{status:401,headers:{...headers,'WWW-Authenticate':challengeMcpFic(c)}}); }
+  try {
+    if(!await quotaMcpFic(userId)) return Response.json({errore:'Limite richieste raggiunto.'},{status:429,headers:{...headers,'Retry-After':'60'}});
+    const server=creaServerMcpFic(clientFic());
+    const transport=new WebStandardStreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true,maxRequestBodySize:16000});
+    await server.connect(transport);
+    try {const response=await transport.handleRequest(req); response.headers.set('Cache-Control','private, no-store'); return response;}
+    finally {await server.close();}
+  } catch {return Response.json({errore:'Servizio temporaneamente non disponibile.'},{status:503,headers});}
+}
+export const POST=gestisci;
+export const GET=gestisci;
+export const DELETE=gestisci;

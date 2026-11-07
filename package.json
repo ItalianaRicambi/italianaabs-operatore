@@ -9,12 +9,16 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@supabase/supabase-js": "2.119.0",
     "fast-xml-parser": "5.11.2",
+    "jose": "6.2.15",
     "next": "16.2.4",
     "nodemailer": "10.1.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "unpdf": "1.8.1"
+    "unpdf": "1.8.1",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

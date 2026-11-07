@@ -11,6 +11,17 @@ const doc = (id = 1) => ({ id, type: 'invoice', date: '2026-11-03', number: 34, 
 const pagina = (rows: unknown[], current = 1, last = 1, total = rows.length) => Response.json({ data: rows, current_page: current, last_page: last, total });
 const errore = (codice: string) => (e: unknown) => e instanceof ErroreFic && e.codice === codice && !e.message.includes(config.token);
 
+test('dettaglio verifica azienda, ID e tipo senza consentire letture di altri documenti', async () => {
+  const urls:string[]=[];
+  const c=creaClientFic(config,async url=>{urls.push(String(url));return String(url).endsWith('/user/companies')?aziende():Response.json({data:doc(7)});});
+  assert.equal((await c.leggi(7)).id,7);
+  assert.equal(urls[1],'https://api-v2.fattureincloud.it/c/29153/issued_documents/7?fieldset=detailed');
+  for(const data of [doc(8),{...doc(7),type:'credit_note'}]) {
+    await assert.rejects(creaClientFic(config,async url=>String(url).endsWith('/user/companies')?aziende():Response.json({data})).leggi(7),errore('risposta'));
+  }
+  await assert.rejects(c.leggi(-1),errore('parametri'));
+});
+
 test('solo GET sul dominio ufficiale, no redirect/cache; dati sensibili remoti non propagati', async () => {
   const calls: string[] = [];
   const client = creaClientFic(config, async (url, init) => {

@@ -37,7 +37,7 @@ export default async function FattureInCloud({ searchParams }: { searchParams: P
           <p className="mt-2 text-slate-600">Consulta i documenti originali e i pagamenti registrati.</p></div>
         <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-900">Sola lettura</span>
       </div>
-      <p className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">Questa consultazione non aggiorna le pratiche. La sincronizzazione automatica e il collegamento a ChatGPT sono ancora da attivare.</p>
+      <p className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">Questa consultazione legge gli originali. Nel <Link href="/fatture-in-cloud/registro" className="font-bold underline">registro documenti</Link> puoi acquisirli senza duplicazioni e verificare le possibili corrispondenze con le pratiche.</p>
       {!configurato ? <section className="rounded-xl border border-amber-300 bg-amber-50 p-5">
         <h2 className="font-bold text-amber-950">Completa il collegamento</h2>
         <p className="mt-2 text-sm">L’app è pronta per il test. Occorre inserire le credenziali nella configurazione protetta del server.</p>

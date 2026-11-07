@@ -108,6 +108,15 @@ export function creaClientFic(configInput: ConfigFic, richiedi: typeof fetch = f
   }
   return {
     verifica: () => verificaAzienda(AbortSignal.timeout(15000)),
+    async leggi(id: number): Promise<DocumentoFic> {
+      if (!intero(id, 1)) throw new ErroreFic('parametri');
+      const signal = AbortSignal.timeout(20000);
+      await verificaAzienda(signal);
+      const body = await get(`/c/${config.companyId}/issued_documents/${id}?fieldset=detailed`, signal);
+      const d = oggetto(body.data);
+      if (d.id !== id || typeof d.type !== 'string' || !Object.hasOwn(TIPI_FIC, d.type)) throw new ErroreFic('risposta');
+      return documento(d, d.type as TipoFic);
+    },
     async cerca(input: RicercaFic): Promise<RisultatoFic> {
       const filtro = validaRicercaFic(input), signal = AbortSignal.timeout(45000);
       await verificaAzienda(signal);

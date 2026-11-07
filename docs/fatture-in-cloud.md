@@ -1,6 +1,6 @@
 # Fatture in Cloud: consultazione privata
 
-Prima fase: consultazione diretta tramite API ufficiali, esclusivamente GET, per la sola azienda Italiana Ricambi (partita IVA verificata prima di ogni ricerca). Non registra documenti, non emette fatture, non modifica pratiche o pagamenti e non attiva cron. Il token personale creato in Fatture in Cloud deve avere soltanto i permessi in lettura concordati: Clienti, Preventivi, Ordini, Fatture e Proforma.
+Consultazione tramite API ufficiali, esclusivamente GET, per la sola azienda Italiana Ricambi (partita IVA verificata prima di ogni ricerca), con registro privato dei documenti normalizzati. Non emette fatture e non modifica pratiche o pagamenti. Il token personale creato in Fatture in Cloud deve avere soltanto i permessi in lettura concordati: Clienti, Preventivi, Ordini, Fatture e Proforma.
 
 ## Configurazione e prova
 
@@ -23,11 +23,49 @@ Massimo 31 giorni e dieci pagine da 50 documenti per ricerca, con timeout comple
 
 Endpoint riservato alla sessione operatore: `GET /api/fatture-in-cloud?azione=verifica`; per la ricerca: `tipo=invoice|quote|order|proforma&dal=YYYY-MM-DD&al=YYYY-MM-DD&cerca=...`. Non è un endpoint MCP e non è accessibile da ChatGPT con il solo token FIC.
 
-## Passaggi successivi
+## Registro e proposte di abbinamento
 
-- Sincronizzazione: dopo il test reale, registrare gli ID FIC, lo stato e la prova di abbinamento in tabelle dedicate. Abbinare prioritariamente ID pratica/riferimento ordine; usare targa e cliente come controlli. Codice dispositivo o solo nome non bastano per una chiusura automatica. Un proforma o preventivo pagato non va classificato automaticamente come fattura. Gestire annullamenti, rettifiche e concorrenza con l'importazione PDF già presente prima di attivare aggiornamenti di stato.
-- ChatGPT: realizzare un server MCP che richiami lo stesso client di sola lettura. Autenticare il chiamante tramite OAuth 2.1 e provider d'identità verificato; il token FIC resta nel backend e non è il token di autenticazione MCP. Non pubblicare strumenti anonimi né URL contenenti segreti. Servono discovery OAuth, verifica audience/issuer/scopes e installazione della connessione privata nell'account ChatGPT. Questo passaggio non è ancora implementato.
-- Il riscontro ricevuto dall'assistenza conferma la fattibilità tecnica, ma non chiarisce la clausola contrattuale sui fornitori esterni. Il quesito resta distinto dalla configurazione tecnica.
+`/fatture-in-cloud/registro` richiede la sessione operatore. La sincronizzazione manuale acquisisce un tipo e un periodo completo, al massimo 31 giorni/500 documenti. Il registro separa Preview e Production, conserva ID e data di verifica, evita duplicati e segnala documenti non più rilevati. Snapshot incompleti o superati da un aggiornamento concorrente non vengono salvati. Nessuna cancellazione automatica e nessun trigger verso l'importazione PDF o le pratiche.
+
+La pagina mostra gli ultimi 100 documenti. Propone una pratica commerciale soltanto con targa e almeno un identificativo fiscale concordanti, senza identificativi in conflitto; esclude pratiche posteriori e archivi test/duplicati. Riferimenti espliciti alla pratica restringono la selezione. Più targhe o più candidati richiedono revisione. Sono suggerimenti, non aggiornamenti di stato: un proforma resta un proforma anche se pagato.
+
+Le migrazioni `20261107185928` e `20261107190702` sono state applicate al progetto collegato. Tabelle e RPC FIC sono accessibili solo al server. Prima di predisporre OAuth è stato inoltre revocato l'accesso anonimo/autenticato a 16 RPC preesistenti con privilegi elevati, mantenendo il ruolo server e i corpi delle funzioni.
+
+Gli esiti delle importazioni sono conservati soltanto nel registro privato. Le prove Preview non modificano la dashboard di produzione.
+
+## ChatGPT: implementato, attivazione ancora da completare
+
+`/mcp` espone due strumenti di sola lettura con SDK MCP ufficiale: `fic_cerca_documenti` e `fic_leggi_documento`. La ricerca restituisce al massimo 50 risultati sintetici per chiamata con indicazione esplicita dei limiti; il dettaglio limita righe e testi e segnala troncamenti. Il token FIC rimane nel backend. Token JWT OAuth verificati con firma asimmetrica, issuer, audience dedicata alla risorsa, client ID, scadenza, scope e lista di utenti autorizzati. Quota 30 richieste/minuto/utente.
+
+Senza configurazione completa, MCP e discovery rispondono 503 senza dati. La pagina `/oauth/consent` usa Supabase Auth e richiede un account preabilitato; verifica client e callback esatti prima di autorizzare. Non offre registrazione libera. Non utilizzare il PIN della dashboard o il token FIC come credenziale ChatGPT.
+
+Variabili server da configurare solo dopo aver registrato l'app OAuth e l'utente:
+
+| Variabile | Uso |
+| --- | --- |
+| `FIC_MCP_RESOURCE_URL` | URL HTTPS stabile completo di `/mcp`; deve coincidere con `aud` del token e con la risorsa ChatGPT. |
+| `FIC_MCP_ISSUER` | Issuer esatto del server OAuth, da discovery. |
+| `FIC_MCP_JWKS_URL` | JWKS del medesimo provider, con chiavi RS256/ES256. |
+| `FIC_MCP_CLIENT_ID` | Identificativo del client OAuth privato registrato per ChatGPT. |
+| `FIC_MCP_USER_IDS` | UUID degli utenti autorizzati, separati da virgole. |
+| `FIC_AUTH_PUBLISHABLE_KEY` | Chiave pubblicabile Supabase `sb_publishable_…`, resa al client esclusivamente nella pagina di consenso. Mai la chiave server. |
+| `FIC_MCP_REDIRECT_URIS` | Callback HTTPS esatti mostrati nella configurazione ChatGPT, separati da virgole. |
+
+Per completare: abilitare il server OAuth Supabase, verificare la firma asimmetrica, registrare il client con il callback effettivamente fornito da ChatGPT, creare/verificare l'account autorizzato e configurare un access-token hook che emetta l'audience dedicata solo per quel client. Il valore generico Supabase `authenticated` non è accettato come audience MCP. Impostare la pagina di consenso HTTPS stabile, configurare le variabili, distribuire e verificare l'intero flusso PKCE, consenso, chiamata strumenti e revoca dall'account ChatGPT. Non considerare il solo test JWT una prova di compatibilità completa con il provider.
+
+Configurazione OAuth, hook, utente e connessione ChatGPT non sono ancora attivati. Il codice resta in anteprima e la PR in bozza finché il flusso reale non è verificato.
+
+## Sincronizzazione pianificata: predisposta, non attiva
+
+`GET /api/fatture-in-cloud/cron` è predisposto per un futuro scheduler: richiede `FIC_SYNC_ENABLED=true` e `Authorization: Bearer <CRON_SECRET>` con segreto di almeno 32 caratteri. Sincronizza separatamente i quattro tipi negli ultimi 31 giorni italiani; un fallimento restituisce 503 e indica i soli tipi già completati. I documenti anteriori alla finestra richiedono una sincronizzazione manuale del periodo.
+
+Non è stato configurato alcun cron né abilitata questa variabile. Prima dell'attivazione servono frequenza concordata, budget API adeguato e prova del recupero errori. L'endpoint non equivale a un processo automatico già in esecuzione.
+
+## Verifiche e limiti del rilascio
+
+Test del client FIC (azienda, paginazione, errori/quote, dettaglio), abbinamenti conservativi, JWT negativi e trasporto MCP. Prova SQL con rollback per idempotenza, snapshot concorrenti, segnalazione assenze e permessi. Build TypeScript/Next e controlli delle rotte senza autenticazione. Il registro remoto con sessione operatore e il flusso OAuth completo richiedono ancora collaudo interattivo.
+
+Il riscontro dell'assistenza FIC conferma la fattibilità tecnica ma non chiarisce la clausola contrattuale sui fornitori esterni; il quesito resta distinto dalla configurazione tecnica.
 
 ## Documentazione verificata
 
