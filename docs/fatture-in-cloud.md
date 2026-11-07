@@ -37,7 +37,7 @@ Gli esiti delle importazioni sono conservati soltanto nel registro privato. Le p
 
 `/mcp` espone due strumenti di sola lettura con SDK MCP ufficiale: `fic_cerca_documenti` e `fic_leggi_documento`. La ricerca restituisce al massimo 50 risultati sintetici per chiamata con indicazione esplicita dei limiti; il dettaglio limita righe e testi e segnala troncamenti. Il token FIC rimane nel backend. Token JWT OAuth verificati con firma asimmetrica, issuer, audience dedicata alla risorsa, client ID, scadenza, scope e lista di utenti autorizzati. Quota 30 richieste/minuto/utente.
 
-Senza configurazione completa, MCP e discovery rispondono 503 senza dati. La pagina `/oauth/consent` usa Supabase Auth e richiede un account preabilitato; verifica client e callback esatti prima di autorizzare. Non offre registrazione libera. Non utilizzare il PIN della dashboard o il token FIC come credenziale ChatGPT.
+Con i soli URL verificati del provider, la discovery pubblica restituisce le informazioni OAuth e MCP risponde 401 con challenge, senza accettare token o leggere dati. Senza questi URL entrambi rispondono 503. Client ID e utenti autorizzati restano obbligatori per ogni lettura. La pagina `/oauth/consent` usa Supabase Auth e richiede un account preabilitato; verifica client e callback esatti prima di autorizzare. Non offre registrazione libera. Non utilizzare il PIN della dashboard o il token FIC come credenziale ChatGPT.
 
 Variabili server da configurare solo dopo aver registrato l'app OAuth e l'utente:
 

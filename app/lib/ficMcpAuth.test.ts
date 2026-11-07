@@ -1,9 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPair, SignJWT } from 'jose';
-import { autorizzaMcpFic, configMcpFic, metadataMcpFic } from './ficMcpAuth.ts';
+import { autorizzaMcpFic, discoveryMcpFic, configMcpFic, metadataMcpFic } from './ficMcpAuth.ts';
 const user='11111111-1111-4111-8111-111111111111';
 const c={resource:'https://example.com/mcp',issuer:'https://auth.example.com/auth/v1',jwks:'https://auth.example.com/auth/v1/.well-known/jwks.json',clientId:'chatgpt-test',users:[user]};
+test('discovery disponibile prima della registrazione senza abilitare accesso ai documenti',()=>{
+  const env={FIC_MCP_RESOURCE_URL:c.resource,FIC_MCP_ISSUER:c.issuer,FIC_MCP_JWKS_URL:c.jwks};
+  assert.deepEqual(discoveryMcpFic(env),{resource:c.resource,issuer:c.issuer,jwks:c.jwks});
+  assert.equal(configMcpFic(env),null);
+  assert.equal(configMcpFic({...env,FIC_MCP_CLIENT_ID:c.clientId}),null);
+  assert.equal(configMcpFic({...env,FIC_MCP_USER_IDS:user}),null);
+  assert.doesNotMatch(JSON.stringify(metadataMcpFic(c)),/clientId|users|secret|token/i);
+  assert.equal(discoveryMcpFic({...env,FIC_MCP_ISSUER:'http://auth.example.com'}),null);
+});
 test('OAuth accetta solo firma, destinatario, client, identità e scope autorizzati',async()=>{
   const {privateKey,publicKey}=await generateKeyPair('ES256');
   const claims={iss:c.issuer,aud:c.resource,sub:user,client_id:c.clientId,scope:'email',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+3600};

@@ -1,6 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { clientFic } from '../lib/fattureInCloudServer';
-import { configMcpFic, autorizzaMcpFic, challengeMcpFic } from '../lib/ficMcpAuth';
+import { discoveryMcpFic, configMcpFic, autorizzaMcpFic, challengeMcpFic } from '../lib/ficMcpAuth';
 import { creaServerMcpFic } from '../lib/ficMcpServer';
 import { quotaMcpFic } from '../lib/ficRegistroServer';
 export const dynamic='force-dynamic';
@@ -9,7 +9,12 @@ export const maxDuration=60;
 const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'};
 async function gestisci(req: Request) {
   const c=configMcpFic();
-  if(!c) return Response.json({errore:'Collegamento ChatGPT in configurazione.'},{status:503,headers});
+  if(!c) {
+    const d=discoveryMcpFic();
+    // Discovery pubblica per registrare il client; nessun token è accettato finché manca l'allowlist.
+    return Response.json({errore:'Collegamento ChatGPT in configurazione.'},{status:d?401:503,
+      headers:d?{...headers,'WWW-Authenticate':challengeMcpFic(d)}:headers});
+  }
   if(req.headers.get('origin') && req.headers.get('origin')!==new URL(c.resource).origin)
     return Response.json({errore:'Origin non autorizzata.'},{status:403,headers});
   let userId:string;
