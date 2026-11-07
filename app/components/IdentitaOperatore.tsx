@@ -120,7 +120,7 @@ export function AccessoOperatore() {
 export function BarraOperatore({ operatore }: { operatore: Operatore }) {
   return (
     <div className="border-b border-blue-200 bg-blue-50">
-      <div className="mx-auto flex max-w-[1750px] items-center justify-between gap-4 px-6 py-3">
+      <div className="mx-auto flex max-w-[1750px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div className="text-sm text-blue-950">
           Operatore attivo: <strong>{operatore}</strong>
         </div>

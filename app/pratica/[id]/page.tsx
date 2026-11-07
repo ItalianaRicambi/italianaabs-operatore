@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { SchedaPratica, SezionePraticaVisibile, CardPratica } from '../../components/SchedaPratica';
+import { prossimaAzione } from '../../lib/oggi';
+import { giornoRoma } from '../../lib/esitiGls';
 import { leggiMbe } from "../../lib/mbeServer";
 import { SpedizioniMbe } from "../../components/SpedizioniMbe";
 import { leggiDocumentiPreventivo } from "../../lib/documentiPreventivoServer";
@@ -71,6 +74,8 @@ type Pratica = {
   tipo_guasto?: string | null;
   descrizione_guasto?: string | null;
   campi_bloccati_operatore?: string[] | null;
+  blocco_operatore?: boolean | null;
+  verifica_tecnica_necessaria?: boolean;
   stato_completezza?: string | null;
   fonte_completezza?: string | null;
   stato_conferma_cliente?: "non_richiesta" | "in_attesa" | "confermato" | null;
@@ -334,13 +339,14 @@ async function getPratica(id: string, ricercaCliente: string) {
     ),
   ]);
 
-  const [scelte, offerte, assistenzeRientro, preventiviOfferta, documentiAmministrativi, messaggiAmministrativi] = await Promise.all([
+  const [scelte, offerte, assistenzeRientro, preventiviOfferta, documentiAmministrativi, messaggiAmministrativi, verificheTecniche] = await Promise.all([
     selectSupabase<SceltaCliente[]>(`v_scelte_cliente?pratica_id=eq.${id}&select=*`),
     selectSupabase<OffertaVersione[]>(`offerte_versioni?pratica_id=eq.${id}&select=id,pratica_id,preventivo_id,versione,inviato_at,stato,errore,file_url,registrata_at&order=inviato_at.desc,registrata_at.desc`),
     selectSupabase<AssistenzaRientro[]>(`assistenze_rientri?pratica_id=eq.${id}&select=*&order=aperta_at.desc`),
     selectSupabase<{id:string;file_url:string|null;inviato_at:string|null}[]>(`preventivi?pratica_id=eq.${id}&select=id,file_url,inviato_at&order=inviato_at.desc`),
     selectSupabase<{id:string;tipo_documento:string;numero_documento:string|null;data_documento:string|null;documento_url:string|null}[]>(`documenti_amministrativi?pratica_id=eq.${id}&select=id,tipo_documento,numero_documento,data_documento,documento_url&order=data_documento.desc`),
     selectSupabase<{id:number;testo:string|null}[]>(`keplero_live_events?pratica_id=eq.${id}&select=id,testo:payload->>ultimo_messaggio_cliente&order=id.desc&limit=200`),
+    selectSupabase<{pratica_id: string}[]>(`keplero_lavori_pratiche_elenco?pratica_id=eq.${id}&stato=neq.risolta&verifica_tecnica_necessaria=eq.true&select=pratica_id&limit=1`),
   ]);
   const opzioniOfferta = offerte.length ? await selectSupabase<AlternativaOfferta[]>(`offerta_opzioni?offerta_id=in.(${offerte.map(q=>q.id).join(",")})&select=*&order=numero.asc`) : [];
 
@@ -364,7 +370,7 @@ async function getPratica(id: string, ricercaCliente: string) {
   });
 
   return {
-    pratica: pratiche[0],
+    pratica: { ...pratiche[0], verifica_tecnica_necessaria: verificheTecniche.length > 0 },
     codici,
     allegati,
     storicoOperatore,
@@ -808,11 +814,16 @@ export default async function PraticaPage({
             leggibile: null,
           }));
 
+  const prossima = prossimaAzione({ ...pratica, scelta_cliente: sceltaCliente,
+    assistenze_rientro: assistenzeRientro, attivita_operative: attivitaOperative,
+    offerta_da_verificare: [...offerte].sort((a, b) => Date.parse(b.registrata_at) - Date.parse(a.registrata_at) || b.id.localeCompare(a.id))[0]?.stato === 'da_verificare',
+  }, giornoRoma());
+
   return (
     <main className="min-h-screen bg-slate-50">
       <BarraOperatore operatore={operatoreAttivo} />
 
-      <div className="mx-auto max-w-[1500px] px-6 py-8">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 text-slate-900 sm:px-6">
         <NavigazionePratica
           key={`alto-${pratica.id}`}
           praticaId={pratica.id}
@@ -829,8 +840,11 @@ export default async function PraticaPage({
               </p>
 
               <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
-                {codicePratica(pratica)}
+                {codicePratica(pratica)} · {pratica.targa || 'Targa da completare'}
               </h1>
+
+              <p className="mt-2 text-base font-semibold text-slate-700">{[pratica.marca_veicolo, pratica.modello_veicolo].filter(Boolean).join(' ') || 'Veicolo da identificare'} · {pratica.nome_cliente || 'Cliente da identificare'}</p>
+              <p className="mt-2 text-sm text-slate-600">Stato: {etichettaStato(pratica.tipo_flusso === 'assistenza' ? pratica.stato_assistenza : pratica.stato_commerciale)} · Fatturazione: {etichettaStato(pratica.stato_fatturazione)}</p>
 
               <p className="mt-2 text-sm text-slate-500">
                 Creata {formattaData(pratica.created_at)}
@@ -908,12 +922,22 @@ export default async function PraticaPage({
           </section>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-3">
+        <SchedaPratica key={pratica.id} praticaId={pratica.id} iniziale={ricercaCliente ? 'amministrazione' : 'dati'} azione={prossima}
+          protetta={Boolean(pratica.blocco_operatore || pratica.blocco_classificazione_operatore || pratica.campi_bloccati_operatore?.length)}>
+        <div className="pratica-griglia grid gap-6 xl:grid-cols-3">
           <section className="space-y-6 xl:col-span-2">
+            <SezionePraticaVisibile sezioni={['logistica']}>
             <AssistenzeRientro praticaId={pratica.id} assistenze={assistenzeRientro} solaLettura={String(navigazione.filtro || "").includes("mese_precedente")} />
+            </SezionePraticaVisibile>
+            <SezionePraticaVisibile sezioni={['offerta']}>
             {documentiPreventivo === null ? <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4">Acquisizione automatica preventivi da verificare: registro non disponibile.</p> : <DocumentiPreventivoAutomatici documenti={documentiPreventivo} />}
+            </SezionePraticaVisibile>
+            <SezionePraticaVisibile sezioni={['logistica']}>
             <section className="rounded-xl border bg-slate-50 p-4"><h2 className="text-xl font-bold">Spedizioni MBE</h2><Link href="/mbe" className="text-blue-800 underline">Apri registro MBE</Link>{spedizioniMbe === null ? <p role="alert">Registro MBE non disponibile.</p> : <SpedizioniMbe righe={spedizioniMbe} />}</section>
+            </SezionePraticaVisibile>
+            <SezionePraticaVisibile sezioni={['offerta']}>
             <OfferteEScelta dataInvio={pratica.preventivo_inviato_at || null} praticaId={pratica.id} scelta={sceltaCliente} offerte={offerte} opzioni={opzioniOfferta} preventivi={preventiviOfferta} solaLettura={String(navigazione.filtro || "").includes("mese_precedente")} />
+            </SezionePraticaVisibile>
             <Card titolo="Cliente e veicolo">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Campo label="Cliente" value={pratica.nome_cliente} />
@@ -1679,12 +1703,14 @@ export default async function PraticaPage({
               )}
             </Card>
 
+            <SezionePraticaVisibile sezioni={['logistica']}>
             {(esitiGls.righe.length > 0 || esitiGls.errore) && <section className="mb-5 rounded-2xl border border-blue-200 bg-white p-5">
               <h2 className="mb-3 text-lg font-bold text-blue-950">Esiti delle prese GLS</h2>
               <p className="mb-3 text-xs text-slate-600">Il ritiro effettuato non equivale alla ricezione del dispositivo. Gli esiti si riferiscono al controllo indicato.</p>
               {esitiGls.errore && <p className="text-sm text-red-800">{esitiGls.errore}</p>}
               <div className="space-y-3">{esitiGls.righe.map(e => <EsitoGlsCard key={e.id} esito={e} />)}</div>
             </section>}
+            </SezionePraticaVisibile>
             {attivitaOperative.length > 0 && (
               <Card titolo="Attività operative rilevate">
                 <div className="space-y-4">
@@ -1954,7 +1980,7 @@ export default async function PraticaPage({
             </Card>}
             {pratica.tipo_flusso === "commerciale" && pratica.stato_commerciale === "ordine_acquisito" &&
               !String(navigazione.filtro || "").includes("mese_precedente") && (
-                <ImportazioneDocumentoAmministrativo praticaId={pratica.id} />
+                <SezionePraticaVisibile sezioni={['amministrazione']}><ImportazioneDocumentoAmministrativo praticaId={pratica.id} /></SezionePraticaVisibile>
               )}
             {(pratica.stato_fatturazione === "da_fatturare" ||
               clienteCollegato) && (
@@ -2281,6 +2307,7 @@ export default async function PraticaPage({
             </Card>
           </aside>
         </div>
+        </SchedaPratica>
         <NavigazionePratica
           key={`basso-${pratica.id}`}
           praticaId={pratica.id}
@@ -2302,10 +2329,9 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="mb-5 text-base font-bold text-slate-950">{titolo}</h2>
+    <CardPratica titolo={titolo}>
       {children}
-    </section>
+    </CardPratica>
   );
 }
 

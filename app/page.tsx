@@ -29,6 +29,9 @@ import { StatoRisposteK } from './components/StatoRisposteK';
 import { StatoOriginaliK } from './components/StatoOriginaliK';
 import { StatoLavoriK } from './components/StatoLavoriK';
 import { StatoOrdiniShopify } from './components/StatoOrdiniShopify';
+import { HomeOggi } from './components/HomeOggi';
+import { FILTRI_OGGI, filtraOggi, controlloFermo, numeroPagina } from './lib/oggi';
+import { giornoRoma } from './lib/esitiGls';
 
 type Pratica = {
   verifica_tecnica_necessaria?: boolean;
@@ -207,6 +210,8 @@ async function getPratiche(): Promise<{
       Authorization: `Bearer ${secretKey}`,
     };
 
+    const avvisi: string[] = [];
+
     const praticheBaseRaw = await fetchTutteLePagine<Pratica>(
       `${url}/rest/v1/v_coda_operatore_tempi?select=*&order=priorita.asc,created_at.asc,id.asc`,
       { headers }
@@ -262,6 +267,7 @@ async function getPratiche(): Promise<{
       // La dashboard deve continuare a funzionare anche se i soli
       // metadati aggiuntivi non fossero temporaneamente leggibili.
       console.error("Metadati pratiche non disponibili:", error);
+      avvisi.push("Metadati amministrativi non disponibili");
     }
 
     const metadatiPerId = new Map(
@@ -294,6 +300,7 @@ async function getPratiche(): Promise<{
       tempiPerId = new Map(tempi.map((riga) => [riga.id, riga]));
     } catch (error) {
       console.error("Tempi lavorativi dashboard non disponibili:", error);
+      avvisi.push("Tempi lavorativi parziali");
     }
 
     let lavoriTecnici: { pratica_id: string }[] = [];
@@ -360,6 +367,7 @@ async function getPratiche(): Promise<{
       );
     } catch (error) {
       console.error("Coda attività operative non disponibile:", error);
+      avvisi.push("Attività operative non disponibili: ritiri e richiamate potrebbero mancare dall’elenco");
     }
 
     const [scelte, assistenze, offerte] = await Promise.all([
@@ -385,7 +393,7 @@ async function getPratiche(): Promise<{
         offerta_da_verificare: ultimeOfferte.get(pratica.id)?.stato === "da_verificare",
       })),
       attivita,
-      errore: erroreLavoriTecnici,
+      errore: [...avvisi, erroreLavoriTecnici].filter(Boolean).join("; ") || null,
     };
   } catch (error) {
     return {
@@ -711,6 +719,7 @@ function filtraPratiche(
   meseCorrente: string,
   mesePrecedente: string
 ) {
+  if (Object.hasOwn(FILTRI_OGGI, filtro)) return filtraOggi(pratiche, filtro, giornoRoma());
   switch (filtro) {
     case "assistenza_da_evadere":
       return pratiche.filter(
@@ -863,6 +872,8 @@ function labelFiltro(
   etichettaCorrente = "mese corrente",
   etichettaPrecedente = "mese precedente"
 ) {
+  if (Object.hasOwn(FILTRI_OGGI, filtro)) return FILTRI_OGGI[filtro];
+  if (filtro === "controlli") return "Centro controlli";
   switch (filtro) {
     case "assistenza_da_evadere":
       return "Assistenze da evadere";
@@ -935,6 +946,8 @@ export default async function Home({
   searchParams: Promise<{
     filtro?: string | string[];
     cerca?: string | string[];
+    vista?: string | string[];
+    pagina?: string | string[];
   }>;
 }) {
   const operatoreAttivo = await getOperatoreAttivo();
@@ -948,14 +961,17 @@ export default async function Home({
   ]);
   let emailStato: {ricevute:number;da_classificare:number;errori:number;ultima_ricezione:string|null;allegati_da_verificare:number}|null=null;
   try {emailStato=await rpcEmail('stato_richieste_email');}catch{/* L'errore rimane visibile nel riquadro email. */}
-  const controlloKInRitardo = !controlloK.stato?.ultima_esecuzione_at ||
-    // eslint-disable-next-line react-hooks/purity -- Pagina server dinamica: valuta il ritardo rispetto all'ora della richiesta.
-    Date.now() - new Date(controlloK.stato.ultima_esecuzione_at).getTime() > 15 * 60_000;
+  const controlloKInRitardo = controlloFermo(controlloK.stato?.ultima_esecuzione_at,
+    // eslint-disable-next-line react-hooks/purity -- Pagina server dinamica: controlla la freschezza all'istante della richiesta.
+    controlloK.errore ?? controlloK.stato?.errore, Date.now());
   const params = await searchParams;
+  const vistaClassica = (Array.isArray(params.vista) ? params.vista[0] : params.vista) === "classica";
+  const valorePagina = Array.isArray(params.pagina) ? params.pagina[0] : params.pagina;
+  const pagina = numeroPagina(valorePagina);
 
   const filtroAttivo = Array.isArray(params?.filtro)
     ? params.filtro[0]
-    : params?.filtro || "tutte";
+    : params?.filtro || (vistaClassica ? "tutte" : "oggi");
 
   const cercaAttiva = (
     Array.isArray(params?.cerca)
@@ -994,6 +1010,7 @@ export default async function Home({
 
   const hrefConFiltro = (filtro: string) => {
     const query = new URLSearchParams();
+    if (vistaClassica || solaLettura) query.set("vista", "classica");
 
     if (filtro !== "tutte") {
       query.set("filtro", filtro);
@@ -1007,10 +1024,101 @@ export default async function Home({
     return stringaQuery ? `/?${stringaQuery}` : "/";
   };
 
-  const hrefAzzeraRicerca =
-    filtroAttivo === "tutte"
-      ? "/"
-      : `/?filtro=${encodeURIComponent(filtroAttivo)}`;
+  const hrefAzzeraRicerca = `/?vista=classica&filtro=${encodeURIComponent(filtroAttivo)}`;
+
+  const pannelloControlli = <div id="controlli" className="space-y-4">
+        <StatoLavoriK /><StatoRisposteK /><StatoOriginaliK /><StatoOrdiniShopify />
+        <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-blue-950">Richieste email · info@italianaabs.com</h2><Link href="/email" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Apri richieste email</Link></div>
+          {emailStato ? <p className="mt-3 text-sm">Ricevute: {emailStato.ricevute} · Da classificare: {emailStato.da_classificare} · Errori: {emailStato.errori} · Allegati da verificare: {emailStato.allegati_da_verificare}<br/>Ultima acquisizione: {formattaData(emailStato.ultima_ricezione)}</p> : <p role="alert" className="mt-3 text-sm text-red-800">Registro email non disponibile: verificare l’acquisizione delle richieste.</p>}
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-blue-950">Monitoraggio prese GLS</h2>
+            <Link href="/gls" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Apri esiti e motivazioni GLS</Link>
+          </div>
+          <p className="mt-2 text-sm text-amber-900">Aggiornamento automatico da configurare. Gli esiti mostrano la data dell’ultimo controllo registrato.</p>
+          {esitiGls.errore ? <p className="mt-2 text-sm text-red-800">{esitiGls.errore}</p> : <div className="mt-3 flex flex-wrap gap-4 text-sm">
+            <Link href="/gls?stato=prenotata" className="font-semibold text-blue-800">Prenotate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'prenotata').length}</Link>
+            <Link href="/gls?stato=effettuata" className="font-semibold text-green-800">Effettuate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'effettuata').length}</Link>
+            <Link href="/gls?stato=non_effettuata" className="font-semibold text-red-800">Non effettuate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'non_effettuata').length}</Link>
+            <Link href="/gls?stato=annullata" className="font-semibold text-amber-950">Annullate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'annullata').length}</Link>
+            <Link href="/gls?stato=da_verificare" className="font-semibold text-amber-950">Esiti da verificare: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'da_verificare').length}</Link>
+            <Link href="/gls?stato=da_abbinare" className="font-semibold text-amber-950">Abbinamenti da verificare: {esitiGls.righe.filter(e => e.esito_abbinamento !== 'abbinata').length}</Link>
+          </div>}
+        </section>
+
+        {errore && (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            <strong>Errore di collegamento:</strong> {errore}
+          </div>
+        )}
+
+        {(prenotazioniInAttesa.errore || prenotazioniInAttesa.righe.length > 0) && <section className="mb-6 rounded-2xl border border-amber-300 bg-white p-5">
+        <h2 className="text-lg font-bold text-amber-950">Conferme prese da verificare ({prenotazioniInAttesa.righe.length})</h2>
+        {prenotazioniInAttesa.errore && <p className="mt-2 text-sm text-red-800">{prenotazioniInAttesa.errore}</p>}
+        {prenotazioniInAttesa.righe.map(r => <details key={r.id} className="mt-3 rounded-xl border border-amber-200 p-3">
+          <summary className="cursor-pointer text-sm font-bold">{r.riferimento} · {dataPresaIt(r.data_ritiro)} · {r.esito.replaceAll("_", " ")}</summary>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{r.testo}</p>
+          {r.errore && <p className="mt-2 text-sm text-red-800">Elaborazione da verificare</p>}
+          {r.pratica_id && <Link className="mt-2 block text-sm font-bold text-blue-700" href={`/pratica/${r.pratica_id}`}>Apri la pratica collegata</Link>}
+          {!solaLettura && <AbbinamentoPresa ricevutaId={r.id} ritiri={attivita.filter(a => a.tipo.startsWith("ritiro_")).map(a => ({ id: a.id, label: `${pratiche.find(p => p.id === a.pratica_id)?.codice_pratica || a.pratica_id} · ${pratiche.find(p => p.id === a.pratica_id)?.targa || "Targa assente"} · ${NOMI_RITIRO[a.tipo] || a.tipo}` }))} />}
+        </details>)}
+      </section>}
+
+      <section className="mb-6 rounded-2xl border border-amber-200 bg-white p-5">
+          <h2 className="text-lg font-bold text-slate-950">Controllo coerenza K e Dashboard</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Messaggi ricevuti nelle ultime 48 ore, con conteggio sospeso sabato e domenica, confrontati con preventivi e stati della pratica. I PDF ricevuti ma non abbinati restano segnalati fino alla risoluzione.
+            Le incongruenze richiedono una verifica dell’operatore.
+          </p>
+          {controlloK.errore || controlloK.stato?.errore || controlloKInRitardo ? (
+            <p className="mt-3 font-semibold text-red-700">
+              {controlloK.errore || controlloK.stato?.errore || "Controllo non aggiornato: ultima esecuzione assente o oltre 15 minuti fa"}
+            </p>
+          ) : (
+            <p className="mt-3 text-sm text-slate-700">
+              Ultimo controllo: {formattaData(controlloK.stato?.ultima_esecuzione_at || null)} · {controlloK.stato?.eventi_esaminati} eventi esaminati · {controlloK.segnalazioni.length} segnalazioni aperte
+            </p>
+          )}
+          <p className="mt-2 text-sm text-amber-800">
+            Copertura parziale: le risposte di K non sono trasmesse alla dashboard.
+            Le istruzioni su privati e imballaggio richiedono ancora il controllo della conversazione originale.
+            I messaggi che K non trasmette non possono essere verificati qui.
+          </p>
+          <details className="mt-3" open={controlloK.segnalazioni.length > 0}>
+            <summary className="cursor-pointer text-sm font-semibold text-slate-800">Segnalazioni da verificare ({controlloK.segnalazioni.length})</summary>
+            <div className="mt-3 max-h-96 space-y-3 overflow-y-auto">
+              {controlloK.segnalazioni.map((voce) => {
+                const pratica = pratiche.find((p) => p.id === voce.pratica_id);
+                const linkDocumento = voce.regola === "preventivo_pdf_non_abbinato"
+                  ? voce.evidenza.match(/https:\/\/\S+/)?.[0]
+                  : undefined;
+                return (
+                  <div key={voce.chiave} className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm">
+                    <p className="font-semibold text-slate-900">
+                      {voce.pratica_id ? <Link className="underline" href={`/pratica/${voce.pratica_id}`}>{pratica?.codice_pratica || "Apri pratica"}{pratica?.targa ? ` · ${pratica.targa}` : ""}</Link> : voce.regola === "preventivo_pdf_non_abbinato" ? "Preventivo da abbinare" : "Evento senza pratica"}{voce.event_id != null ? ` · Evento ${voce.event_id}` : ""}
+                    </p>
+                    <p className="mt-1 text-slate-700">{voce.descrizione}</p>
+                    {voce.evidenza && <p className="mt-1 whitespace-pre-wrap text-slate-600">{voce.regola === "preventivo_pdf_non_abbinato" ? "Documento" : "Messaggio"}: {voce.evidenza}</p>}
+                    {linkDocumento && <a className="mt-2 inline-block font-semibold text-blue-700 underline" href={linkDocumento} target="_blank" rel="noopener noreferrer">Apri PDF da abbinare</a>}
+                  </div>
+                );
+              })}
+              {controlloK.segnalazioni.length === 0 && !controlloKInRitardo && !controlloK.errore && !controlloK.stato?.errore && <p className="text-sm text-slate-600">Nessuna incoerenza rilevata dalle regole attive.</p>}
+            </div>
+          </details>
+        </section>
+    <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Copertura email non attestata come completa: l’attivazione e il collaudo del flusso info devono essere verificati. Anche dopo l’attivazione, l’assenza di nuovi record non prova che tutta la posta sia stata acquisita.</p>
+  </div>;
+
+  if (!vistaClassica && !solaLettura) return <HomeOggi
+    operatore={operatoreAttivo} pratiche={pratiche} righe={praticheFiltrate}
+    filtro={filtroAttivo} etichetta={labelFiltro(filtroAttivo, mesi.etichettaCorrente, mesi.etichettaPrecedente)}
+    cerca={cercaAttiva} pagina={pagina} giornoRoma={giornoRoma()} errore={errore}
+    controllo={{fermo: controlloKInRitardo, ultimo: controlloK.stato?.ultima_esecuzione_at || null, aperte: controlloK.segnalazioni.length}}
+    email={emailStato} controlli={pannelloControlli} />;
 
   const assistenzaDaEvadere = contaAssistenzaDaEvadere(pratiche);
   const assistenzaAperta = contaAssistenzaAperta(pratiche);
@@ -1100,6 +1208,7 @@ export default async function Home({
       )}
       cerca={cercaAttiva}
       voci={vociNavigazione}
+      ritorno={hrefConFiltro(filtroAttivo)}
     >
     <main className="min-h-screen bg-slate-50">
       <BarraOperatore operatore={operatoreAttivo} />
@@ -1110,8 +1219,9 @@ export default async function Home({
             <p className="mb-1 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
               Italiana Ricambi / ItalianaABS
             </p>
+            <Link href="/" className="mb-3 inline-block text-sm font-bold text-blue-700 underline">← Apri la nuova home Oggi</Link>
             <h1 className="text-3xl font-bold tracking-tight text-slate-950">
-              Dashboard Operatore
+              Dashboard Operatore · vista classica
             </h1>
             <p className="mt-2 text-sm text-slate-600">
               Preventivi, assistenza, ordini acquisiti e controllo fatturazione
@@ -1133,89 +1243,7 @@ export default async function Home({
 
         <div className="mb-4"><Link href="/mbe" className="font-bold text-blue-800 underline">Spedizioni MBE · tracking e abbinamenti</Link></div>
         <div className="mb-4"><Link href="/preventivi" className="font-bold text-blue-800 underline">Preventivi acquisiti automaticamente · invii da verificare</Link></div>
-        <StatoLavoriK /><StatoRisposteK /><StatoOriginaliK /><StatoOrdiniShopify />
-        <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-blue-950">Richieste email · info@italianaabs.com</h2><Link href="/email" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Apri richieste email</Link></div>
-          {emailStato ? <p className="mt-3 text-sm">Ricevute: {emailStato.ricevute} · Da classificare: {emailStato.da_classificare} · Errori: {emailStato.errori} · Allegati da verificare: {emailStato.allegati_da_verificare}<br/>Ultima acquisizione: {formattaData(emailStato.ultima_ricezione)}</p> : <p role="alert" className="mt-3 text-sm text-red-800">Registro email non disponibile: verificare l’acquisizione delle richieste.</p>}
-        </section>
-
-        <section className="mb-6 rounded-2xl border border-blue-200 bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-blue-950">Monitoraggio prese GLS</h2>
-            <Link href="/gls" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Apri esiti e motivazioni GLS</Link>
-          </div>
-          <p className="mt-2 text-sm text-amber-900">Aggiornamento automatico da configurare. Gli esiti mostrano la data dell’ultimo controllo registrato.</p>
-          {esitiGls.errore ? <p className="mt-2 text-sm text-red-800">{esitiGls.errore}</p> : <div className="mt-3 flex flex-wrap gap-4 text-sm">
-            <Link href="/gls?stato=prenotata" className="font-semibold text-blue-800">Prenotate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'prenotata').length}</Link>
-            <Link href="/gls?stato=effettuata" className="font-semibold text-green-800">Effettuate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'effettuata').length}</Link>
-            <Link href="/gls?stato=non_effettuata" className="font-semibold text-red-800">Non effettuate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'non_effettuata').length}</Link>
-            <Link href="/gls?stato=annullata" className="font-semibold text-amber-950">Annullate: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'annullata').length}</Link>
-            <Link href="/gls?stato=da_verificare" className="font-semibold text-amber-950">Esiti da verificare: {esitiGls.righe.filter(e => statoGlsAttuale(e) === 'da_verificare').length}</Link>
-            <Link href="/gls?stato=da_abbinare" className="font-semibold text-amber-950">Abbinamenti da verificare: {esitiGls.righe.filter(e => e.esito_abbinamento !== 'abbinata').length}</Link>
-          </div>}
-        </section>
-
-        {errore && (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-            <strong>Errore di collegamento:</strong> {errore}
-          </div>
-        )}
-
-        {(prenotazioniInAttesa.errore || prenotazioniInAttesa.righe.length > 0) && <section className="mb-6 rounded-2xl border border-amber-300 bg-white p-5">
-        <h2 className="text-lg font-bold text-amber-950">Conferme prese da verificare ({prenotazioniInAttesa.righe.length})</h2>
-        {prenotazioniInAttesa.errore && <p className="mt-2 text-sm text-red-800">{prenotazioniInAttesa.errore}</p>}
-        {prenotazioniInAttesa.righe.map(r => <details key={r.id} className="mt-3 rounded-xl border border-amber-200 p-3">
-          <summary className="cursor-pointer text-sm font-bold">{r.riferimento} · {dataPresaIt(r.data_ritiro)} · {r.esito.replaceAll("_", " ")}</summary>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{r.testo}</p>
-          {r.errore && <p className="mt-2 text-sm text-red-800">Elaborazione da verificare</p>}
-          {r.pratica_id && <Link className="mt-2 block text-sm font-bold text-blue-700" href={`/pratica/${r.pratica_id}`}>Apri la pratica collegata</Link>}
-          {!solaLettura && <AbbinamentoPresa ricevutaId={r.id} ritiri={attivita.filter(a => a.tipo.startsWith("ritiro_")).map(a => ({ id: a.id, label: `${pratiche.find(p => p.id === a.pratica_id)?.codice_pratica || a.pratica_id} · ${pratiche.find(p => p.id === a.pratica_id)?.targa || "Targa assente"} · ${NOMI_RITIRO[a.tipo] || a.tipo}` }))} />}
-        </details>)}
-      </section>}
-
-      <section className="mb-6 rounded-2xl border border-amber-200 bg-white p-5">
-          <h2 className="text-lg font-bold text-slate-950">Controllo coerenza K e Dashboard</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Messaggi ricevuti nelle ultime 48 ore, con conteggio sospeso sabato e domenica, confrontati con preventivi e stati della pratica. I PDF ricevuti ma non abbinati restano segnalati fino alla risoluzione.
-            Le incongruenze richiedono una verifica dell’operatore.
-          </p>
-          {controlloK.errore || controlloK.stato?.errore || controlloKInRitardo ? (
-            <p className="mt-3 font-semibold text-red-700">
-              {controlloK.errore || controlloK.stato?.errore || "Controllo non aggiornato: ultima esecuzione assente o oltre 15 minuti fa"}
-            </p>
-          ) : (
-            <p className="mt-3 text-sm text-slate-700">
-              Ultimo controllo: {formattaData(controlloK.stato?.ultima_esecuzione_at || null)} · {controlloK.stato?.eventi_esaminati} eventi esaminati · {controlloK.segnalazioni.length} segnalazioni aperte
-            </p>
-          )}
-          <p className="mt-2 text-sm text-amber-800">
-            Copertura parziale: le risposte di K non sono trasmesse alla dashboard.
-            Le istruzioni su privati e imballaggio richiedono ancora il controllo della conversazione originale.
-            I messaggi che K non trasmette non possono essere verificati qui.
-          </p>
-          <details className="mt-3" open={controlloK.segnalazioni.length > 0}>
-            <summary className="cursor-pointer text-sm font-semibold text-slate-800">Segnalazioni da verificare ({controlloK.segnalazioni.length})</summary>
-            <div className="mt-3 max-h-96 space-y-3 overflow-y-auto">
-              {controlloK.segnalazioni.map((voce) => {
-                const pratica = pratiche.find((p) => p.id === voce.pratica_id);
-                const linkDocumento = voce.regola === "preventivo_pdf_non_abbinato"
-                  ? voce.evidenza.match(/https:\/\/\S+/)?.[0]
-                  : undefined;
-                return (
-                  <div key={voce.chiave} className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm">
-                    <p className="font-semibold text-slate-900">
-                      {voce.pratica_id ? <Link className="underline" href={`/pratica/${voce.pratica_id}`}>{pratica?.codice_pratica || "Apri pratica"}{pratica?.targa ? ` · ${pratica.targa}` : ""}</Link> : voce.regola === "preventivo_pdf_non_abbinato" ? "Preventivo da abbinare" : "Evento senza pratica"}{voce.event_id != null ? ` · Evento ${voce.event_id}` : ""}
-                    </p>
-                    <p className="mt-1 text-slate-700">{voce.descrizione}</p>
-                    {voce.evidenza && <p className="mt-1 whitespace-pre-wrap text-slate-600">{voce.regola === "preventivo_pdf_non_abbinato" ? "Documento" : "Messaggio"}: {voce.evidenza}</p>}
-                    {linkDocumento && <a className="mt-2 inline-block font-semibold text-blue-700 underline" href={linkDocumento} target="_blank" rel="noopener noreferrer">Apri PDF da abbinare</a>}
-                  </div>
-                );
-              })}
-              {controlloK.segnalazioni.length === 0 && !controlloKInRitardo && !controlloK.errore && !controlloK.stato?.errore && <p className="text-sm text-slate-600">Nessuna incoerenza rilevata dalle regole attive.</p>}
-            </div>
-          </details>
-        </section>
+        {pannelloControlli}
 
         <section className="mb-5">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-500">
@@ -1560,6 +1588,7 @@ export default async function Home({
             </div>
 
             <form method="GET" className="mt-5 flex flex-col gap-2 lg:flex-row">
+              <input type="hidden" name="vista" value="classica" />
               {filtroAttivo !== "tutte" && (
                 <input type="hidden" name="filtro" value={filtroAttivo} />
               )}
