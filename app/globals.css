@@ -24,3 +24,12 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* La scheda cambia soltanto presentazione: i form nascosti restano montati. */
+.pratica-sezioni [hidden] { display: none !important; }
+.pratica-sezioni[data-sezione="amministrazione"] .pratica-griglia { display: flex; flex-direction: column; }
+.pratica-sezioni[data-sezione="amministrazione"] .pratica-griglia > aside { order: -1; }
+.pratica-sezioni button:focus-visible, main a:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+}

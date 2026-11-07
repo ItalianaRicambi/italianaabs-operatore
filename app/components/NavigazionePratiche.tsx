@@ -28,6 +28,8 @@ type Elenco = {
   etichetta: string;
   cerca: string;
   voci: VoceElenco[];
+  ritorno?: string;
+  righePerPagina?: number;
 };
 type ElencoSalvato = Elenco & { salvatoIl: number };
 type Parametro = string | string[] | undefined;
@@ -59,6 +61,10 @@ function elencoValido(value: unknown): value is ElencoSalvato {
     typeof value.salvatoIl !== "number" || !Number.isFinite(value.salvatoIl) ||
     !Array.isArray(value.voci) || value.voci.length > MASSIMO_VOCI
   ) return false;
+  if (value.ritorno !== undefined && (typeof value.ritorno !== "string" ||
+    !/^\/\?(?!\/)[^#]*$/.test(value.ritorno) || value.ritorno.length > 15000)) return false;
+  if (value.righePerPagina !== undefined && (typeof value.righePerPagina !== "number" ||
+    !Number.isInteger(value.righePerPagina) || value.righePerPagina < 1 || value.righePerPagina > 100)) return false;
 
   const ids = new Set<string>();
   for (const voce of value.voci) {
@@ -147,7 +153,7 @@ function leggiElenco(chiave: string): ElencoSalvato | null {
 
 function queryElenco(filtro: string, cerca: string): URLSearchParams {
   const query = new URLSearchParams();
-  if (filtro && filtro !== "tutte") query.set("filtro", filtro);
+  if (filtro) query.set("filtro", filtro);
   if (cerca) query.set("cerca", cerca);
   return query;
 }
@@ -168,7 +174,7 @@ function hrefPratica(id: string, elenco: Elenco): string {
 const Contesto = createContext<{ elenco: Elenco; ricorda: () => void } | null>(null);
 
 export function ContestoNavigazioneElenco({
-  chiave, filtro, etichetta, cerca, voci, children,
+  chiave, filtro, etichetta, cerca, voci, children, ritorno, righePerPagina,
 }: {
   chiave: string;
   filtro: string;
@@ -176,10 +182,12 @@ export function ContestoNavigazioneElenco({
   cerca: string;
   voci: VoceElenco[];
   children: ReactNode;
+  ritorno?: string;
+  righePerPagina?: number;
 }) {
   const elenco = useMemo<Elenco>(
-    () => ({ versione: 1, chiave, filtro, etichetta, cerca, voci }),
-    [chiave, filtro, etichetta, cerca, voci]
+    () => ({ versione: 1, chiave, filtro, etichetta, cerca, voci, ritorno, righePerPagina }),
+    [chiave, filtro, etichetta, cerca, voci, ritorno, righePerPagina]
   );
   const ricorda = useCallback(() => memorizzaElenco(elenco), [elenco]);
   useEffect(() => { ricorda(); }, [ricorda]);
@@ -188,16 +196,20 @@ export function ContestoNavigazioneElenco({
 }
 
 export function ApriPraticaConContesto({
-  praticaId, children, className,
+  praticaId, children, className, sezione,
 }: {
   praticaId: string;
   children: ReactNode;
   className?: string;
+  sezione?: string;
 }) {
   const contesto = useContext(Contesto);
+  const base = contesto ? hrefPratica(praticaId, contesto.elenco) : `/pratica/${encodeURIComponent(praticaId)}`;
+  const destinazione = sezione && ["dati", "offerta", "logistica", "amministrazione", "storico"].includes(sezione)
+    ? `${base}#sezione-${sezione}` : base;
   return (
     <Link
-      href={contesto ? hrefPratica(praticaId, contesto.elenco) : `/pratica/${encodeURIComponent(praticaId)}`}
+      href={destinazione}
       className={className}
       prefetch={false}
       onClick={() => contesto?.ricorda()}
@@ -241,6 +253,7 @@ export function NavigazionePratica({
   } | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Lo storage è disponibile solo dopo hydration; il primo render deve coincidere con il server.
     setLetto({ chiave, elenco: leggiElenco(chiave) });
   }, [chiave]);
 
@@ -251,7 +264,13 @@ export function NavigazionePratica({
   const indice = elenco?.voci.findIndex((voce) => voce.id === praticaId) ?? -1;
   const precedente = elenco && indice > 0 ? elenco.voci[indice - 1] : null;
   const successiva = elenco && indice >= 0 ? elenco.voci[indice + 1] || null : null;
-  const ritorno = hrefElenco(elenco?.filtro || filtroUrl, elenco?.cerca ?? cercaUrl, praticaId);
+  let ritorno = hrefElenco(elenco?.filtro || filtroUrl, elenco?.cerca ?? cercaUrl, praticaId);
+  if (elenco?.ritorno) {
+    const query = new URLSearchParams(elenco.ritorno.slice(2));
+    // Tornare alla pagina che contiene la pratica attuale, anche dopo Precedente/Successiva.
+    if (elenco.righePerPagina && indice >= 0) query.set("pagina", String(Math.floor(indice / elenco.righePerPagina) + 1));
+    ritorno = `/?${query}#pratica-${encodeURIComponent(praticaId)}`;
+  }
   const classeLink = "flex min-h-11 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-800 transition hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600";
   const classeDisabilitato = "min-h-11 cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-400";
 
