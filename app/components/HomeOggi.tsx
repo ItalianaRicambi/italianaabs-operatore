@@ -96,6 +96,7 @@ export function HomeOggi({ operatore, pratiche, righe, filtro, etichetta, cerca,
                 </Link>;
               })}
             </nav>
+            <Link href="/fatture-in-cloud" prefetch={false} className="mt-2 block rounded-xl px-3 py-3 text-sm font-semibold text-blue-800 hover:bg-blue-50">Documenti Fatture in Cloud</Link>
             <div className="mt-5 border-t border-slate-200 pt-4 lg:mt-8">
               <Link href={href("controlli")} prefetch={false} aria-current={centroControlli ? "page" : undefined}
                 className={`flex min-h-11 items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${centroControlli ? "bg-blue-100 text-blue-950" : "text-slate-600 hover:bg-slate-100"}`}>
