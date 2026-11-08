@@ -53,7 +53,11 @@ Variabili server da configurare solo dopo aver registrato l'app OAuth e l'utente
 
 Per completare: abilitare il server OAuth Supabase, verificare la firma asimmetrica, registrare il client con il callback effettivamente fornito da ChatGPT, creare/verificare l'account autorizzato e configurare un access-token hook che emetta l'audience dedicata solo per quel client. Il valore generico Supabase `authenticated` non è accettato come audience MCP. Impostare la pagina di consenso HTTPS stabile, configurare le variabili, distribuire e verificare l'intero flusso PKCE, consenso, chiamata strumenti e revoca dall'account ChatGPT. Non considerare il solo test JWT una prova di compatibilità completa con il provider.
 
-Configurazione OAuth, hook, utente e connessione ChatGPT non sono ancora attivati. Il codice resta in anteprima e la PR in bozza finché il flusso reale non è verificato.
+La migrazione `20261108120802_oauth_fic_audience.sql` prepara `public.fic_oauth_access_token_hook`. I collegamenti tra client, utente e audience sono configurati separatamente nella tabella privata `fic_private.oauth_audiences`, senza credenziali o identificativi personali nel repository. La funzione modifica esclusivamente `aud` quando client e utente corrispondono; conserva tutti gli altri claim, incluso lo scope assegnato dal provider. Non usa `user_metadata` e lascia invariati i token degli altri client e gli accessi diretti.
+
+In Supabase, selezionare questa funzione in **Authentication → Auth Hooks → Custom Access Token**, come funzione Postgres nello schema `public`. La creazione SQL da sola non abilita l'hook. Solo `supabase_auth_admin` può eseguirla e leggere la configurazione; nessun privilegio elevato nella funzione. `supabase/tests/fic_oauth_hook.sql` verifica con rollback audience, refresh, isolamento degli altri utenti/client e permessi. Il test del cambio ruolo Auth non è disponibile al collegamento SQL amministrativo: il collaudo reale deve confermare anche l'esecuzione da parte del servizio Auth.
+
+La configurazione del client e dell'utente è stata predisposta nell'anteprima; restano l'abilitazione dell'hook e il collaudo della connessione ChatGPT. Il codice resta in anteprima e la PR in bozza finché il flusso reale non è verificato.
 
 ## Sincronizzazione pianificata: predisposta, non attiva
 
