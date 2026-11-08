@@ -38,6 +38,7 @@ test('cliente riconosciuto con identificatori esatti, mai col solo nome e mai co
 test('avviso persistente: pronto, mancanti, ambiguità, blocchi e chiusura alla fattura',()=>{
  const p={id:'test',tipo_flusso:'commerciale',stato_commerciale:'ordine_acquisito',stato_fatturazione:'da_fatturare',stato_amministrativo:'pronto_fatturazione',cliente_id:'cliente',dati_raw:{fic_anagrafica:{stato:'riconosciuto'}}};
  assert.equal(avvisoOrdine(p)?.pronto,true);
+ assert.equal(avvisoOrdine({...p,blocco_classificazione_operatore:true})?.pronto,true);
  assert.equal(avvisoOrdine({...p,dati_raw:{}})?.pronto,false);
  assert.equal(avvisoOrdine({...p,cliente_id:null})?.pronto,false);
  assert.equal(avvisoOrdine({...p,blocco_operatore:true})?.pronto,false);
