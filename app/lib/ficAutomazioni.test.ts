@@ -1,0 +1,50 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { clientiCompatibili, identitaFiscaleCompleta, queryClienteFic, urlPdfChat, fatturaCorrisponde } from './ficAutomazioni.ts';
+import { avvisoOrdine } from './avvisiOrdini.ts';
+import { leggiDocumentoAmministrativo } from './documentiAmministrativi.ts';
+import type { OriginaleK } from './originaliKeplero.ts';
+import type { DocumentoFic } from './fattureInCloud.ts';
+const raw='Fattura nr. 10/2026\nData: 08/11/2026\nSpettabile\nCLIENTE DI PROVA\nCF: TSTFSC80A01F952A\nVia Cliente 10\n00123 Roma (RM)\nITALIA\nItaliana Ricambi di Scotti Norberto\nP.IVA: 02439670031\nTarga: AB123CD\nTotale dovuto € 402,30';
+const pdf=leggiDocumentoAmministrativo(raw,'AB123CD');
+const fic:DocumentoFic={id:123,tipo:'invoice',data:'2026-11-08',numero:'10/2026',cliente:'CLIENTE DI PROVA',partitaIva:'',codiceFiscale:'TSTFSC80A01F952A',oggetto:'Targa: AB123CD',note:'',importo:402.3,valuta:'EUR',righe:[],pagamenti:[]};
+test('la fattura richiede targa, destinatario, data, numero, valuta e totale coerenti; proforma esclusa',()=>{
+ assert.equal(fatturaCorrisponde(pdf,fic),true);
+ for(const x of [{tipo:'proforma'},{codiceFiscale:'ABCDEF80A01F952A'},{numero:'11/2026'},{data:'2026-11-07'},{valuta:'USD'},{importo:402.31},{oggetto:'Targa: XY999ZZ'},{oggetto:'Targa: AB123CD e Targa: XY999ZZ'},{oggetto:'AB123CD'}]) assert.equal(fatturaCorrisponde(pdf,{...fic,...x} as DocumentoFic),false);
+ assert.equal(fatturaCorrisponde({...pdf,tipo:'proforma'},fic),false);
+ assert.throws(()=>leggiDocumentoAmministrativo(raw,''));
+ assert.equal(leggiDocumentoAmministrativo(raw,'',true).targa,'AB123CD');
+ assert.throws(()=>leggiDocumentoAmministrativo(raw+'\nTarga: XY999ZZ','',true));
+});
+test('PDF solo in uscita con prova WhatsApp e URL fidato',()=>{
+ const m={direzione:'uscita',tipo:'file',testo:'attachment:https://v2.api.keplero.ai/v2/session-attachments/test/fattura.pdf',originale:{sender_type:'user',metadata:{origin:'whatsapp_coexistence'}}} as unknown as OriginaleK;
+ assert.ok(urlPdfChat(m));
+ assert.ok(urlPdfChat({...m,originale:{whatsapp_message:{status:'delivered'}}}));
+ for(const x of [{direzione:'entrata'},{tipo:'text'},{originale:{}},{originale:{whatsapp_message:{status:'failed'}}},{testo:m.testo.replace('keplero.ai','evil.test')},{testo:m.testo+'?redirect=x'},{testo:m.testo.replace('https:','http:')},{testo:m.testo.replace('/v2/session-attachments/','/other/')}]) assert.equal(urlPdfChat({...m,...x} as OriginaleK),null);
+});
+test('cliente riconosciuto con identificatori esatti, mai col solo nome e mai con conflitti fiscali',()=>{
+ const c={id:1,name:'Prova',vat_number:'IT12345678903',tax_code:'12345678903',email:'info@example.invalid',phone:'+39 333 1234567 / 0321123456'};
+ assert.equal(clientiCompatibili({telefono:'3331234567'},[c]).length,1);
+ assert.equal(clientiCompatibili({partita_iva:'12345678903'},[c]).length,1);
+ assert.equal(clientiCompatibili({email:'INFO@example.invalid'},[c]).length,1);
+ assert.equal(clientiCompatibili({partita_iva:'22345678903',email:'info@example.invalid'},[c]).length,0);
+ assert.equal(clientiCompatibili({telefono:'1234567'},[c]).length,0);
+ assert.equal(clientiCompatibili({},[c]).length,0);
+ assert.equal(clientiCompatibili({telefono:'3331234567'},[c,{...c,id:2}]).length,2);
+ assert.equal(identitaFiscaleCompleta({partita_iva:'12345'}),false);
+ assert.equal(identitaFiscaleCompleta({codice_fiscale:'TSTFSC80A01F952A'}),true);
+ assert.doesNotMatch(queryClienteFic({email:"x' or 1=1 --"}),/1=1/);
+});
+test('avviso persistente: pronto, mancanti, ambiguità, blocchi e chiusura alla fattura',()=>{
+ const p={id:'test',tipo_flusso:'commerciale',stato_commerciale:'ordine_acquisito',stato_fatturazione:'da_fatturare',stato_amministrativo:'pronto_fatturazione',cliente_id:'cliente',dati_raw:{fic_anagrafica:{stato:'riconosciuto'}}};
+ assert.equal(avvisoOrdine(p)?.pronto,true);
+ assert.equal(avvisoOrdine({...p,dati_raw:{}})?.pronto,false);
+ assert.equal(avvisoOrdine({...p,cliente_id:null})?.pronto,false);
+ assert.equal(avvisoOrdine({...p,blocco_operatore:true})?.pronto,false);
+ assert.equal(avvisoOrdine({...p,offerta_da_verificare:true})?.pronto,false);
+ assert.equal(avvisoOrdine({...p,dati_raw:{fic_anagrafica:{stato:'ambiguo'}}})?.pronto,false);
+ assert.equal(avvisoOrdine({...p,dati_raw:{...p.dati_raw,sospensione_fatturazione_operatore:{attiva:true}}})?.pronto,false);
+ assert.equal(avvisoOrdine({...p,stato_fatturazione:'fatturato'}),null);
+ assert.equal(avvisoOrdine({...p,tipo_flusso:'assistenza'}),null);
+ assert.equal(avvisoOrdine({...p,stato_commerciale:'preventivo_inviato'}),null);
+});

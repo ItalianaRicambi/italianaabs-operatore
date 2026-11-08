@@ -1,3 +1,4 @@
+import { AvvisoOrdine } from '../../components/AvvisoOrdine';
 import Link from 'next/link';
 import { SchedaPratica, SezionePraticaVisibile, CardPratica } from '../../components/SchedaPratica';
 import { prossimaAzione } from '../../lib/oggi';
@@ -832,6 +833,7 @@ export default async function PraticaPage({
           cerca={navigazione.cerca}
         />
 
+        <AvvisoOrdine pratica={pratica} />
         <header className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div>

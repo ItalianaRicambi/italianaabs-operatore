@@ -29,11 +29,14 @@ import { StatoRisposteK } from './components/StatoRisposteK';
 import { StatoOriginaliK } from './components/StatoOriginaliK';
 import { StatoLavoriK } from './components/StatoLavoriK';
 import { StatoOrdiniShopify } from './components/StatoOrdiniShopify';
+import { AvvisiOrdini } from './components/AvvisoOrdine';
+import { AggiornaAvvisi } from './components/AggiornaAvvisi';
 import { HomeOggi } from './components/HomeOggi';
 import { FILTRI_OGGI, filtraOggi, controlloFermo, numeroPagina } from './lib/oggi';
 import { giornoRoma } from './lib/esitiGls';
 
 type Pratica = {
+  dati_raw?: Record<string, unknown> | null;
   verifica_tecnica_necessaria?: boolean;
   id: string;
   codice_pratica: string;
@@ -256,11 +259,12 @@ async function getPratiche(): Promise<{
       richiesta_amministrativa_preparata_at: string | null;
       richiesta_amministrativa_inviata_at: string | null;
       data_fattura: string | null;
+      dati_raw: Record<string, unknown> | null;
     }> = [];
 
     try {
       metadati = await fetchTutteLePagine(
-        `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at,da_verificare_at,cliente_id,stato_amministrativo,stato_amministrativo_at,nota_amministrativa,stato_richiesta_amministrativa,campi_richiesta_amministrativa,richiesta_amministrativa_preparata_at,richiesta_amministrativa_inviata_at,data_fattura&order=id.asc`,
+        `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at,da_verificare_at,cliente_id,stato_amministrativo,stato_amministrativo_at,nota_amministrativa,stato_richiesta_amministrativa,campi_richiesta_amministrativa,richiesta_amministrativa_preparata_at,richiesta_amministrativa_inviata_at,data_fattura,dati_raw&order=id.asc`,
         { headers }
       );
     } catch (error) {
@@ -342,6 +346,7 @@ async function getPratiche(): Promise<{
               richiesta_amministrativa_inviata_at:
                 meta.richiesta_amministrativa_inviata_at,
               data_fattura: meta.data_fattura,
+              dati_raw: meta.dati_raw,
             }
           : {}),
         minuti_lavorativi_preventivo:
@@ -1212,6 +1217,7 @@ export default async function Home({
     >
     <main className="min-h-screen bg-slate-50">
       <BarraOperatore operatore={operatoreAttivo} />
+      {!solaLettura && <><AggiornaAvvisi /><AvvisiOrdini pratiche={pratiche} /></>}
 
       <div className="mx-auto max-w-[1750px] px-6 py-8">
         <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
