@@ -108,6 +108,24 @@ export function creaClientFic(configInput: ConfigFic, richiedi: typeof fetch = f
   }
   return {
     verifica: () => verificaAzienda(AbortSignal.timeout(15000)),
+    async cercaClienti(query: string): Promise<Record<string, unknown>[]> {
+      if (!query || query.length > 1800) throw new ErroreFic('parametri');
+      const signal = AbortSignal.timeout(25000);
+      await verificaAzienda(signal);
+      const rows: Record<string, unknown>[] = [];
+      let total: number | null = null;
+      for (let page = 1; page <= 5; page++) {
+        const params = new URLSearchParams({ q: query, fieldset: 'detailed', per_page: '100', page: String(page) });
+        const body = await get(`/c/${config.companyId}/entities/clients?${params}`, signal);
+        if (!Array.isArray(body.data) || !intero(body.total) || !intero(body.last_page, 1) || body.current_page !== page
+          || body.data.length > 100 || (total !== null && total !== body.total)) throw new ErroreFic('risposta');
+        total = body.total;
+        for (const x of body.data) { const c = oggetto(x); if (!intero(c.id, 1) || !testo(c.name)) throw new ErroreFic('risposta'); rows.push(c); }
+        if (new Set(rows.map(c => c.id)).size !== rows.length) throw new ErroreFic('risposta');
+        if (page >= body.last_page) { if (rows.length !== total) throw new ErroreFic('risposta'); return rows; }
+      }
+      throw new ErroreFic('risposta'); // Mai classificare un cliente come nuovo da un elenco parziale.
+    },
     async leggi(id: number): Promise<DocumentoFic> {
       if (!intero(id, 1)) throw new ErroreFic('parametri');
       const signal = AbortSignal.timeout(20000);
