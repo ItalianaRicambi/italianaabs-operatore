@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { createClient, type OAuthAuthorizationDetails } from '@supabase/supabase-js';
+import { scopeConsensoValido } from '../../lib/ficOAuthConsent';
 export default function Consent({url,publishableKey,clientId,authorizationId,redirects}:{url:string;publishableKey:string;clientId:string;authorizationId:string;redirects:string[]}) {
   const [client]=useState(()=>createClient(url,publishableKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}}));
   const [details,setDetails]=useState<OAuthAuthorizationDetails|null>(null),[errore,setErrore]=useState(''),[busy,setBusy]=useState(false);
@@ -23,7 +24,7 @@ export default function Consent({url,publishableKey,clientId,authorizationId,red
       const {data:auth,error}=await client.auth.oauth.getAuthorizationDetails(authorizationId);
       if(error||!auth) throw new Error();
       if('redirect_url' in auth) {ritorna(auth.redirect_url);return;}
-      if(auth.client.id!==clientId || auth.scope.trim()!=='email' || !redirects.includes(auth.redirect_uri)) throw new Error();
+      if(auth.client.id!==clientId || !scopeConsensoValido(auth.scope) || !redirects.includes(auth.redirect_uri)) throw new Error();
       setDetails(auth);
     }catch {setErrore('Accesso non completato. Verifica l’account autorizzato oppure riavvia il collegamento da ChatGPT.');}
     finally{setBusy(false);}
