@@ -7,6 +7,7 @@ begin
   or has_function_privilege('authenticated','public.fic_registra_controllo_cliente(uuid,jsonb,text)','execute') then raise exception 'RPC esposte';end if;
  insert into public.pratiche(nome_cliente,targa,keplero_conversation_id,tipo_flusso,stato_commerciale,stato_fatturazione,created_at,dati_raw)
  values('TEST avvisi fattura','TFIC001',sess::text,'commerciale','ordine_acquisito','da_fatturare',now()-interval '1 day','{"anagrafica_estratta":{"codice_fiscale":"TSTFSC80A01F952A"},"payload_live":{"anagrafica_fiscale":{"codice_fiscale":"TSTFSC80A01F952A"}}}') returning id into p;
+ update public.pratiche set blocco_classificazione_operatore=true where id=p;
  if public.contesto_cliente_keplero(p)->>'richiedere_anagrafica_completa'<>'false' then raise exception 'Richiesta dati duplicata';end if;
  r:=public.fic_registra_controllo_cliente(p,'[{"id":999999999999,"name":"Cliente test automazione","tax_code":"TSTFSC80A01F952A","address_street":"Via Test 1","address_city":"Roma","address_postal_code":"00100","country":"Italia"}]','riconosciuto');
  select cliente_id into cid from public.pratiche where id=p;
