@@ -15,7 +15,7 @@ function unico(valori: string[], nome: string) {
   return unici[0];
 }
 
-export function leggiDocumentoAmministrativo(raw: string, targaAttesa: string): DocumentoAmministrativo {
+export function leggiDocumentoAmministrativo(raw: string, targaAttesa: string, deduciTarga = false): DocumentoAmministrativo {
   const testo = raw.replace(/\r/g, '').replace(/\u00a0/g, ' ').trim();
   if (testo.length < 100 || testo.length > 200000) throw new Error('Documento non leggibile o troppo lungo.');
   const intestazioni = [...testo.matchAll(/^(Fattura|Pro\s+Forma)\s+nr\.\s*([^\n]+)/gim)];
@@ -27,7 +27,7 @@ export function leggiDocumentoAmministrativo(raw: string, targaAttesa: string): 
   const data = `${anno}-${mese}-${giorno}`;
   if (new Date(`${data}T00:00:00Z`).toISOString().slice(0, 10) !== data) throw new Error('Data del documento non valida.');
   const targa = unico([...testo.matchAll(/\bTarga\s*:\s*([A-Z0-9]+)/gi)].map(m => normalizzaTarga(m[1])), 'Targa');
-  if (!normalizzaTarga(targaAttesa) || targa !== normalizzaTarga(targaAttesa)) throw new Error('La targa del documento non coincide con la pratica.');
+  if (!targa || (!deduciTarga && !normalizzaTarga(targaAttesa)) || (targaAttesa && targa !== normalizzaTarga(targaAttesa))) throw new Error('La targa del documento non coincide con la pratica.');
   // Il blocco del destinatario termina prima dei dati fiscali di Italiana Ricambi.
   const blocchi = [...testo.matchAll(/Spettabile\s*\n([\s\S]+?)\nItaliana Ricambi di Scotti Norberto/gi)].map(m => m[1].trim());
   const blocco = unico(blocchi, 'Destinatario');
@@ -51,7 +51,7 @@ export function leggiDocumentoAmministrativo(raw: string, targaAttesa: string): 
       partita_iva: iva, codice_fiscale: cf } };
 }
 
-export async function leggiDocumentoAmministrativoPdf(bytes: Uint8Array, targa: string) {
+export async function leggiDocumentoAmministrativoPdf(bytes: Uint8Array, targa: string, deduciTarga = false) {
   if (bytes.length > 3 * 1024 * 1024 || Buffer.from(bytes.subarray(0, 5)).toString() !== '%PDF-') throw new Error('Carica un PDF non superiore a 3 MB.');
   const { getDocumentProxy } = await import('unpdf');
   const pdf = await getDocumentProxy(bytes);
@@ -64,6 +64,6 @@ export async function leggiDocumentoAmministrativoPdf(bytes: Uint8Array, targa: 
       pagine.push(contenuto.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join(''));
       pagina.cleanup();
     }
-    return leggiDocumentoAmministrativo(pagine.join('\n'), targa);
+    return leggiDocumentoAmministrativo(pagine.join('\n'), targa, deduciTarga);
   } finally { await pdf.cleanup(); }
 }

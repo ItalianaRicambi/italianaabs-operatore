@@ -1,3 +1,5 @@
+import { AvvisiOrdini } from './AvvisoOrdine';
+import { AggiornaAvvisi } from './AggiornaAvvisi';
 import Link from "next/link";
 import { randomUUID } from "node:crypto";
 import type { ReactNode } from "react";
@@ -82,7 +84,7 @@ export function HomeOggi({ operatore, pratiche, righe, filtro, etichetta, cerca,
       ritorno={href(filtro, cerca, pagina)} righePerPagina={perPagina}
       voci={elenco.map(p => ({ id: p.id, codice: p.codice_pratica || p.id }))}>
       <main className="min-h-screen bg-slate-50 text-slate-900">
-        <BarraOperatore operatore={operatore} />
+        <BarraOperatore operatore={operatore} /><AggiornaAvvisi />
         <div className="mx-auto grid max-w-[1600px] lg:grid-cols-[210px_minmax(0,1fr)]">
           <aside className="border-b border-slate-200 bg-white p-4 lg:min-h-[calc(100vh-72px)] lg:border-r lg:p-6">
             <Link href="/" className="block text-lg font-black tracking-tight text-blue-950">Italiana<span className="text-blue-600">ABS</span></Link>
@@ -112,6 +114,7 @@ export function HomeOggi({ operatore, pratiche, righe, filtro, etichetta, cerca,
               </div>
               <Link href={href(filtro, cerca, pagina)} prefetch={false} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-100">Aggiorna elenco</Link>
             </header>
+            <AvvisiOrdini pratiche={pratiche} />
             {errore && <p role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-4 text-sm font-semibold text-red-900">Dati parziali o non disponibili: {errore}. I conteggi non attestano l’assenza di attività.</p>}
             <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${controllo.fermo ? "border-red-300 bg-red-50 text-red-950" : "border-slate-200 bg-white text-slate-700"}`} role={controllo.fermo ? "alert" : undefined}>
               <p><strong>{controllo.fermo ? "Controllo K fermo o in errore" : "Controllo K"}</strong><span className="ml-2">Ultima esecuzione: {dataIt(controllo.ultimo)} · {controllo.aperte} segnalazioni aperte</span></p>
