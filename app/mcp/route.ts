@@ -17,13 +17,16 @@ async function gestisci(req: Request) {
   }
   if(req.headers.get('origin') && req.headers.get('origin')!==new URL(c.resource).origin)
     return Response.json({errore:'Origin non autorizzata.'},{status:403,headers});
-  let userId:string;
+  let userId:string|null=null;
   try { const auth=req.headers.get('authorization')||''; if(!/^Bearer /i.test(auth)) throw new Error();
     userId=await autorizzaMcpFic(auth.slice(7),c);
-  } catch { return Response.json({errore:'Autenticazione richiesta.'},{status:401,headers:{...headers,'WWW-Authenticate':challengeMcpFic(c)}}); }
+  } catch { /* Public protocol discovery; tool calls return an OAuth challenge. */ }
+  if(!userId && req.method!=='POST')
+    return Response.json({errore:'Autenticazione richiesta.'},{status:401,headers:{...headers,'WWW-Authenticate':challengeMcpFic(c)}});
   try {
-    if(!await quotaMcpFic(userId)) return Response.json({errore:'Limite richieste raggiunto.'},{status:429,headers:{...headers,'Retry-After':'60'}});
-    const server=creaServerMcpFic(clientFic());
+    if(userId && !await quotaMcpFic(userId)) return Response.json({errore:'Limite richieste raggiunto.'},{status:429,headers:{...headers,'Retry-After':'60'}});
+    // Anonymous discovery never creates a Fatture in Cloud client or reads its data.
+    const server=creaServerMcpFic(userId?clientFic():null,challengeMcpFic(c));
     const transport=new WebStandardStreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true,maxRequestBodySize:16000});
     await server.connect(transport);
     try {const response=await transport.handleRequest(req); response.headers.set('Cache-Control','private, no-store'); return response;}
