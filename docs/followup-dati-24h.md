@@ -41,3 +41,32 @@ ABS-002090 e ABS-002447 sono ordini con dati amministrativi mancanti e richiesta
 6. **Code e collaudo integrato.** Collegare le attese delle richieste registrate alle code esistenti senza rimuovere i blocchi operatore. Provare concorrenza, riavvii, cambi di dati dopo claim, documenti tardivi, retry e ack persi con provider simulato/sandbox. Solo dopo questi test attivare il percorso completo; non abilitare semplicemente le due bozze native.
 
 L'automazione ChatGPT di completamento è `Automation_975858fb99788191b8174f6c97315d3d`. Il risultato NON è completo: non comunicare che i follow-up sono operativi e non disattivare le automazioni operative. In successivi controlli evitare notifiche ripetute senza novità.
+
+## Aggiornamento dopo risposta supporto #18399 — 09/11/2026
+
+La risposta Keplero delle 18:43 UTC documenta `POST https://v2.api.keplero.ai/conversations/2aef20d3-5ef8-4c81-8f21-bd450f22960c/send-template`, Bearer della lettura, body `{channel:"whatsapp",name,language:"it",to:"+…",variables:[numeroPratica,soliCampiMancanti]}`. HTTP 200 restituisce `sessionId` e significa accettazione WhatsApp, non consegna. Il messaggio originale contiene `metadata.wa_message_id`, `sender=assistant`, `sender_type=operator`, `metadata.templateOrigin.type=manual_operator`, testo renderizzato e stato WhatsApp. La chiamata diretta non ha retry automatici né invii differiti. Nessuna idempotenza provider. Timeout circa 30s: client 60s, mai retry ambiguo.
+
+**Difetto confermato dal supporto:** il trigger nativo di silenzio non annulla il promemoria quando arriva una risposta. Le due bozze vanno lasciate spente anche dopo l'attivazione del futuro worker Dashboard. Nessuna sandbox Keplero: test positivi richiedono un numero interno concordato.
+
+Aggiunto nel ramo:
+- `transport.ts`: POST diretto, validazione, nessun retry, conferma tramite originale univoco con testo esatto, ID nuovi, origine e intervallo temporale. HTTP 200 da solo non marca l'invio come confermato. Nessun messaggio trovato non autorizza a ripetere il POST.
+- `runner.ts` e `storeServer.ts`: claim persistente, seconda revisione dopo claim, controllo freschezza prima del POST, registrazione preventiva del tentativo, riconciliazione solo in lettura anche dopo riavvio. Il revisore server completo è ancora una dipendenza da implementare: questi moduli NON sono un worker schedulato operativo.
+- `evidence.ts`: rilettura di tutti gli originali e byte di tutti gli allegati, senza il vecchio limite di otto PDF; controllo mutazioni durante la lettura. La lettura dei byte NON equivale a comprensione semantica. Associazione esatta di una richiesta mirata realmente inviata, con data originale e prova; il discovery automatico delle richieste va ancora collegato.
+- Attività operatore persistente unica per fase dopo altre 48h, nomi dedicati in Dashboard; nessun secondo messaggio.
+
+**Migrazione nuova già APPLICATA:** `20261109191619_trasporto_followup_dati.sql`. Non riapplicare né questa né `20261109123445`. Aggiunge `tentativo_at`, `tentativo`, `attivita_id` al registro e le RPC `inizia_invio_followup_dati` / `segnala_followup_dati`, più una guardia privata. Ordine lock pratica → registro. Nessun cron o invio abilitato. Al ricontrollo dopo interruzione: config false/false/null/null, zero richieste e invii.
+
+### Collaudo di questo aggiornamento
+
+36 test Node per policy, trasporto, prove originali, media, orchestrazione, timeout, seconda verifica e concorrenza **simulata** di 20 worker; ESLint e TypeScript. Due script SQL passati su PGlite 0.3.14 con schema minimo isolato `supabase/tests/fixtures/followup_schema.sql`: test precedente + `supabase/tests/followup_dati_trasporto.sql`. Lo schema isolato non replica trigger reali o anagrafica FIC; non sostituisce il collaudo su Supabase. L'orologio delle funzioni nel test SQL viene sostituito SOLO dentro la transazione annullata. Non applicare lo script test come migrazione.
+
+Il tentativo iniziale di test SQL remoto è scaduto in attesa della conferma tecnica; un secondo tentativo è stato interrotto. **Il nuovo collaudo SQL remoto NON è confermato superato.** La migrazione invece è stata applicata con successo e verificata nella cronologia. Non dichiarare collaudata la concorrenza multi-connessione reale.
+
+### Mancano ancora per rendere operativi i follow-up
+
+1. Revisore server completo: interpretazione attuale di TUTTI i testi e allegati, ricerca anagrafica FIC e documenti, campi davvero mancanti, associazioni certe. Non passare booleani preimpostati, payload client o riassunti AI a `runReviewedRequest`.
+2. Collegare discovery/registrazione delle richieste mirate, testo esatto dei template approvati, destinatario verificato dalla conversazione e revisore al worker/endpoint autenticato. Il codice dei singoli componenti non costituisce ancora questa integrazione.
+3. Scheduler, copertura del calendario aziendale e cutover esplicito. Non inventare chiusure future; al controllo solo ferie agosto erano registrate.
+4. Test Supabase con due connessioni e prova completa collegata; prova positiva del trasporto su un numero interno concordato, mai clienti.
+
+Nessun merge/rilascio operativo, nessuna attivazione, nessun invio cliente. Automazione ChatGPT di completamento già disabilitata prima di questo aggiornamento; non è un monitor attivo del ticket.
