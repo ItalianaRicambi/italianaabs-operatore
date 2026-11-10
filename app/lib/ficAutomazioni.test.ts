@@ -44,7 +44,7 @@ test('avviso persistente: pronto, mancanti, ambiguità, blocchi e chiusura alla 
  assert.equal(avvisoOrdine({...p,blocco_operatore:true})?.pronto,false);
  assert.equal(avvisoOrdine({...p,offerta_da_verificare:true})?.pronto,false);
  assert.equal(avvisoOrdine({...p,dati_raw:{fic_anagrafica:{stato:'ambiguo'}}})?.pronto,false);
- assert.equal(avvisoOrdine({...p,dati_raw:{...p.dati_raw,sospensione_fatturazione_operatore:{attiva:true}}})?.pronto,false);
+ assert.equal(avvisoOrdine({...p,dati_raw:{...p.dati_raw,sospensione_fatturazione_operatore:{attiva:true}}}),null);
  assert.equal(avvisoOrdine({...p,stato_fatturazione:'fatturato'}),null);
  assert.equal(avvisoOrdine({...p,tipo_flusso:'assistenza'}),null);
  assert.equal(avvisoOrdine({...p,stato_commerciale:'preventivo_inviato'}),null);

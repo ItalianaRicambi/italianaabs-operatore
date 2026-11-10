@@ -4,8 +4,11 @@ import type { PraticaOggi } from './oggi.ts';
 
 export function avvisoOrdine(p: PraticaOggi) {
   if (p.tipo_flusso !== 'commerciale' || p.stato_commerciale !== 'ordine_acquisito' || p.stato_fatturazione === 'fatturato') return null;
+  // La sospensione è una decisione già presa, non una nuova urgenza.
+  // L'ordine resta consultabile, ma non richiede fatturazione fino allo sblocco manuale.
+  if (fatturazioneSospesa(p)) return null;
   const fic = p.dati_raw?.fic_anagrafica as { stato?: string } | undefined;
-  if (fatturazioneSospesa(p) || p.blocco_operatore || p.offerta_da_verificare || sceltaClienteDaChiarire({...p,stato_fatturazione:p.stato_fatturazione || '',stato_commerciale:p.stato_commerciale || '',tipo_flusso:p.tipo_flusso || ''}))
+  if (p.blocco_operatore || p.offerta_da_verificare || sceltaClienteDaChiarire({...p,stato_fatturazione:p.stato_fatturazione || '',stato_commerciale:p.stato_commerciale || '',tipo_flusso:p.tipo_flusso || ''}))
     return { pronto: false, titolo: 'ORDINE ACCETTATO — VERIFICA OPERATORE', testo: 'È presente un blocco o una sospensione. Verificare prima di emettere fattura e proseguire la pratica.' };
   if (prontaPerFatturazione(p) && ['riconosciuto', 'nuovo'].includes(fic?.stato || ''))
     return { pronto: true, titolo: 'ORDINE ACCETTATO — EMETTERE FATTURA', testo: 'Dati fiscali disponibili e controllo Fatture in Cloud eseguito. Emettere la fattura e organizzare lo svolgimento della pratica.' };
