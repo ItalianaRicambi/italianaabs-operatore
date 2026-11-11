@@ -1,4 +1,4 @@
-# Follow-up dati mancanti — stato del 9 novembre 2026
+# Follow-up dati mancanti — stato aggiornato 11 novembre 2026
 
 **Implementazione parziale, invii disabilitati. Non attivare i trigger di silenzio.**
 
@@ -8,6 +8,30 @@ La console Keplero mostra APPROVATO / Utilità / IT per entrambi i modelli `ital
 - Fatturazione: `cb6a0de3-f443-463c-a3ee-6de18d426b20`; solo trigger silenzio 1440 minuti.
 
 L'approvazione non dimostra che il reminder sia inviabile. Il trigger generico può scattare dopo un messaggio che non richiede dati e non può essere usato come data della richiesta.
+
+## Stato corrente — calendario confermato e salvato il 11/11/2026
+
+L'utente ha autorizzato il collaudo sul proprio numero WhatsApp personale comunicato in questa conversazione (finale **8753**); non occorre richiederlo di nuovo. Non copiare il numero completo nel repository. Nessun messaggio di collaudo è stato ancora inviato.
+
+Calendario confermato da Norberto fino al **31/12/2026**: weekend, festività nazionali, ponte **7–8 dicembre**, **24–26 dicembre**, **31 dicembre**. Nessun'altra chiusura straordinaria nota; l'utente comunicherà eventuali ferie. Dal 2027 il calendario non autorizza invii finché non viene estesa esplicitamente la copertura.
+
+**Migrazione `20261111142734_calendario_followup_dati_2026` già applicata a Supabase: NON riapplicare.** Aggiunge `followup_dati_chiusure`, la lettura servizio `configurazione_followup_dati()` e la guardia privata comune `followup_dati_fascia_aperta(timestamptz)`, usata da claim e inizio invio. La tabella generale `chiusure_aziendali` resta invariata (una riga agosto), per non modificare altri processi. Il calendario dedicato incorpora anche le chiusure generali in lettura. Le definizioni preesistenti di claim/inizio sono state confrontate con quelle remote prima della sostituzione: nessuna modifica altrui sovrascritta.
+
+Config riletta: `enabled=false`, `transport_verified=false`, `accept_requests_after=NULL`, `calendar_confirmed_through=2026-12-31`, **zero richieste / zero invii**. RLS e nessun accesso anon/authenticated alla nuova tabella/RPC. `calendarServer.ts` legge il calendario e il cutover reali per entrambe le verifiche del runner; non accetta questi valori dal revisore iniettato.
+
+Verifiche: **51 test Node** (40 follow-up + 11 Oggi), TypeScript ed ESLint passati. Tutti i tre script di regressione SQL passati in PGlite con la nuova migrazione; schema minimo, non produzione. **25 casi calendario passati anche sul vero Supabase**, in sola lettura, senza record sintetici o invii: chiusure, confini orari, pausa, weekend, fuso e stop 2027. Questi 25 casi NON certificano la concorrenza reale né il collaudo completo del trasporto. Le precedenti scadenze di conferma sui test transazionali remoti rimangono irrisolte; non sono state aggirate o ritentate in questo aggiornamento.
+
+**Blocco di accesso attuale:** aprendo la console template l'11/11, il browser è stato reindirizzato a `/auth/login`. Non eseguito login né aggiramento. Quindi nessuna nuova lettura dei corpi approvati o prova reale: approvazione valida all'ultima verifica del 9/11. Le bozze native non sono state modificate.
+
+Restano da completare prima dell'attivazione:
+1. Revisore server effettivo di testi, tutti gli allegati, anagrafica e documenti, con associazioni certe e campi residui. I byte degli allegati o i riassunti AI non bastano.
+2. Discovery e registrazione automatici della richiesta mirata realmente inviata, testi esatti approvati, destinatario verificato, endpoint/worker autenticato e scheduler. Cutover solo all'attivazione, niente recupero storico.
+3. Disponibilità runtime dei collegamenti: all'ultima lettura Vercel Keplero è configurato solo in produzione, FIC solo nella preview `codex/fatture-in-cloud-lettura`. Non sono state esposte o spostate credenziali.
+4. Collaudo integrato e concorrenza con connessioni reali, prova sul numero interno autorizzato e riconciliazione tramite ID WhatsApp. Non basta il successo dei test isolati o del calendario.
+
+**Nessun merge, deployment operativo, scheduler o invio attivato.** Automazione ChatGPT di completamento già disabilitata; non cambiarne lo stato né notificare approvazioni già note. I paragrafi seguenti conservano lo storico e i dettagli tecnici delle preparazioni precedenti; lo stato corrente è quello di questa sezione.
+
+## Storico della preparazione del 9–11 novembre
 
 ## Preparazione completata
 

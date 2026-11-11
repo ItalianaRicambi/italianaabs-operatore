@@ -3,6 +3,7 @@ import {rpcOriginaliK} from '../originaliKepleroServer';
 import {leggiMessaggiConversazioneKeplero} from '../kepleroMessagesServer';
 import {sendTemplate,type Attempt,type Receipt} from './transport';
 import {reconcileStored,runReminder,type Review,type Store,type StoredAttempt} from './runner';
+import {readFollowupConfiguration} from './calendarServer';
 
 /** Adattatore persistente Supabase. Il revisore non è esposto a client/Keplero:
  * deve essere fornito dal worker server dopo letture originali, media e anagrafiche.
@@ -30,7 +31,12 @@ export function createStore(requestId:string):Store{
  };
 }
 export function runReviewedRequest(requestId:string,review:()=>Promise<Review>){
- return runReminder({review,store:createStore(requestId),now:Date.now,messages:leggiMessaggiConversazioneKeplero,
+ return runReminder({review:async()=>{
+  // Leggere prima della revisione live: il timer di freschezza non viene esteso.
+  const configuration=await readFollowupConfiguration();
+  const result=await review();
+  return {...result,context:{...result.context,...configuration}};
+ },store:createStore(requestId),now:Date.now,messages:leggiMessaggiConversazioneKeplero,
   send:attempt=>sendTemplate(attempt,process.env.KEPLERO_API_KEY)});
 }
 export function recoverAttempt(requestId:string,attempt:StoredAttempt){
