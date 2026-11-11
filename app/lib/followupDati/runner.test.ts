@@ -2,8 +2,9 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {runReminder,reconcileStored,type Review,type Dependencies,type Store} from './runner.ts';
 import type {Attempt} from './transport.ts';
+import {renderApprovedTemplate} from './templates.ts';
 const now=Date.parse('2026-11-10T10:00:00Z'),session='00000000-0000-4000-a000-000000000001';
-function review():Review{return {session,to:'+390000000001',practiceVersion:'v1',messageIds:['1'],expectedText:'Pratica ABS-999999: foto leggibili del componente',context:{
+function review():Review{return {session,to:'+390000000001',practiceVersion:'v1',messageIds:['1'],context:{
  enabledAfter:'2026-11-09T00:00:00Z',calendar:{confirmedThrough:'2026-12-31',closures:[]},
  request:{practiceId:'test',phase:'preventivo',messageId:'1',sentAt:'2026-11-09T10:00:00Z',sourceFingerprint:'a'.repeat(64),deliveryConfirmed:true,fields:['foto']},
  ledger:{state:'none',sentAt:null,messageId:null},
@@ -19,7 +20,7 @@ function setup(){
  };
  const d:Dependencies={store,review:async()=>review(),now:()=>now,
   send:async()=>{calls++;return {kind:'accepted',session};},
-  messages:async()=>[{id:'2',session,timestamp:new Date(now).toISOString(),type:'text',content:review().expectedText,sender:'assistant',sender_type:'operator',metadata:{wa_message_id:'wamid.synthetic',templateOrigin:{type:'manual_operator'}},whatsapp_message:{status:'sent'}}],
+  messages:async()=>[{id:'2',session,timestamp:new Date(now).toISOString(),type:'text',content:renderApprovedTemplate('preventivo',['ABS-999999','foto leggibili del componente']),sender:'assistant',sender_type:'operator',metadata:{wa_message_id:'wamid.synthetic',templateOrigin:{type:'manual_operator'}},whatsapp_message:{status:'sent'}}],
  };
  return {d,state:()=>state,calls:()=>calls,attempt:()=>attempt!};
 }

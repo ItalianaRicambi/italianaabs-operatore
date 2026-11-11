@@ -1,8 +1,9 @@
 import {prepareReminder,shouldEscalate,type Context} from './policy.ts';
 import {reconcile,validateSend,type Attempt,type SendResult,type Receipt} from './transport.ts';
 import type {MessaggioKeplero} from '../kepleroMessages.ts';
+import {renderApprovedTemplate} from './templates.ts';
 
-export type Review = {context:Context;practiceVersion:string;session:string;to:string;messageIds:string[];expectedText:string};
+export type Review = {context:Context;practiceVersion:string;session:string;to:string;messageIds:string[]};
 export type StoredAttempt = {claim:string;attempt:Attempt};
 export type Store = {
  claim(review:Review):Promise<string|null>;
@@ -44,7 +45,7 @@ export async function runReminder(d:Dependencies):Promise<RunResult>{
    await d.store.finish(claim,'cancelled',null,'changed_after_claim');return {kind:'cancelled',reason:'changed_after_claim'};
   }
   const attempt:Attempt={phase:last.context.request.phase,to:last.to,session:last.session,variables:final.variables,
-   startedAt:new Date(d.now()).toISOString(),beforeIds:last.messageIds,expectedText:last.expectedText};
+   startedAt:new Date(d.now()).toISOString(),beforeIds:last.messageIds,expectedText:renderApprovedTemplate(last.context.request.phase,final.variables)};
   validateSend(attempt);
   if(!attempt.expectedText.includes(final.variables[0])||!attempt.expectedText.includes(final.variables[1]))throw new Error('template_text_unverified');
   if(!await d.store.begin(claim,last,attempt))return {kind:'stop',reason:'dispatch_not_authorized'};
