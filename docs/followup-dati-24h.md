@@ -11,7 +11,7 @@ L'approvazione non dimostra che il reminder sia inviabile. Il trigger generico p
 
 ## Stato corrente — calendario confermato e salvato il 11/11/2026
 
-L'utente ha autorizzato il collaudo sul proprio numero WhatsApp personale comunicato in questa conversazione (finale **8753**); non occorre richiederlo di nuovo. Non copiare il numero completo nel repository. Nessun messaggio di collaudo è stato ancora inviato.
+L'utente ha autorizzato il collaudo sul proprio numero WhatsApp personale comunicato in questa conversazione (finale **8753**); non occorre richiederlo di nuovo. Non copiare il numero completo nel repository. I due messaggi di collaudo UI sono stati inviati una sola volta ciascuno il 11/11/2026, esclusivamente a questo numero interno; dettagli e limiti della verifica sotto.
 
 Calendario confermato da Norberto fino al **31/12/2026**: weekend, festività nazionali, ponte **7–8 dicembre**, **24–26 dicembre**, **31 dicembre**. Nessun'altra chiusura straordinaria nota; l'utente comunicherà eventuali ferie. Dal 2027 il calendario non autorizza invii finché non viene estesa esplicitamente la copertura.
 
@@ -25,15 +25,29 @@ Verifiche: **53 test Node** (42 follow-up + 11 Oggi), TypeScript ed ESLint passa
 
 Entrambe le bozze native sono state aperte e verificate **Disabled**: fatturazione con solo trigger, preventivo con filtro e template ancora Invalid. Non attivarle e non trasformare questa verifica in una prova del percorso automatico.
 
-Destinatario interno verificato nell'intestazione della chat **Norby Privato**, numero coincidente con quello autorizzato (finale 8753), sessione `48d184d4-9b52-4c08-a8ed-b593c4ab31d0`. La chat mostrava “Keplero is handling this conversation”. Il tentativo di cliccare **Take control** è stato **rifiutato dalla revisione automatica**, perché cambia la gestione operatore/automazione e l'autorizzazione al test non è stata considerata sufficiente a coprire questa presa in carico. Nessuna presa in carico eseguita, nessun messaggio inviato, nessuna via alternativa usata per aggirare il rifiuto. Serve autorizzazione esplicita alla presa in carico temporanea della sola chat personale prima di proseguire il collaudo UI. Una prova UI non certificherà da sola il trasporto server.
+### Collaudo UI interno eseguito — 11/11/2026, ore 21:01–21:02 mostrate in console
 
-Prova prevista: un messaggio per ciascuno dei due modelli, soltanto sul numero interno, variabili con identificativo di collaudo e dicitura esplicita TEST INTERNO, nessuna pratica cliente o richiesta di dati personali. Non ripetere un invio dal risultato ambiguo. Il test del trasporto diretto e l'ID WhatsApp devono ancora essere verificati separatamente.
+Destinatario interno verificato nell'intestazione della chat **Norby Privato**, numero coincidente con quello autorizzato (finale 8753), sessione `48d184d4-9b52-4c08-a8ed-b593c4ab31d0`.
+
+Dopo l'autorizzazione esplicita «autorizzo», la presa in carico temporanea della sola chat interna è riuscita (20:55). Il pulsante Templates del composer apriva risposte rapide, non i modelli WhatsApp approvati. La chat è stata restituita a Keplero alle 20:56, senza inviare messaggi da quel composer. L'invio corretto è avvenuto da **Conversations → + → Whatsapp**, selezionando i modelli esistenti. Non è stato creato alcun duplicato.
+
+| Modello | Variabile pratica del collaudo | ID messaggio Keplero | Ora console |
+| --- | --- | --- | --- |
+| `italianaabs_dati_preventivo_24h` | `TEST INTERNO PREVENTIVO 11-11-2026` | `51052639` | 21:01 |
+| `italianaabs_dati_fatturazione_24h` | `TEST INTERNO FATTURAZIONE 11-11-2026` | `51053080` | 21:02 |
+
+Variabile 2 preventivo: `targa e foto del dispositivo (collaudo interno autorizzato: nessun dato reale da inviare)`.
+Variabile 2 fatturazione: `codice destinatario SDI o PEC (collaudo interno autorizzato: nessun dato fiscale reale da inviare)`.
+
+Entrambi i testi renderizzati sono stati verificati nella chat corretta, con doppia spunta e dicitura «Sent manually by Norberto Scotti». Un solo clic Send per ciascun modello, nessun retry. Stato finale chat: **Keplero is handling this conversation**. Nessun invio a clienti, nessuna pratica fittizia registrata e nessun cambiamento alle bozze native.
+
+Questa prova dimostra l'invio manuale dei due modelli e la sostituzione delle variabili. **Non certifica il trasporto del worker, il provider message ID, la concorrenza o il percorso automatico.** Gli ID sopra sono di Keplero, non `wa_message_id`. La lettura mirata di `keplero_originali` subito dopo il test non ha trovato ancora queste due righe; non è stata trattata come prova di mancato invio e nessun messaggio è stato ripetuto. Config Supabase riletta dopo il test: false/false, cutover NULL, calendario 2026-12-31, zero richieste/invii nel registro automatico. `transport_verified` resta false.
 
 Restano da completare prima dell'attivazione:
 1. Revisore server effettivo di testi, tutti gli allegati, anagrafica e documenti, con associazioni certe e campi residui. I byte degli allegati o i riassunti AI non bastano.
 2. Discovery e registrazione automatici della richiesta mirata realmente inviata, collegamento dei testi approvati e del destinatario verificato al revisore, endpoint/worker autenticato e scheduler. Cutover solo all'attivazione, niente recupero storico.
 3. Disponibilità runtime dei collegamenti: all'ultima lettura Vercel Keplero è configurato solo in produzione, FIC solo nella preview `codex/fatture-in-cloud-lettura`. Non sono state esposte o spostate credenziali.
-4. Collaudo integrato e concorrenza con connessioni reali, prova sul numero interno autorizzato e riconciliazione tramite ID WhatsApp. Non basta il successo dei test isolati o del calendario.
+4. Collaudo integrato e concorrenza con connessioni reali, prova del trasporto server sul numero interno autorizzato e riconciliazione tramite ID WhatsApp; il test manuale UI sopra non sostituisce questi controlli. Non basta il successo dei test isolati o del calendario.
 
 **Nessun merge, deployment operativo, scheduler o invio attivato.** Automazione ChatGPT di completamento già disabilitata; non cambiarne lo stato né notificare approvazioni già note. I paragrafi seguenti conservano lo storico e i dettagli tecnici delle preparazioni precedenti; lo stato corrente è quello di questa sezione.
 
