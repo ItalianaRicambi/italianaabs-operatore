@@ -70,3 +70,15 @@ Il tentativo iniziale di test SQL remoto è scaduto in attesa della conferma tec
 4. Test Supabase con due connessioni e prova completa collegata; prova positiva del trasporto su un numero interno concordato, mai clienti.
 
 Nessun merge/rilascio operativo, nessuna attivazione, nessun invio cliente. Automazione ChatGPT di completamento già disabilitata prima di questo aggiornamento; non è un monitor attivo del ticket.
+
+## Ripresa 11/11/2026
+
+Il ramo remoto è ancora `737e677`; main è `bacb589`. Nessuna modifica al ramo separato `fix/sospensioni-avviso-20261110`.
+
+Ripetuto il collaudo remoto su richiesta dell'utente: la conferma tecnica del connettore Supabase è nuovamente scaduta prima dell'esecuzione. Anche il tentativo più circoscritto, senza DDL/sostituzioni di funzioni e con soli dati sintetici in rollback, ha restituito `status=expired`. Non è un risultato SQL e non va contato come test superato. Non tentare altre vie per aggirare la conferma.
+
+Verifiche in sola lettura riuscite: entrambe le migrazioni presenti, zero richieste/invii, config ancora false/false/null/null, nessun accesso anon/authenticated alle RPC di invio/segnalazione, indice attività unico presente e orologi delle funzioni non sostituiti da fixture. Nessun invio reale o attivazione.
+
+Aggiunto `supabase/tests/followup_dati_trasporto_orario_reale.sql`: variante senza DDL, usa l'orario effettivo e verifica il rifiuto fuori fascia. Il percorso CAS positivo è verificabile da questo script solo durante l'orario aziendale. Non applicarlo come migrazione; richiede una transazione annullata. Il test su Supabase rimane da completare con conferma tecnica valida. Restano inoltre tutti i punti di integrazione e collaudo indicati sopra e le informazioni richieste su numero interno e chiusure future.
+
+La variante senza DDL è stata eseguita con successo su PGlite 0.3.14 con schema minimo isolato durante la pausa pranzo: guardie fuori fascia, esito ambiguo e attività 48h unica. Questo non certifica il percorso positivo in fascia aperta né il DB remoto.
