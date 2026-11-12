@@ -1,3 +1,5 @@
+import { prepareFiscalRequest, prepareTechnicalRequest } from "../../../lib/followupDati/initialRequest";
+import { rpcOriginaliK } from "../../../lib/originaliKepleroServer";
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { leggiIdConversazioneKeplero } from "./identitaConversazione";
@@ -1330,12 +1332,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let istruzioneFollowup = "";
+    if (tipoFlusso === "commerciale" && !decisione.bloccoContattoOperativo
+      && uuidValido(praticaIdContesto) && uuidValido(conversationId)
+      && testo(primo(body, "channel", "canale")).toLowerCase() === "whatsapp"
+      && !bool(primo(body,"is_group","gruppo"))) {
+      const richiesta = richiestaDatiAmministrativi as {necessaria?:boolean; messaggio?:string; campi?:string[]} | null;
+      const dati = richiesta?.necessaria === true
+        ? prepareFiscalRequest(richiesta.messaggio ?? null, richiesta.campi ?? [])
+        : prepareTechnicalRequest(decisione.completezza.datiMancanti);
+      if (dati) {
+        try {
+          const proposta = await rpcOriginaliK<boolean>("followup_dati_proponi", {
+            p_pratica: praticaIdContesto, p_sessione: conversationId, p_fase: dati.phase, p_testo: dati.exactText,
+          });
+          if (proposta) istruzioneFollowup = ` Se la richiesta dei dati mancanti è il prossimo passo e i dati non sono già stati forniti, usa esattamente questa frase senza aggiungere altro al messaggio: ${JSON.stringify(dati.exactText)}`;
+        } catch {
+          console.warn("keplero_followup_formulazione_non_disponibile");
+        }
+      }
+    }
+
     return NextResponse.json({
       ok: true,
 
-      message: registrazione.istruzione + istruzioneFlusso + istruzioneRitiro + istruzioneAssistenza,
+      message: registrazione.istruzione + istruzioneFlusso + istruzioneRitiro + istruzioneAssistenza + istruzioneFollowup,
       registrazione,
-      indicazioni_dati: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini),
+      indicazioni_dati: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini) + istruzioneFollowup,
 
       contesto_offerta: contestoOfferta,
       contesto_ritiro: contestoRientro,

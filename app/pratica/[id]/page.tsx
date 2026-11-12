@@ -533,6 +533,8 @@ function etichettaAzione(azione: string) {
 }
 
 function titoloAttivitaOperativa(tipo: string) {
+  if (tipo === "followup_dati_preventivo") return "Dati preventivo: nessuna risposta al promemoria";
+  if (tipo === "followup_dati_fatturazione") return "Dati fatturazione: nessuna risposta al promemoria";
   if (NOMI_RITIRO[tipo]) return NOMI_RITIRO[tipo];
   switch (tipo) {
     case "ritiro_programma_scambio":

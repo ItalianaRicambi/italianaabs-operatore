@@ -63,6 +63,8 @@ function conclusa(p: PraticaOggi) {
 }
 type AttivitaOggi = NonNullable<PraticaOggi["attivita_operative"]>[number];
 function azioneAttivita(operativa: AttivitaOggi, giornoRoma: string): ProssimaAzione {
+  if (operativa.tipo === "followup_dati_preventivo" || operativa.tipo === "followup_dati_fatturazione")
+    return azione("Verificare i dati ancora mancanti", "Nessuna risposta al promemoria da almeno 48 ore. Valutare la pratica; nessun secondo sollecito automatico.", operativa.tipo === "followup_dati_fatturazione" ? "amministrazione" : "pratiche", operativa.tipo === "followup_dati_fatturazione" ? "amministrazione" : "logistica");
   const ritiro = operativa.tipo.startsWith("ritiro_");
   const area = ritiro ? "logistica" : "pratiche";
   if (operativa.stato === "da_collegare") return azione("Verificare il collegamento", "Attività non collegata in modo univoco alla pratica di origine.", area, "logistica", "da_lavorare", operativa.priorita === "urgente");

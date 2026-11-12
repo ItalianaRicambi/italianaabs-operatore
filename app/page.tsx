@@ -112,7 +112,8 @@ type AttivitaOperatore = {
     | "ritiro_lavorazione" | "ritiro_verifica_garanzia" | "ritiro_da_classificare" | "ritiro_altro_reso"
     | "richiamata_post_preventivo"
     | "richiamata_post_vendita"
-    | "richiamata_da_classificare";
+    | "richiamata_da_classificare"
+    | "followup_dati_preventivo" | "followup_dati_fatturazione";
   stato: "da_gestire" | "da_collegare" | "programmata";
   priorita: "normale" | "alta" | "urgente";
   pratica_id: string;
@@ -464,6 +465,8 @@ function haAttivita(pratica: Pratica, ...tipi: AttivitaOperatore["tipo"][]) {
 }
 
 function etichettaAttivita(tipo: AttivitaOperatore["tipo"]) {
+  if (tipo === "followup_dati_preventivo") return "Dati preventivo: nessuna risposta al promemoria";
+  if (tipo === "followup_dati_fatturazione") return "Dati fatturazione: nessuna risposta al promemoria";
   if (NOMI_RITIRO[tipo]) return NOMI_RITIRO[tipo];
   switch (tipo) {
     case "ritiro_programma_scambio":
