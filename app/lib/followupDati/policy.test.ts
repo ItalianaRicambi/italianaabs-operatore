@@ -110,3 +110,24 @@ test('un flag mancante non viene interpretato come esito negativo verificato',()
  const c=context();c.snapshot.invoiceOrProformaIssued=undefined as unknown as boolean;
  stopped(c,'evidence_unverified');
 });
+
+test('both follow-up phases honor a verified date and resume at the first business opening',()=>{
+ for (const make of [context,fiscal]) {
+  const monday=iso('2026-11-16T08:00:00Z');
+  for (const at of [now,monday]) {
+   const c=make(at);
+   c.snapshot.customerReplyAtOrAfterRequest=true;
+   c.snapshot.customerDeferral={notBefore:'2026-11-13T23:00:00.000Z',
+    messages:[{id:'reply',fingerprint:'c'.repeat(64)}],conversationFingerprint:c.snapshot.sourceFingerprint};
+   const result=prepareReminder(c,at);
+   if (at===now) assert.deepEqual(result,{kind:'wait',at:'2026-11-16T08:00:00.000Z'});
+   else assert.equal(result.kind,'ready');
+   const missing=c.snapshot.missing;
+   c.snapshot.missing=[];
+   stopped(c,'data_complete',at);
+   c.snapshot.missing=missing;
+   c.snapshot.customerDeferral.conversationFingerprint='d'.repeat(64);
+   stopped(c,'response_to_review',at);
+  }
+ }
+});

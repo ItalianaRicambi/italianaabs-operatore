@@ -13,7 +13,8 @@ function review():Review{return {session,to:'+390000000001',practiceVersion:'v1'
 function setup(){
  let state='none',calls=0,activity=false;let attempt:Attempt|undefined;
  const store:Store={
-  async claim(){if(state!=='none')return null;state='claimed';return 'claim';},
+  async claim(){if(state!=='none'&&state!=='deferred')return null;state='claimed';return 'claim';},
+  async releaseUnsent(){if(state!=='claimed'||attempt)return false;state='deferred';return true;},
   async begin(_claim,_review,a){if(state!=='claimed'||attempt)return false;attempt=a;return true;},
   async finish(_claim,next){if(state==='sent'||state==='cancelled')return false;if(state==='ambiguous'&&next!=='sent')return false;state=next;return true;},
   async escalate(){if(activity)return false;activity=true;return true;},
@@ -63,4 +64,37 @@ test('48h escalation creates one activity and no further messages; replies stop 
 test('slow database acknowledgement cannot send with stale review',async()=>{
  const s=setup();const begin=s.d.store.begin;s.d.store.begin=async(...args)=>{const ok=await begin(...args);s.d.now=()=>now+16000;return ok;};
  assert.equal((await runReminder(s.d)).reason,'expired_before_dispatch');assert.equal(s.calls(),0);
+});
+
+test('a dated reply during preparation or detected by the database reschedules before sending',async()=>{
+ for (const databaseSeesFirst of [false,true]) {
+  const s=setup();
+  if (databaseSeesFirst) {
+   const begin=s.d.store.begin;
+   let blocked=false;
+   s.d.store.begin=async(...args)=>{if(!blocked){blocked=true;return false;}return begin(...args);};
+  }
+  const due=Date.parse('2026-11-17T10:00:00Z');
+  let clock=now,reads=0;
+  s.d.now=()=>clock;
+  s.d.review=async()=>{
+   const r=review();
+   r.context.snapshot.readStartedAt=r.context.snapshot.readFinishedAt=new Date(clock).toISOString();
+   if (s.state()==='deferred') r.context.ledger.state='deferred';
+   if (reads++ >= (databaseSeesFirst ? 2 : 1)) {
+    r.context.snapshot.customerReplyAtOrAfterRequest=true;
+    r.context.snapshot.customerDeferral={notBefore:new Date(due).toISOString(),
+     messages:[{id:'customer-reply',fingerprint:'c'.repeat(64)}],conversationFingerprint:r.context.snapshot.sourceFingerprint};
+   }
+   return r;
+  };
+  assert.deepEqual(await runReminder(s.d),{kind:'wait',reason:new Date(due).toISOString()});
+  assert.equal(s.calls(),0);
+  assert.equal(s.state(),'deferred');
+  clock=due;
+  const messages=s.d.messages;
+  s.d.messages=async session=>(await messages(session)).map(m=>({...m,timestamp:new Date(clock).toISOString()}));
+  assert.equal((await runReminder(s.d)).kind,'sent');
+  assert.equal(s.calls(),1);
+ }
 });

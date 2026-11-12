@@ -17,7 +17,7 @@ create table public.keplero_originali(sessione uuid,messaggio_id text,data_messa
  direzione text not null,tipo text not null,testo text not null,impronta text not null,candidato boolean,revoca boolean,
  originale jsonb not null,modificato boolean not null default false,primary key(sessione,messaggio_id));
 create table public.preventivi(id uuid primary key default gen_random_uuid(),pratica_id uuid);
-create table public.keplero_verifiche_originali(sessione uuid,esito text);
+create table public.keplero_verifiche_originali(sessione uuid,messaggio_id text,esito text);
 create table public.chiusure_aziendali(data_inizio date,data_fine date);
 create function private.verifica_dati_cliente_fatturazione(uuid) returns jsonb language sql as $$select '{"completi":false}'::jsonb$$;
 create table public.attivita_operatore (

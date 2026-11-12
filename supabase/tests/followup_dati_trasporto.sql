@@ -8,8 +8,13 @@ begin
   'private.followup_dati_stato_valido(uuid,timestamptz,timestamptz)'::regprocedure,
   'public.inizia_invio_followup_dati(uuid,timestamptz,timestamptz,text,text[],jsonb)'::regprocedure,
   'public.claim_followup_dati(uuid,timestamptz,timestamptz,text,text[])'::regprocedure,
-  'public.segnala_followup_dati(uuid,text,timestamptz,timestamptz)'::regprocedure
+  'public.segnala_followup_dati(uuid,text,timestamptz,timestamptz)'::regprocedure,
+  to_regprocedure('private.followup_dati_stato_valido(uuid,timestamptz,timestamptz,jsonb)'),
+  to_regprocedure('public.inizia_invio_followup_dati(uuid,timestamptz,timestamptz,text,text[],jsonb,jsonb)'),
+  to_regprocedure('public.claim_followup_dati(uuid,timestamptz,timestamptz,text,text[],jsonb)'),
+  to_regprocedure('public.segnala_followup_dati(uuid,text,timestamptz,timestamptz,jsonb)')
  ] loop
+  if f is null then continue;end if;
   body:=pg_get_functiondef(f);
   execute replace(body,'clock_timestamp()', 'timestamptz ''2026-11-09T10:00:00Z''' );
  end loop;

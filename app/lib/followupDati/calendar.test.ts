@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {isOpen,nextOpening,type Calendar} from './policy.ts';
+import {fourthBusinessDayOpening,isOpen,nextOpening,type Calendar} from './policy.ts';
 
 // Conferma Norberto 11/11/2026. Stesso dataset della migrazione dedicata.
 const calendar:Calendar={confirmedThrough:'2026-12-31',closures:[
@@ -29,4 +29,11 @@ test('giorni non dichiarati chiusi restano lavorativi con pausa pranzo e venerdÃ
  assert.equal(isOpen(instant('2026-12-28T11:30:00Z'),calendar),false);
  assert.equal(isOpen(instant('2026-12-30T17:29:59Z'),calendar),true);
  assert.equal(isOpen(instant('2026-12-11T12:30:00Z'),calendar),false);
+});
+
+test('an undated reply resumes on the fourth subsequent working day in Rome',()=>{
+ assert.equal(fourthBusinessDayOpening(instant('2026-11-13T10:00:00Z'),calendar),instant('2026-11-19T08:00:00Z'));
+ assert.equal(fourthBusinessDayOpening(instant('2026-12-04T10:00:00Z'),calendar),instant('2026-12-14T08:00:00Z'));
+ assert.equal(fourthBusinessDayOpening(instant('2026-12-29T10:00:00Z'),calendar),null);
+ assert.equal(fourthBusinessDayOpening(instant('2026-07-10T10:00:00Z'),calendar),instant('2026-07-16T07:00:00Z'));
 });

@@ -1,7 +1,8 @@
 import {createHash} from 'node:crypto';
 import {normalizzaOriginaliK,type OriginaleK} from '../originaliKeplero.ts';
 import type {MessaggioKeplero} from '../kepleroMessages.ts';
-import {labels,type Field,type Phase,type RequestEvidence} from './policy.ts';
+import {fourthBusinessDayOpening,labels,type Calendar,type Field,type Phase,type RequestEvidence,type Snapshot} from './policy.ts';
+import {customerTiming} from './customerTiming.ts';
 
 export type Attachment = {messageId:string;sha256:string;bytes:Uint8Array;contentType:string};
 export type LiveEvidence = {originals:OriginaleK[];attachments:Attachment[];fingerprint:string;startedAt:string;finishedAt:string};
@@ -43,7 +44,7 @@ export async function readLiveEvidence(session:string,read:()=>Promise<Messaggio
  * manuale "inviata", una data importata o un ultimo messaggio generico non bastano.
  * Nessun invio viene effettuato da questo registratore.
  */
-export function findTargetedRequest(input:{practiceId:string;phase:Phase;exactText:string;fields:Field[];cutover:string},evidence:LiveEvidence):RequestEvidence|null{
+export function findTargetedRequest(input:{practiceId:string;phase:Phase;exactText:string;fields:Field[];cutover:string},evidence:LiveEvidence,calendar:Calendar):RequestEvidence|null{
  const cutoff=Date.parse(input.cutover);
  if(!Number.isFinite(cutoff)||!input.exactText.trim()||!input.fields.length||!input.fields.every(f=>Object.hasOwn(labels,f)))return null;
  // La provenienza e il significato del testo mirato restano responsabilità del
@@ -55,6 +56,48 @@ export function findTargetedRequest(input:{practiceId:string;phase:Phase;exactTe
  const wa=last.originale.whatsapp_message as Record<string,unknown>|undefined;
  const proof=['delivered','read'].includes(String(wa?.status))
   ||(last.originale.sender_type==='user'&&metadata?.origin==='whatsapp_coexistence');
- if(!proof||evidence.originals.some(m=>m.data>=last.data&&m.direzione!=='uscita'))return null;
+ if(!proof)return null;
+ const replies = reviewCustomerReplies(last.data, evidence, calendar);
+ if(replies.responsePendingReview || replies.unknownDirectionAfterRequest)return null;
  return {practiceId:input.practiceId,phase:input.phase,messageId:last.id,sentAt:last.data,sourceFingerprint:last.impronta,deliveryConfirmed:true,fields:input.fields};
+}
+
+/** Only understood text commitments can clear the existing hold for a customer reply. */
+export function reviewCustomerReplies(sentAt: string, evidence: LiveEvidence, calendar: Calendar): Pick<Snapshot,
+ 'customerReplyAtOrAfterRequest' | 'unknownDirectionAfterRequest' | 'responsePendingReview' | 'customerDeferral'> {
+ const after = evidence.originals.filter(message => Date.parse(message.data) >= Date.parse(sentAt));
+ const replies = after.filter(message => message.direzione === 'entrata');
+ const review = {
+  customerReplyAtOrAfterRequest: replies.length > 0,
+  unknownDirectionAfterRequest: after.some(message => message.direzione === 'ignota'),
+  responsePendingReview: false,
+  customerDeferral: undefined,
+ };
+ if (!replies.length || review.unknownDirectionAfterRequest) return review;
+
+ let notBefore = 0;
+ let lastUndatedReply: number | null = null;
+ for (const reply of replies) {
+  const time = Date.parse(reply.data);
+  const due = reply.tipo === 'text' && !reply.revoca ? customerTiming(reply.testo, time) : null;
+  if (due === null || time > Date.parse(evidence.finishedAt)) {
+   return {...review, responsePendingReview: true};
+  }
+  if (due === 'undated') {
+   lastUndatedReply = time;
+  } else {
+   notBefore = Math.max(notBefore, due);
+   lastUndatedReply = null;
+  }
+ }
+ if (lastUndatedReply !== null) {
+  const fallback = fourthBusinessDayOpening(lastUndatedReply, calendar);
+  if (fallback === null) return {...review, responsePendingReview: true};
+  notBefore = Math.max(notBefore, fallback);
+ }
+ return {...review, customerDeferral: {
+  notBefore: new Date(notBefore).toISOString(),
+  messages: replies.map(reply => ({id: reply.id, fingerprint: reply.impronta})),
+  conversationFingerprint: evidence.fingerprint,
+ }};
 }

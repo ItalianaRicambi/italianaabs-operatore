@@ -7,6 +7,7 @@ export type Review = {context:Context;practiceVersion:string;session:string;to:s
 export type StoredAttempt = {claim:string;attempt:Attempt};
 export type Store = {
  claim(review:Review):Promise<string|null>;
+ releaseUnsent(claim:string):Promise<boolean>;
  /** Scrive il tentativo PRIMA del POST e fa CAS: una sola chiamata può ottenere true. */
  begin(claim:string,review:Review,attempt:Attempt):Promise<boolean>;
  finish(claim:string,state:'sent'|'ambiguous'|'cancelled',receipt:Receipt|null,reason:string):Promise<boolean>;
@@ -23,8 +24,17 @@ function sameTarget(a:Review,b:Review):boolean {
   &&a.context.request.phase===b.context.request.phase&&a.context.request.messageId===b.context.request.messageId
   &&a.context.request.sourceFingerprint===b.context.request.sourceFingerprint;
 }
-/** Due letture indipendenti; nessuna attestazione client. La seconda segue il
- * claim. Se cambia qualcosa, lo slot resta consumato: mai inviare con prove vecchie.
+function dispatchDecision(review:Review,now:number) {
+ return prepareReminder({...review.context,ledger:{state:'none',messageId:null,sentAt:null}},now);
+}
+async function deferUnsent(d:Dependencies,claim:string,first:Review,last:Review,decision:ReturnType<typeof dispatchDecision>):Promise<RunResult|null> {
+ const deferral = last.context.snapshot.customerDeferral;
+ if (decision.kind !== 'wait' || !sameTarget(first,last) || !deferral
+  || Date.parse(deferral.notBefore) <= d.now() || !await d.store.releaseUnsent(claim)) return null;
+ return {kind:'wait',reason:decision.at};
+}
+/** Due letture indipendenti. La seconda segue il claim. Solo un rinvio
+ * verificato prima del tentativo può lasciare lo slot disponibile più avanti.
  */
 export async function runReminder(d:Dependencies):Promise<RunResult>{
  const first=await d.review();
@@ -40,7 +50,9 @@ export async function runReminder(d:Dependencies):Promise<RunResult>{
   const last=await d.review();
   // Il solo worker con claim può valutare di nuovo la policy; begin verifica il
   // possesso/stato nel DB e impedisce che un secondo processo consumi lo stesso slot.
-  const final=prepareReminder({...last.context,ledger:{state:'none',messageId:null,sentAt:null}},d.now());
+  const final=dispatchDecision(last,d.now());
+  const deferred=await deferUnsent(d,claim,first,last,final);
+  if(deferred)return deferred;
   if(final.kind!=='ready'||!sameTarget(first,last)||JSON.stringify(final.variables)!==JSON.stringify(decision.variables)){
    await d.store.finish(claim,'cancelled',null,'changed_after_claim');return {kind:'cancelled',reason:'changed_after_claim'};
   }
@@ -48,8 +60,14 @@ export async function runReminder(d:Dependencies):Promise<RunResult>{
    startedAt:new Date(d.now()).toISOString(),beforeIds:last.messageIds,expectedText:renderApprovedTemplate(last.context.request.phase,final.variables)};
   validateSend(attempt);
   if(!attempt.expectedText.includes(final.variables[0])||!attempt.expectedText.includes(final.variables[1]))throw new Error('template_text_unverified');
-  if(!await d.store.begin(claim,last,attempt))return {kind:'stop',reason:'dispatch_not_authorized'};
-  if(prepareReminder({...last.context,ledger:{state:'none',messageId:null,sentAt:null}},d.now()).kind!=='ready'){
+  if(!await d.store.begin(claim,last,attempt)){
+   // Il DB può vedere una risposta arrivata dopo la seconda lettura. Conferma
+   // il rinvio sugli originali prima di rilasciare una prenotazione non usata.
+   const updated=await d.review();
+   const deferred=await deferUnsent(d,claim,first,updated,dispatchDecision(updated,d.now()));
+   return deferred??{kind:'stop',reason:'dispatch_not_authorized'};
+  }
+  if(dispatchDecision(last,d.now()).kind!=='ready'){
    await d.store.finish(claim,'cancelled',null,'expired_before_dispatch');
    return {kind:'cancelled',reason:'expired_before_dispatch'};
   }

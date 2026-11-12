@@ -1,3 +1,5 @@
+import type {CustomerDeferral} from './customerTiming.ts';
+
 /** Preparazione fail-closed. Nessun trasporto o trigger è collegato a questo modulo.
  * Le attestazioni devono provenire dal futuro adattatore server, mai dal client/AI.
  */
@@ -24,7 +26,15 @@ function local(instant:number) {
  const day = `${parts.year}-${parts.month}-${parts.day}`;
  return {day, minute:Number(parts.hour)*60+Number(parts.minute), weekday:new Date(`${day}T12:00:00Z`).getUTCDay()};
 }
-function validDay(day:string):boolean {
+export function romeDay(instant: number): string {
+ return local(instant).day;
+}
+export function midnightInRome(day: string): number {
+ const utcMidnight = Date.parse(day);
+ // Rome midnight falls at either 22:00 or 23:00 UTC on the previous day.
+ return local(utcMidnight - hour).minute === 0 ? utcMidnight - hour : utcMidnight - 2 * hour;
+}
+export function validDay(day:string):boolean {
  return /^\d{4}-\d\d-\d\d$/.test(day) && Number.isFinite(Date.parse(day)) && new Date(day).toISOString().slice(0,10)===day;
 }
 function calendarValid(c:Calendar) {
@@ -50,6 +60,20 @@ export function nextOpening(instant:number,c:Calendar):number|null {
  }
  return null;
 }
+/** The message's local day is excluded, even when the business is open. */
+export function fourthBusinessDayOpening(instant: number, calendar: Calendar): number | null {
+ if (!Number.isFinite(instant) || !calendarValid(calendar)) return null;
+ const messageDay = Date.parse(romeDay(instant));
+ let workingDays = 0;
+ for (let offset = 1; offset <= 45; offset++) {
+  const day = new Date(messageDay + offset * 24 * hour).toISOString().slice(0,10);
+  if (day > calendar.confirmedThrough) return null;
+  const opening = midnightInRome(day) + 9 * hour;
+  if (isOpen(opening,calendar) && ++workingDays === 4) return opening;
+ }
+ return null;
+}
+
 export type RequestEvidence = {
  practiceId:string; phase:Phase; messageId:string; sentAt:string|null; sourceFingerprint:string;
  deliveryConfirmed:boolean; fields:Field[];
@@ -63,11 +87,12 @@ export type Snapshot = {
  // L'adattatore deve rileggere originali E byte degli allegati, non il riassunto della chat.
  readStartedAt:string; readFinishedAt:string; allOriginalsRead:boolean; allAttachmentsReviewed:boolean;
  originalRequestPresent:boolean; originalRequestUnchanged:boolean;
- // Qualunque risposta successiva, inclusi file/audio/media, sospende questa richiesta.
+ // Una risposta sospende la richiesta salvo un rinvio esplicito verificato sugli originali.
  customerReplyAtOrAfterRequest:boolean; unknownDirectionAfterRequest:boolean;
+ customerDeferral?:CustomerDeferral;
  sourceFingerprint:string;
 };
-export type Ledger = { state:'none'|'claimed'|'sent'|'ambiguous'|'cancelled'; sentAt:string|null; messageId:string|null };
+export type Ledger = { state:'none'|'deferred'|'claimed'|'sent'|'ambiguous'|'cancelled'; sentAt:string|null; messageId:string|null };
 export type Context = { request:RequestEvidence; snapshot:Snapshot; ledger:Ledger; calendar:Calendar; enabledAfter:string|null };
 export type Decision = { kind:'stop'; reason:string } | {kind:'wait'; at:string} |
  {kind:'ready'; key:string; template:string; variables:[string,string]; requestMessageId:string; snapshotFingerprint:string};
@@ -88,7 +113,12 @@ function evidenceProblem(c:Context,now:number):string|null {
  if(s.closedOrDeclined||['rifiutato','chiuso'].includes(s.commercialState))return 'closed';
  if(s.operatorBlocked)return 'operator_block';
  if(s.invoiceOrProformaIssued)return 'already_invoiced';
- if(s.responsePendingReview||s.customerReplyAtOrAfterRequest||s.unknownDirectionAfterRequest)return 'response_to_review';
+ const deferral = s.customerDeferral;
+ const verifiedDeferral = deferral && deferral.conversationFingerprint === s.sourceFingerprint
+  && Number.isFinite(timestamp(deferral.notBefore)) && timestamp(deferral.notBefore) > timestamp(r.sentAt)
+  && Array.isArray(deferral.messages) && deferral.messages.length > 0;
+ if(s.responsePendingReview||s.unknownDirectionAfterRequest
+  || (s.customerReplyAtOrAfterRequest ? !verifiedDeferral : !!deferral))return 'response_to_review';
  const start=timestamp(s.readStartedAt),end=timestamp(s.readFinishedAt);
  if(!s.allOriginalsRead||!s.allAttachmentsReviewed||!Number.isFinite(start)||!Number.isFinite(end)||start>end||end>now||now-start>15_000)return 'live_review_incomplete_or_stale';
  if(!/^[a-f0-9]{64}$/.test(s.sourceFingerprint)||!s.originalRequestPresent||!s.originalRequestUnchanged)return 'request_changed_or_absent';
@@ -109,9 +139,12 @@ function evidenceProblem(c:Context,now:number):string|null {
  return null;
 }
 export function prepareReminder(c:Context,now:number):Decision {
- if(c.ledger.state!=='none')return stop('reminder_already_claimed');
+ if(c.ledger.state!=='none'&&c.ledger.state!=='deferred')return stop('reminder_already_claimed');
  const problem=evidenceProblem(c,now);if(problem)return stop(problem);
- const due=nextOpening(timestamp(c.request.sentAt)+24*hour,c.calendar);
+ const due=nextOpening(Math.max(
+  timestamp(c.request.sentAt)+24*hour,
+  c.snapshot.customerDeferral ? timestamp(c.snapshot.customerDeferral.notBefore) : 0,
+ ),c.calendar);
  if(due===null)return stop('calendar_unverified');
  if(now<due)return {kind:'wait',at:new Date(due).toISOString()};
  if(!isOpen(now,c.calendar)){
@@ -125,5 +158,8 @@ export function prepareReminder(c:Context,now:number):Decision {
 export function shouldEscalate(c:Context,now:number):boolean {
  if(c.ledger.state!=='sent'||!c.ledger.messageId||!Number.isFinite(timestamp(c.ledger.sentAt)))return false;
  if(evidenceProblem(c,now))return false;
- return now>=Math.max(timestamp(c.ledger.sentAt),timestamp(c.request.sentAt))+48*hour;
+ return now>=Math.max(
+  timestamp(c.ledger.sentAt),timestamp(c.request.sentAt),
+  c.snapshot.customerDeferral ? timestamp(c.snapshot.customerDeferral.notBefore) : 0,
+ )+48*hour;
 }
