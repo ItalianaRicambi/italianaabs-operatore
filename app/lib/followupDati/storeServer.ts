@@ -17,7 +17,7 @@ export function createStore(requestId:string):Store{
    p_rinvio:review.context.snapshot.customerDeferral??null,
   });},
   releaseUnsent(claim){return rpcOriginaliK<boolean>('rilascia_claim_followup_dati',{p_claim:claim});},
-  begin(claim:string,review:Review,attempt:Attempt){return rpcOriginaliK<boolean>('inizia_invio_followup_dati',{
+  begin(claim:string,review:Review,attempt:Attempt){return rpcOriginaliK<boolean>('followup_dati_inizia_worker',{
    p_claim:claim,p_pratica_updated_at:review.practiceVersion,p_verificata_at:review.context.snapshot.readStartedAt,
    p_impronta:review.context.snapshot.sourceFingerprint,p_campi:review.context.snapshot.missing,p_tentativo:attempt,
    p_rinvio:review.context.snapshot.customerDeferral??null,

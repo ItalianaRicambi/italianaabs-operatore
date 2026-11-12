@@ -1,6 +1,6 @@
 # Follow-up dati mancanti — stato aggiornato 12 novembre 2026
 
-**Implementazione parziale, invii disabilitati. Non attivare i trigger di silenzio.**
+**Il worker della Dashboard gestisce i solleciti. I trigger di silenzio nativi di Keplero non soddisfano la verifica delle risposte.**
 
 La console Keplero mostra APPROVATO / Utilità / IT per entrambi i modelli `italianaabs_dati_preventivo_24h` e `italianaabs_dati_fatturazione_24h`. Non sono stati creati duplicati. Le automazioni esistenti restano disabilitate:
 
@@ -13,9 +13,11 @@ L'approvazione non dimostra che il reminder sia inviabile. Il trigger generico p
 
 Entrambe le fasi partono dalla richiesta mirata realmente inviata. Le 24 ore restano il minimo; una scadenza più lunga comunicata dal cliente prevale. «Settimana prossima vado dal meccanico e vi comunico i codici guasto» e «tra una settimana» danno sette giorni dal messaggio del cliente. «Entro venerdì» o una data precisa lasciano passare l'intero giorno indicato. Alla scadenza si applica la prima fascia lavorativa utile. Se il cliente indica più scadenze, si attende quella più lontana. Una promessa senza data come «Vi faccio sapere appena riesco» fa attendere fino alla prima fascia del quarto giorno lavorativo successivo al messaggio. Il conteggio esclude il giorno del messaggio, i weekend e le chiusure. Se il cliente precisa poi una data, si usa la scadenza comunicata. Un testo ambiguo, un allegato o una risposta non interpretata sospendono il sollecito per verifica. Dati completati, documenti già emessi, pratica chiusa o blocchi operatore continuano a fermare l'invio.
 
-La migrazione `20261112181116_rinvio_cliente_followup_dati` è in bozza. Il server rilegge i testi originali. Il DB controlla scadenza e corrispondenza di tutte le risposte rilette prima di prenotare e di iniziare l'invio. Un rinvio riconosciuto mentre il worker prepara l'invio consente di riprogrammare la prenotazione finché il tentativo non è stato registrato. Le verifiche di invio singolo e dell'attività operatore dopo altre 48 ore sono state eseguite con dati sintetici.
+La migrazione `20261112190005_rinvio_cliente_followup_dati` è stata applicata. Il server rilegge i testi originali. Il DB controlla scadenza e corrispondenza di tutte le risposte rilette prima di prenotare e di iniziare l'invio. Un rinvio riconosciuto mentre il worker prepara l'invio consente di riprogrammare la prenotazione finché il tentativo non è stato registrato. Le verifiche di invio singolo e dell'attività operatore dopo altre 48 ore sono state eseguite con dati sintetici.
 
-Verifiche di questa modifica: 59 test Node, TypeScript, ESLint sui moduli modificati e cinque script SQL su PGlite. La migrazione non è stata applicata al progetto Supabase di produzione. Restano da collegare il revisore completo, l'acquisizione automatica delle richieste e lo scheduler, e da collaudare il percorso automatico con Keplero.
+Verifiche di questa modifica: 59 test Node, TypeScript, ESLint sui moduli modificati e cinque script SQL su PGlite. La migrazione `20261112191400_collega_worker_followup_dati` è stata applicata. Il worker usa il recupero periodico già schedulato, collega la richiesta esatta al messaggio originale consegnato e verifica destinatario, dati residui, anagrafica e documenti prima dell'invio. L'invio pilota richiede un numero mobile italiano riscontrato nel webhook WhatsApp e nella pratica. Gli allegati non classificabili fermano il sollecito. Per la fatturazione il worker usa l'esito recente del controllo Fatture in Cloud e riconosce il preventivo già associato tramite impronta del PDF.
+
+L'attivazione si verifica nella configurazione Supabase e nel registro degli invii. Il collaudo del trasporto usa solo destinatario interno autorizzato e al massimo un tentativo per modello. L'avvio clienti accetta soltanto richieste successive al cutover.
 
 ## Stato corrente — calendario confermato e salvato il 11/11/2026
 
