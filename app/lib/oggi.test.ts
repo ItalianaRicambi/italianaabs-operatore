@@ -19,7 +19,7 @@ test("solo gli stati registrati, non la completezza storica, determinano le conc
 test("fatturazione pronta, sospesa e dati richiesti restano distinti", () => {
   assert.equal(azione(ordine).titolo, "Preparare la fatturazione");
   assert.equal(azione({ ...ordine, cliente_id: null }).titolo, "Completare i dati dell’ordine");
-  assert.equal(azione({ ...ordine, dati_raw: { sospensione_fatturazione_operatore: { attiva: true } } }).titolo, "Verificare la sospensione");
+  assert.equal(azione({ ...ordine, dati_raw: { sospensione_fatturazione_operatore: { attiva: true } } }).titolo, "Fatturazione sospesa");
   assert.equal(azione({ ...ordine, stato_amministrativo: "dati_mancanti", stato_richiesta_amministrativa: "inviata" }).stato, "in_attesa");
 });
 

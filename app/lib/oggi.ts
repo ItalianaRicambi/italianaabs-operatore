@@ -111,7 +111,9 @@ function azioneStato(p: PraticaOggi): ProssimaAzione {
   if (p.offerta_da_verificare) return azione("Verificare l’offerta", "L’ultima offerta presenta elementi da controllare.", "pratiche", "offerta");
   if (p.stato_commerciale === "ordine_acquisito" || p.stato_fatturazione === "da_fatturare") {
     if (prontaPerFatturazione(p)) return azione("Preparare la fatturazione", "Ordine acquisito, cliente collegato e dati fiscali pronti.", "amministrazione", "amministrazione");
-    if (fatturazioneSospesa(p)) return azione("Verificare la sospensione", "Fatturazione sospesa dall’operatore: il blocco resta invariato.", "amministrazione", "amministrazione");
+    if (fatturazioneSospesa(p)) return p.stato_richiesta_amministrativa === "inviata"
+      ? azione("Attendere i dati fiscali", "Dati già richiesti al cliente. La sospensione resta attiva fino alla verifica e riabilitazione dell’operatore.", "amministrazione", "amministrazione", "in_attesa")
+      : azione("Fatturazione sospesa", "In attesa della riabilitazione dell’operatore; l’accettazione dell’ordine resta registrata.", "amministrazione", "amministrazione", "in_attesa");
     if (p.stato_richiesta_amministrativa === "inviata") return azione("Attendere i dati fiscali", "Richiesta dati già inviata; non preparare un nuovo sollecito automaticamente.", "amministrazione", "amministrazione", "in_attesa");
     return azione("Completare i dati dell’ordine", "Verificare anagrafica e dati amministrativi prima di fatturare.", "amministrazione", "amministrazione");
   }
