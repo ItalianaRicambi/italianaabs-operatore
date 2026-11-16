@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { leggiCodaOrdini } from '../lib/codaOrdiniServer';
 import { classificaCoda, numeroPratica } from '../lib/codaOrdini';
+import { CoperturaShopify } from './CoperturaShopify';
 export async function CodaOrdini() {
  let dati;
  try { dati = await leggiCodaOrdini(); } catch { return <section role="alert" className="mb-5 rounded-xl border-2 border-red-700 p-5 text-red-800">Coda ordini non disponibile: non è possibile attestare che tutti gli ordini siano visibili. <Link href="/ordini" className="underline">Apri controllo ordini</Link></section>; }
@@ -18,6 +19,6 @@ export async function CodaOrdini() {
   <p className="mt-3 font-bold">{verifiche.length} pratiche con accettazione / ordine dichiarato da verificare · {c.praticheDaVerificare.length+c.shopifyDaVerificare.length} evasioni non attestate</p>
   {verifiche.length>0 && <p className="mt-1 text-sm">{verifiche.slice(0,5).map(v=>v.targa || numeroPratica(v.numero_pratica)).join(' · ')} — non ancora ordini confermati.</p>}
   <Link href="/ordini" prefetch={false} className="mt-4 inline-flex rounded-lg bg-blue-900 px-4 py-3 font-bold text-white">Apri ordini, evasioni e verifiche →</Link>
-  <p className="mt-3 text-xs">Copertura Shopify basata sugli eventi ricevuti: l’assenza di nuovi eventi non prova l’acquisizione di tutti gli ordini. Riconciliazione periodica con Shopify da attivare e collaudare.</p>
+  <CoperturaShopify/>
  </section>;
 }

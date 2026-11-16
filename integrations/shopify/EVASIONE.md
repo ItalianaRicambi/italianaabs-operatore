@@ -56,3 +56,7 @@ automaticamente che tutti gli ordini sono acquisiti.
 Nessun invio al cliente o modifica a importi, pagamenti o documenti fiscali.
 La migrazione è additiva; per rollback UI ripristinare il deployment precedente,
 conservando i nuovi registri e l'audit. Non cancellare le evidenze raccolte.
+# Aggiornamento: recupero API
+
+La fase successiva è descritta in [RICONCILIAZIONE.md](./RICONCILIAZIONE.md): lettura periodica, copertura limitata agli ultimi 60 giorni e salute verificabile nella dashboard. I limiti sotto riportati descrivono la prima fase basata sui soli eventi. L'attivazione effettiva va confermata con `stato_sync_shopify()`.
+

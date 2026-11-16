@@ -5,7 +5,6 @@ import { createHmac } from 'node:crypto';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
 const secret = 'local-only-order-flow-test-secret-0123456789';
 let fail = false; const writes=[];
 const pratica = {pratica_id:'10000000-0000-4000-8000-000000000001',numero_pratica:999001,targa:'TEST001',
@@ -21,6 +20,7 @@ const verifica={id:'20000000-0000-4000-8000-000000000001',pratica_id:pratica.pra
 const mock=createServer(async(req,res)=>{
  res.setHeader('Content-Type','application/json');
  if(req.method==='POST'){
+  if(req.url.endsWith('/stato_sync_shopify')) {res.end(JSON.stringify({ultimo_successo_at:null,errore:null,ordini_letti:0}));return;}
   let body='';for await(const c of req)body+=c;
   writes.push({url:req.url,body:JSON.parse(body)});
   res.end('true');return;
@@ -53,10 +53,12 @@ try{
   const response=await fetch(base+'/ordini',{headers,signal:AbortSignal.timeout(10000)});
   assert.equal(response.status,200);const html=await response.text();
   for(const value of ['#TEST1','TEST001','fatturato','Pratica non collegata','Possibile revoca successiva','Ordine fatto']) assert.ok(html.includes(value),value);
+  assert.ok(html.includes('Lettura API Shopify non ancora collaudata.'));
   fail=true;const errore=await (await fetch(base+'/ordini',{headers,signal:AbortSignal.timeout(10000)})).text();
   assert.ok(errore.includes('Dati incompleti:'));assert.equal(writes.length,0);
   console.log('PASS HTTP/SSR: accesso protetto, Shopify orfano, fattura indipendente, prove/revoca e errore di lettura esplicito. Nessuna azione eseguita.');
  } else {
+ const { chromium } = require('playwright');
  browser=await chromium.launch({headless:true,executablePath:process.env.ORDER_FLOW_CHROMIUM || undefined});
  const context=await browser.newContext({viewport:{width:1280,height:900}});
  await context.addCookies([{name:'italianaabs_operatore',value:'1.'+signature,url:base}]);
