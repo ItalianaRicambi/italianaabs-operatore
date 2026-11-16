@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CoperturaShopify } from '../components/CoperturaShopify';
 import { redirect } from 'next/navigation';
 import { getOperatoreAttivo } from '../operatore';
 import { BarraOperatore } from '../components/IdentitaOperatore';
@@ -50,6 +51,6 @@ export default async function Ordini() {
  <section className="space-y-3"><h2 className="text-xl font-bold">Stato Shopify da verificare ({c.shopifyDaVerificare.length})</h2>{c.shopifyDaVerificare.map(r=><Shopify key={r.id} r={byId.get(r.id)!}/>)}</section>
  <details className="rounded-xl border bg-white p-4"><summary className="cursor-pointer text-xl font-bold">Storico con evasione non attestata ({c.praticheDaVerificare.length})</summary><p className="my-3">La fattura non prova che siano ancora aperti né già evasi. Verifica documentale necessaria; non classificati automaticamente come urgenti.</p><div className="space-y-3">{c.praticheDaVerificare.map(p=><Pratica key={p.pratica_id} p={p}/>)}</div></details>
  <details className="rounded-xl border bg-white p-4"><summary className="cursor-pointer font-bold">Evasi ({c.shopifyEvasi.length+c.praticheEvase.length})</summary><div className="mt-3 space-y-3">{c.shopifyEvasi.map(r=><Shopify key={r.id} r={byId.get(r.id)!}/>)}{c.praticheEvase.map(p=><Pratica key={p.pratica_id} p={p}/>)}</div></details>
- <p className="rounded border border-amber-400 bg-amber-50 p-4">Copertura Shopify: eventi ricevuti, non riconciliazione completa della sorgente. La riconciliazione periodica con l’API Shopify deve essere attivata e collaudata; l’assenza di eventi non dimostra l’assenza di ordini. Evaso su Shopify non significa consegnato al destinatario.</p>
+ <CoperturaShopify/>
  </div></main>;
 }
