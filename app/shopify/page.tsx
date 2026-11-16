@@ -14,7 +14,7 @@ export default async function OrdiniShopify() {
     <Link href="/" className="font-bold text-blue-800 underline">Torna alla dashboard</Link><h1 className="mt-4 text-3xl font-bold">Ordini Shopify e verifica IVA</h1>
     <p className="mt-3 text-slate-600">L’operatore prepara il documento d’ordine. Il pagamento anticipato è richiesto per PS/PSMI; per RE/RI può avvenire a fine lavori. Le verifiche IVA precedono la fatturazione.</p>
     {!righe ? <p role="alert" className="mt-5 text-red-800">Registro non disponibile. Verificare l’acquisizione degli ordini.</p> : <>
-      <p className="my-5 text-sm">Ordini attivi mostrati: {righe.length} (massimo 200). Ordini di prova e annullati esclusi.</p>
+      <p className="my-5 text-sm">Ordini reali mostrati: {righe.length}. Ordini di prova e annullati esclusi. <Link href="/ordini" className="underline font-bold">Apri la coda da evadere →</Link></p>
       {!righe.length && <p className="rounded-xl border bg-white p-5">Nessun ordine operativo acquisito. La sola assenza di righe non conferma che il collegamento sia attivo.</p>}
       <div className="space-y-4">{righe.map(r => <section key={r.id} className={`rounded-xl border bg-white p-5 ${r.valutazione.verifica_iva || r.conflitto ? 'border-amber-400' : 'border-slate-200'}`}>
         <div className="flex flex-wrap justify-between gap-3"><h2 className="text-lg font-bold">{r.dati.numero} · {r.dati.cliente}</h2><strong>{valuta(r.dati.totale, r.dati.valuta)}</strong></div>

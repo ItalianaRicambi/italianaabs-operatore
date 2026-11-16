@@ -1,4 +1,5 @@
 import { AvvisiOrdini } from './AvvisoOrdine';
+import { CodaOrdini } from './CodaOrdini';
 import { AggiornaAvvisi } from './AggiornaAvvisi';
 import Link from "next/link";
 import { randomUUID } from "node:crypto";
@@ -90,6 +91,7 @@ export function HomeOggi({ operatore, pratiche, righe, filtro, etichetta, cerca,
             <Link href="/" className="block text-lg font-black tracking-tight text-blue-950">Italiana<span className="text-blue-600">ABS</span></Link>
             <p className="mt-1 text-xs font-medium text-slate-500">Area operatore</p>
             <nav aria-label="Aree di lavoro" className="mt-5 flex flex-wrap gap-1 lg:flex-col lg:gap-2">
+              <Link href="/ordini" prefetch={false} className="rounded-xl bg-blue-50 px-3 py-3 text-sm font-bold text-blue-900">Ordini da evadere</Link>
               {AREE.map(([id, label, numero]) => {
                 const attiva = id === "oggi" ? filtro.startsWith("oggi") : filtro === id;
                 return <Link key={id} href={href(id)} prefetch={false} aria-current={attiva ? "page" : undefined}
@@ -114,6 +116,7 @@ export function HomeOggi({ operatore, pratiche, righe, filtro, etichetta, cerca,
               </div>
               <Link href={href(filtro, cerca, pagina)} prefetch={false} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-100">Aggiorna elenco</Link>
             </header>
+            <CodaOrdini />
             <AvvisiOrdini pratiche={pratiche} />
             {errore && <p role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-4 text-sm font-semibold text-red-900">Dati parziali o non disponibili: {errore}. I conteggi non attestano l’assenza di attività.</p>}
             <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${controllo.fermo ? "border-red-300 bg-red-50 text-red-950" : "border-slate-200 bg-white text-slate-700"}`} role={controllo.fermo ? "alert" : undefined}>

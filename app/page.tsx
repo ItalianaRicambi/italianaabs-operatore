@@ -30,6 +30,7 @@ import { StatoOriginaliK } from './components/StatoOriginaliK';
 import { StatoLavoriK } from './components/StatoLavoriK';
 import { StatoOrdiniShopify } from './components/StatoOrdiniShopify';
 import { AvvisiOrdini } from './components/AvvisoOrdine';
+import { CodaOrdini } from './components/CodaOrdini';
 import { AggiornaAvvisi } from './components/AggiornaAvvisi';
 import { HomeOggi } from './components/HomeOggi';
 import { FILTRI_OGGI, filtraOggi, controlloFermo, numeroPagina } from './lib/oggi';
@@ -1220,7 +1221,7 @@ export default async function Home({
     >
     <main className="min-h-screen bg-slate-50">
       <BarraOperatore operatore={operatoreAttivo} />
-      {!solaLettura && <><AggiornaAvvisi /><AvvisiOrdini pratiche={pratiche} /></>}
+      {!solaLettura && <><AggiornaAvvisi /><CodaOrdini /><AvvisiOrdini pratiche={pratiche} /></>}
 
       <div className="mx-auto max-w-[1750px] px-6 py-8">
         <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

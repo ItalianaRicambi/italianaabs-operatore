@@ -1,10 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+test('evasione distinta dal pagamento: evaso mai pronto, parziale resta aperto, mancante non inventato', () => {
+ for (const [fulfillment_status, atteso, pronto] of [
+  ['fulfilled','evaso',false], ['partial','parziale',true], [null,'da_evadere',true],
+  [undefined,'da_verificare',false], ['on_hold','da_verificare',false],
+ ] as const) {
+  const o = normalizzaOrdineShopify({...originale,fulfillment_status});
+  assert.equal(o.stato_evasione,atteso);
+  assert.equal(valutaOrdineShopify(o).pronto_ordine,pronto);
+ }
+ const legacy = normalizzaOrdineShopify(originale); delete legacy.stato_evasione;
+ assert.equal(valutaOrdineShopify(legacy).pronto_ordine,false);
+});
 import { firmaShopifyValida, normalizzaOrdineShopify, servizioShopify, valutaOrdineShopify } from './ordiniShopify.ts';
 
 const originale = {
   id: 17911850598749, name: '#1003', updated_at: '2026-10-25T21:00:00Z', test: false, cancelled_at: null,
+  fulfillment_status: null,
   financial_status: 'paid', current_total_price: '447.00', current_total_tax: '80.61', currency: 'EUR', tax_exempt: false,
   billing_address: { name: 'Mario Rossi', company: '', address1: 'Via A 1', city: 'Milano', zip: '20121', country_code: 'IT' },
   shipping_address: { name: 'Officina', address1: 'Via B 2', city: 'Oleggio', zip: '28047', country_code: 'IT' },

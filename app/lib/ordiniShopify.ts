@@ -8,6 +8,7 @@ export type ServizioShopify = 'PS' | 'PSMI' | 'RE' | 'RI' | 'CODIFICA' | 'da_ver
 export type OrdineShopify = {
   shop: string; ordine_id: string; numero: string; aggiornato_shopify_at: string;
   test: boolean; annullato: boolean; stato_pagamento: string;
+  stato_evasione?: 'da_evadere' | 'parziale' | 'evaso' | 'da_verificare';
   cliente: string; email: string; fatturazione: IndirizzoShopify; spedizione: IndirizzoShopify;
   partita_iva_dichiarata: string | null; partita_iva_discordante: boolean; tipo_cliente: 'azienda_dichiarata' | 'non_dichiarato';
   totale: number; iva: number | null; valuta: string; esente_shopify: boolean | null;
@@ -98,6 +99,8 @@ export function normalizzaOrdineShopify(value: unknown): OrdineShopify {
   const partitaIva = partiteIva.length === 1 ? partiteIva[0] : null;
   return { shop: NEGOZIO_SHOPIFY, ordine_id: id, numero: testo(v.name, 100), aggiornato_shopify_at: new Date(data).toISOString(),
     test: v.test, annullato: !!v.cancelled_at, stato_pagamento: testo(v.financial_status),
+    stato_evasione: v.fulfillment_status === 'fulfilled' ? 'evaso' : v.fulfillment_status === 'partial' ? 'parziale'
+      : v.fulfillment_status === null || v.fulfillment_status === 'unfulfilled' ? 'da_evadere' : 'da_verificare',
     cliente: fatturazione.azienda || fatturazione.nome || spedizione.nome || 'Cliente da verificare', email: testo(v.email || v.contact_email, 254),
     fatturazione, spedizione, partita_iva_dichiarata: partitaIva, partita_iva_discordante: partiteIva.length > 1,
     tipo_cliente: fatturazione.azienda || partiteIva.length ? 'azienda_dichiarata' : 'non_dichiarato',
@@ -110,7 +113,7 @@ export function valutaOrdineShopify(o: OrdineShopify): ValutazioneShopify {
   const attivo = !o.test && !o.annullato && !['refunded','voided','expired'].includes(o.stato_pagamento);
   const pagamentoRichiesto = o.servizi.some(s => s === 'PS' || s === 'PSMI' || s === 'CODIFICA');
   const servizioIncerto = o.servizi.includes('da_verificare') || o.codifica_da_verificare === true;
-  const pronto = attivo && !servizioIncerto && o.stato_pagamento !== 'partially_refunded' && (!pagamentoRichiesto || o.stato_pagamento === 'paid');
+  const pronto = attivo && ['da_evadere', 'parziale'].includes(o.stato_evasione || '') && !servizioIncerto && o.stato_pagamento !== 'partially_refunded' && (!pagamentoRichiesto || o.stato_pagamento === 'paid');
   let stato: ValutazioneShopify['stato_iva'] = 'da_verificare', messaggio = 'Dati IVA incompleti: aprire l’ordine Shopify prima di fatturare.', verifica = true;
   const estero = !!o.spedizione.paese && o.spedizione.paese !== 'IT';
   if (o.iva !== null && o.esente_shopify !== null && o.spedizione.paese) {
@@ -133,6 +136,8 @@ export function valutaOrdineShopify(o: OrdineShopify): ValutazioneShopify {
   return { attivo, pronto_ordine: pronto, pagamento_richiesto: pagamentoRichiesto, stato_iva: stato,
     verifica_iva: verifica, messaggio_iva: messaggio,
     motivazione_ordine: !attivo ? 'Ordine escluso dalla coda operativa.' : o.codifica_da_verificare ? 'Abbinamento o quantità della codifica a banco da verificare prima della stesura dell’ordine.' : servizioIncerto ? 'Soluzione da verificare prima della stesura dell’ordine.'
+      : o.stato_evasione === 'evaso' ? 'Evasione completa dichiarata da Shopify; non equivale a consegna al destinatario.'
+      : !o.stato_evasione || o.stato_evasione === 'da_verificare' ? 'Stato di evasione non trasmesso o sconosciuto: verificare su Shopify.'
       : o.stato_pagamento === 'partially_refunded' ? 'Rimborso parziale: verificare l’ordine.'
         : pagamentoRichiesto && o.stato_pagamento !== 'paid' ? 'PS/PSMI: attendere la conferma del pagamento completo da Shopify.'
           : pagamentoRichiesto ? 'Pagamento completo confermato da Shopify: l’operatore può preparare l’ordine.'
