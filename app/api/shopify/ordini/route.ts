@@ -5,7 +5,7 @@ export const maxDuration = 30;
 export async function POST(request: Request) {
   const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
   if (!secret || secret.length < 32) return Response.json({ ok: false, errore: 'Collegamento Shopify non configurato' }, { status: 503 });
-  if (request.headers.get('x-shopify-shop-domain') !== NEGOZIO_SHOPIFY || !['orders/create','orders/updated','orders/paid','orders/cancelled'].includes(request.headers.get('x-shopify-topic') || '')) return Response.json({ ok: false }, { status: 401 });
+  if (request.headers.get('x-shopify-shop-domain') !== NEGOZIO_SHOPIFY || !['orders/create','orders/updated','orders/paid','orders/cancelled','orders/fulfilled','orders/partially_fulfilled'].includes(request.headers.get('x-shopify-topic') || '')) return Response.json({ ok: false }, { status: 401 });
   // Limitare anche i flussi senza Content-Length, prima di allocare l'intero payload.
   const reader = request.body?.getReader();
   if (!reader) return Response.json({ ok: false }, { status: 400 });
