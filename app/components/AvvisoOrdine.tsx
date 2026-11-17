@@ -10,7 +10,7 @@ export function AvvisoOrdine({ pratica }: { pratica: PraticaOggi }) {
   return <section role="alert" className={`mb-5 rounded-2xl border-2 p-5 shadow-sm ${a.pronto ? 'border-red-700 bg-red-50 text-red-950' : 'border-amber-600 bg-amber-50 text-amber-950'}`}>
     <p className="text-lg font-black">⚠ {a.titolo}</p>
     <p className="mt-2 text-sm font-medium">{a.testo}</p>
-    <Link href="#sezione-amministrazione" prefetch={false} className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-slate-950 px-4 py-2 font-bold text-white">Apri fatturazione e dati cliente →</Link>
+    <a href="#sezione-amministrazione" className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-slate-950 px-4 py-2 font-bold text-white">Apri fatturazione e dati cliente →</a>
     <p className="mt-3 text-xs">L’avviso si chiude quando la fattura della pratica è verificata. Ritiri, lavorazione e spedizione mantengono il proprio avanzamento.</p>
   </section>;
 }

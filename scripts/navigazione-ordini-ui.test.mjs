@@ -121,6 +121,12 @@ test('ritorno home conserva ricerca e pagina; avviso dentro la scheda non perde 
   assert.equal(ritorno(), `/?filtro=ordini_confermati&cerca=ABS&pagina=2#pratica-${id(36)}`);
   await act(() => root.render(e(AvvisoOrdine, { pratica: { id:id(36), tipo_flusso:'commerciale', stato_commerciale:'ordine_acquisito', stato_fatturazione:'da_fatturare' } })));
   assert.equal(document.querySelector('a').getAttribute('href'), '#sezione-amministrazione');
+  window.history.replaceState(null, '', `/pratica/${id(36)}?nav=${id(990)}&filtro=ordini_confermati`);
+  const hashChanged = new Promise(resolve => window.addEventListener('hashchange', resolve, { once:true }));
+  document.querySelector('a').click();
+  await hashChanged;
+  assert.equal(window.location.hash, '#sezione-amministrazione');
+  assert.equal(new URLSearchParams(window.location.search).get('nav'), id(990));
 });
 
 test('contesto mancante o scaduto: nessun elenco inventato e ritorno agli ordini', async t => {
