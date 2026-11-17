@@ -9,6 +9,7 @@ import { leggiOffertaDaPdf, normalizzaOpzioni } from "../../lib/offerte";
 import { leggiPrenotazionePresa } from "../../lib/prenotazioniPrese";
 import { salvaCorrezioneScelta, type EsitoCorrezioneScelta } from "../../lib/correzioneScelta";
 import { leggiDocumentoAmministrativoPdf } from "../../lib/documentiAmministrativi";
+import { messaggioErroreDocumento } from "../../lib/erroriDocumentoAmministrativo";
 
 function uuidFlusso(value: FormDataEntryValue | null) {
   const id = String(value || "");
@@ -42,8 +43,8 @@ export async function importaDocumentoAmministrativo(_state: EsitoCorrezioneScel
     return { ok: true, messaggio: risultato.esito === "gia_registrato" ? "Documento già registrato: nessun duplicato creato."
       : documento.tipo === "fattura" ? `Fattura ${documento.numero} registrata: pratica allineata a Fatturata.`
         : `Pro-forma ${documento.numero} registrata: dati completi, ordine pronto per la fatturazione.` };
-  } catch {
-    return { ok: false, messaggio: "Salvataggio non confermato. Ricarica la pratica per verificare se il documento è stato acquisito; se manca, controlla l’anagrafica fiscale e lo stato dell’ordine prima di riprovare." };
+  } catch (errore) {
+    return { ok: false, messaggio: messaggioErroreDocumento(errore) };
   }
 }
 

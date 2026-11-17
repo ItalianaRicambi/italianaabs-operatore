@@ -8,6 +8,10 @@ La voce **Registra fattura o pro-forma già emessa** legge il PDF originale (mas
 
 Il documento verificato usa la RPC `registra_documento_amministrativo_verificato`, riservata al backend con ruolo `service_role`. Prima del salvataggio verifica l’ordine e l’identità fiscale, crea o collega una sola anagrafica completa e riabilita esplicitamente la fatturazione. L’inserimento del documento e l’aggiornamento della pratica sono atomici. Numero, tipo e data impediscono registrazioni duplicate; lo stesso documento non può essere applicato a un’altra pratica.
 
+Un ordine già acquisito può ancora avere fatturazione `non_applicabile` dopo un recupero commerciale. Dal 17 novembre 2026 l’importazione del documento verificato apre `da_fatturare` nella stessa transazione, prima del collegamento fiscale. Rilegge gli effetti dei trigger per non duplicare clienti e rifiuta destinatari discordanti, conservando anche il vincolo sul cliente collegato prima dell’operazione. Nessuna promozione di preventivi, modifica alla logistica o bonifica massiva. Qualsiasi validazione fallita annulla anche questo passaggio.
+
+Il modulo conserva PDF e conferma dopo un errore e li azzera solo dopo un successo. I rifiuti applicativi noti mostrano una spiegazione specifica senza dettagli SQL; un timeout resta un esito incerto e invita a rileggere i documenti prima del retry idempotente.
+
 - Una **fattura** imposta Fatturata e completa la richiesta amministrativa, conservando la data originale del documento (precisione di giorno).
 - Una **pro-forma** completa i dati amministrativi e mantiene Da fatturare; non equivale a una fattura o a un pagamento.
 - Ricezione, lavorazione, assistenza e ritiri restano flussi distinti e non vengono chiusi da questa operazione.
