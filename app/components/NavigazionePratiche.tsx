@@ -20,7 +20,7 @@ import {
  * La sequenza resta quella dell'elenco di partenza anche dopo un cambio stato.
  * Tornando all'elenco si ricostruisce la sequenza dai risultati della Dashboard.
  */
-type VoceElenco = { id: string; codice: string };
+export type VoceElenco = { id: string; codice: string; ancora?: string };
 type Elenco = {
   versione: 1;
   chiave: string;
@@ -62,7 +62,7 @@ function elencoValido(value: unknown): value is ElencoSalvato {
     !Array.isArray(value.voci) || value.voci.length > MASSIMO_VOCI
   ) return false;
   if (value.ritorno !== undefined && (typeof value.ritorno !== "string" ||
-    !/^\/\?(?!\/)[^#]*$/.test(value.ritorno) || value.ritorno.length > 15000)) return false;
+    !/^\/(?:ordini)?(?:\?[^#\\]*)?$/.test(value.ritorno) || value.ritorno.length > 15000)) return false;
   if (value.righePerPagina !== undefined && (typeof value.righePerPagina !== "number" ||
     !Number.isInteger(value.righePerPagina) || value.righePerPagina < 1 || value.righePerPagina > 100)) return false;
 
@@ -71,7 +71,8 @@ function elencoValido(value: unknown): value is ElencoSalvato {
     if (
       !oggetto(voce) || typeof voce.id !== "string" || !UUID.test(voce.id) ||
       typeof voce.codice !== "string" || voce.codice.length > 100 ||
-      ids.has(voce.id)
+      ids.has(voce.id) || (voce.ancora !== undefined &&
+        (typeof voce.ancora !== "string" || !/^[a-zA-Z0-9_-]{1,150}$/.test(voce.ancora)))
     ) return false;
     ids.add(voce.id);
   }
@@ -161,7 +162,8 @@ function queryElenco(filtro: string, cerca: string): URLSearchParams {
 function hrefElenco(filtro: string, cerca: string, id?: string): string {
   const query = queryElenco(filtro, cerca).toString();
   const ancora = id && UUID.test(id) ? `#pratica-${id}` : "";
-  return `${query ? `/?${query}` : "/"}${ancora}`;
+  const base = filtro.startsWith("evasioni_") ? "/ordini" : query ? `/?${query}` : "/";
+  return `${base}${ancora}`;
 }
 
 function hrefPratica(id: string, elenco: Elenco): string {
@@ -266,10 +268,11 @@ export function NavigazionePratica({
   const successiva = elenco && indice >= 0 ? elenco.voci[indice + 1] || null : null;
   let ritorno = hrefElenco(elenco?.filtro || filtroUrl, elenco?.cerca ?? cercaUrl, praticaId);
   if (elenco?.ritorno) {
-    const query = new URLSearchParams(elenco.ritorno.slice(2));
+    const destinazione = new URL(elenco.ritorno, "https://dashboard.invalid");
     // Tornare alla pagina che contiene la pratica attuale, anche dopo Precedente/Successiva.
-    if (elenco.righePerPagina && indice >= 0) query.set("pagina", String(Math.floor(indice / elenco.righePerPagina) + 1));
-    ritorno = `/?${query}#pratica-${encodeURIComponent(praticaId)}`;
+    if (elenco.righePerPagina && indice >= 0) destinazione.searchParams.set("pagina", String(Math.floor(indice / elenco.righePerPagina) + 1));
+    const ancora = elenco.voci[indice]?.ancora || `pratica-${praticaId}`;
+    ritorno = `${destinazione.pathname}${destinazione.search}#${encodeURIComponent(ancora)}`;
   }
   const classeLink = "flex min-h-11 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-800 transition hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600";
   const classeDisabilitato = "min-h-11 cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-400";
