@@ -3,7 +3,13 @@ export type EvasionePratica = {
  revisione: number; nota: string; updated_at: string; stato_fatturazione: string; shopify_order_id: string | null; blocco_operatore: boolean;
 };
 export type VerificaOrdine = { id: string; pratica_id: string; numero_pratica: number; targa: string | null;
- evento_id: number; evento_at: string; messaggio: string; stato_commerciale: string; blocco_operatore: boolean; possibile_revoca: boolean };
+ evento_id: number | null; evento_at: string; messaggio: string; stato_commerciale: string; blocco_operatore: boolean; possibile_revoca: boolean;
+ originale_messaggio_id?: string | null; blocco_classificazione_operatore?: boolean;
+ prova_modificata?: boolean; collegamento_da_verificare?: boolean };
+export function fonteVerificaOrdine(v: Pick<VerificaOrdine, 'evento_id' | 'originale_messaggio_id'>) {
+ return [v.evento_id != null ? `Evento live ${v.evento_id}` : null,
+  v.originale_messaggio_id ? `Messaggio originale ${v.originale_messaggio_id}` : null].filter(Boolean).join(' · ') || 'Fonte da verificare';
+}
 export type ShopifyCoda = { id: string; pratica_id: string | null; conflitto: boolean;
  dati: { ordine_id: string; numero: string; stato_evasione?: string; test: boolean; annullato: boolean; stato_pagamento: string } };
 export function classificaCoda(shopify: ShopifyCoda[], pratiche: EvasionePratica[]) {

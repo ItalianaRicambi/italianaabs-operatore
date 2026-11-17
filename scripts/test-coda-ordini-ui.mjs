@@ -17,6 +17,10 @@ const ordine={id:'s1',pratica_id:null,conflitto:false,ricevuto_at:'2026-11-16T00
 const verifica={id:'20000000-0000-4000-8000-000000000001',pratica_id:pratica.pratica_id,
  numero_pratica:999002,targa:'TEST002',evento_id:99999,evento_at:'2026-11-16T11:00:00Z',
  messaggio:'Ordine fatto',stato_commerciale:'preventivo_inviato',blocco_operatore:true,possibile_revoca:true};
+const originale={...verifica,id:'20000000-0000-4000-8000-000000000002',numero_pratica:999003,targa:'TEST003',
+ evento_id:null,originale_messaggio_id:'123456',stato_commerciale:'raccolta_dati',
+ messaggio:"Confermo l'offerta per la lavorazione della centralina ABS",blocco_operatore:false,
+ blocco_classificazione_operatore:true,prova_modificata:true,collegamento_da_verificare:true};
 const mock=createServer(async(req,res)=>{
  res.setHeader('Content-Type','application/json');
  if(req.method==='POST'){
@@ -27,8 +31,8 @@ const mock=createServer(async(req,res)=>{
  }
  if(fail && req.url.includes('v_evasioni_pratiche')){res.statusCode=503;res.end('{}');return;}
  const rows=req.url.includes('/ordini_shopify?')?[ordine]:req.url.includes('/v_evasioni_pratiche?')?[pratica]:
- req.url.includes('/v_verifiche_acquisizione_ordini?')?[verifica]:[];
- res.setHeader('Content-Range',rows.length?'0-0/1':'*/0');res.end(JSON.stringify(rows));
+ req.url.includes('/v_verifiche_acquisizione_ordini?')?[verifica,originale]:[];
+ res.setHeader('Content-Range',rows.length?`0-${rows.length-1}/${rows.length}`:'*/0');res.end(JSON.stringify(rows));
 });
 console.log('Starting isolated test services');
 await new Promise(r=>mock.listen(0,'127.0.0.1',r));
@@ -54,6 +58,8 @@ try{
   assert.equal(response.status,200);const html=await response.text();
   for(const value of ['#TEST1','TEST001','fatturato','Pratica non collegata','Possibile revoca successiva','Ordine fatto']) assert.ok(html.includes(value),value);
   assert.ok(html.includes('Lettura API Shopify non ancora collaudata.'));
+  for(const value of ['Messaggio originale 123456','raccolta_dati','TEST003','Originale modificato:',
+    'Collegamento alla pratica non più univoco:','Blocco operatore presente:']) assert.ok(html.includes(value),value);
   fail=true;const errore=await (await fetch(base+'/ordini',{headers,signal:AbortSignal.timeout(10000)})).text();
   assert.ok(errore.includes('Dati incompleti:'));assert.equal(writes.length,0);
   console.log('PASS HTTP/SSR: accesso protetto, Shopify orfano, fattura indipendente, prove/revoca e errore di lettura esplicito. Nessuna azione eseguita.');
@@ -66,7 +72,7 @@ try{
  await page.getByRole('heading',{name:'Shopify da evadere (1)',exact:true}).waitFor();
  assert.equal(await page.getByText('Pratica non collegata: l’ordine resta comunque visibile e da gestire.').count(),1);
  assert.equal(await page.getByText('Evasione: da_evadere · Fatturazione: fatturato').count(),1);
- assert.equal(await page.getByText('Possibile revoca successiva:',{exact:false}).count(),1);
+ assert.equal(await page.getByText('Possibile revoca successiva:',{exact:false}).count(),2);
  await page.getByText('Aggiorna evasione con prova',{exact:true}).click();
  await page.locator('select[name=stato]').selectOption('evaso');
  await page.locator('textarea[name=nota]').first().fill('Collaudo locale, nessuna spedizione reale.');
