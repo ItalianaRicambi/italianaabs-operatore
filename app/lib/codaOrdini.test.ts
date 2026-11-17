@@ -6,7 +6,13 @@ test('annullamento Shopify non riappare come duplicato locale; riferimento non a
  const c=classificaCoda([],[pratica({shopify_order_id:'123'})]);
  assert.equal(c.praticheAperte.length,0);assert.equal(c.praticheDaVerificare.length,1);
 });
-import { classificaCoda, type EvasionePratica, type ShopifyCoda } from './codaOrdini.ts';
+import { classificaCoda, fonteVerificaOrdine, type EvasionePratica, type ShopifyCoda } from './codaOrdini.ts';
+test('prove originali senza webhook e fonti doppie sono distinguibili',()=>{
+ assert.equal(fonteVerificaOrdine({evento_id:null,originale_messaggio_id:'123'}),'Messaggio originale 123');
+ assert.equal(fonteVerificaOrdine({evento_id:42}),'Evento live 42');
+ assert.equal(fonteVerificaOrdine({evento_id:42,originale_messaggio_id:'123'}),'Evento live 42 · Messaggio originale 123');
+ assert.equal(fonteVerificaOrdine({evento_id:null}),'Fonte da verificare');
+});
 const pratica = (delta: Partial<EvasionePratica> = {}):EvasionePratica => ({pratica_id:'p1',numero_pratica:1,targa:'AB123CD',stato:'da_evadere',revisione:1,nota:'Ordine confermato',updated_at:'2026-11-16T00:00:00Z',stato_fatturazione:'fatturato',shopify_order_id:null,blocco_operatore:false,...delta});
 const shop = (delta: Partial<ShopifyCoda> = {}):ShopifyCoda => ({id:'s1',pratica_id:null,conflitto:false,dati:{ordine_id:'1',numero:'#1',stato_evasione:'da_evadere',test:false,annullato:false,stato_pagamento:'paid'},...delta});
 test('Shopify orfano è visibile e fattura non chiude la pratica da evadere',()=>{

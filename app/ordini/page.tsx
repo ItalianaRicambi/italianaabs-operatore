@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { getOperatoreAttivo } from '../operatore';
 import { BarraOperatore } from '../components/IdentitaOperatore';
 import { leggiCodaOrdini } from '../lib/codaOrdiniServer';
-import { classificaCoda, numeroPratica, oraRoma, type EvasionePratica } from '../lib/codaOrdini';
+import { classificaCoda, numeroPratica, oraRoma, fonteVerificaOrdine, type EvasionePratica } from '../lib/codaOrdini';
 import { FormEvasione } from './FormEvasione';
 import type { RigaOrdineShopify } from '../lib/ordiniShopifyServer';
 export const dynamic = 'force-dynamic';
@@ -43,9 +43,11 @@ export default async function Ordini() {
  <p>Prove letterali da verificare con offerta, opzione scelta e possibili revoche. Nessuna acquisizione automatica e nessun aggiramento dei blocchi.</p>
  {d.verifiche.map(v=><article key={v.id} className="rounded-xl border border-amber-400 bg-amber-50 p-4">
  <h3 className="font-bold">{numeroPratica(v.numero_pratica)} · {v.targa || 'Targa mancante'} · stato: {v.stato_commerciale}</h3>
- <p className="mt-2">«{v.messaggio}»</p><p className="text-sm">Evento {v.evento_id} · {oraRoma(v.evento_at)} Europe/Rome</p>
+ <p className="mt-2">«{v.messaggio}»</p><p className="text-sm">{fonteVerificaOrdine(v)} · {oraRoma(v.evento_at)} Europe/Rome</p>
  {v.possibile_revoca && <p className="font-bold text-red-800">Possibile revoca successiva: leggere la conversazione prima di acquisire l’ordine.</p>}
- {v.blocco_operatore && <p className="font-bold">Blocco operatore presente: da rispettare.</p>}
+ {(v.blocco_operatore || v.blocco_classificazione_operatore) && <p className="font-bold">Blocco operatore presente: da rispettare.</p>}
+ {v.prova_modificata && <p className="font-bold text-red-800">Originale modificato: confrontare la revisione prima di acquisire l’ordine.</p>}
+ {v.collegamento_da_verificare && <p className="font-bold text-red-800">Collegamento alla pratica non più univoco: verificare veicolo e offerta.</p>}
  <Link href={'/pratica/'+v.pratica_id+'#sezione-offerta'} className="mt-2 inline-block font-bold underline">Verifica offerta e scelta nella pratica →</Link>
  <FormEvasione tipo="verifica" id={v.id}/></article>)}</section>
  <section className="space-y-3"><h2 className="text-xl font-bold">Stato Shopify da verificare ({c.shopifyDaVerificare.length})</h2>{c.shopifyDaVerificare.map(r=><Shopify key={r.id} r={byId.get(r.id)!}/>)}</section>
