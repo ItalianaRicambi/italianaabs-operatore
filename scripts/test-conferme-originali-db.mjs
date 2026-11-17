@@ -35,6 +35,7 @@ try {
  await original('1',accepted);
  const before=(await db.query('select * from public.pratiche order by id')).rows;
  await db.exec(await read('20261117085731_conferme_originali_dashboard.sql'));
+ await db.exec(await read('20261117094805_conferme_contestuali_coda_verifica.sql'));
  await check('select count(*)::int v from public.v_verifiche_acquisizione_ordini',1);
  await check('select evento_id is null and originale_messaggio_id=\'1\' and blocco_classificazione_operatore v from public.v_verifiche_acquisizione_ordini',true);
  await db.query('update public.keplero_originali set candidato=false where messaggio_id=$1',['1']);
@@ -74,5 +75,35 @@ try {
  }
  await check("select has_table_privilege('anon','public.v_verifiche_acquisizione_ordini','select') v",false);
  await check("select has_function_privilege('authenticated','private.accoda_verifica_originale_ordine(uuid,text)','execute') v",false);
+ for (const [t,want] of [
+  ['Ok facciamo quello originale della macchina\nQuando lo potete ritirare?',true],
+  ['Confermo il preventivo. Quando passa il corriere?',true],
+  ['Accettiamo la lavorazione. Quando spediamo?',true],
+  ['Scelgo il programma scambio',true],
+  ['Procediamo con la riparazione',true],
+  ['Confermo il preventivo?',false],
+  ['Facciamo quello originale?',false],
+  ['Vorrei confermare il preventivo',false],
+  ['Vorremmo confermare il preventivo',false],
+  ['Non confermo il preventivo. Quando passa il corriere?',false],
+  ['Confermo il bonifico. Quando spediamo?',false],
+  ['Programma scambio',false],
+  ['Se scelgo il programma scambio quanto costa?',false],
+  ['Confermo il preventivo. Annulliamo tutto.',false],
+ ]) {
+  const r=await db.query('select private.conferma_contestuale_da_verificare($1) v',[t]);
+  assert.equal(r.rows[0].v,want,t);checks++;
+ }
+ await db.query('delete from public.keplero_pratiche_conversazioni where sessione=$1 and pratica_id=$2',[s,p2]);
+ await db.query("update public.pratiche set stato_commerciale='preventivo_inviato' where id=$1",[p]);
+ const protectedBefore=(await db.query('select * from public.pratiche order by id')).rows;
+ await original('choice','Ok facciamo quello originale della macchina\nQuando lo potete ritirare?');
+ await check("select count(*)::int v from public.v_verifiche_acquisizione_ordini where originale_messaggio_id='choice'",1);
+ await db.query('insert into public.keplero_live_events values(2,$1,$2,now())',[p,{ultimo_messaggio_cliente:'Confermo il preventivo. Quando passa il corriere?'}]);
+ await check('select count(*)::int v from public.v_verifiche_acquisizione_ordini where evento_id=2',1);
+ await db.query('insert into public.keplero_live_events values(3,$1,$2,$3)',[p,{ultimo_messaggio_cliente:'Scelgo il programma scambio'},'2020-01-01']);
+ await check('select count(*)::int v from public.verifiche_acquisizione_ordini where evento_id=3',0);
+ assert.deepEqual((await db.query('select * from public.pratiche order by id')).rows,protectedBefore);checks++;
+ await check("select has_function_privilege('anon','private.conferma_contestuale_da_verificare(text)','execute') v",false);
  console.log(`PASS PostgreSQL isolato: ${checks} verifiche + 10 casi weekend/DST. Nessuna pratica modificata dall'accodamento.`);
 } finally { await db.close(); }
