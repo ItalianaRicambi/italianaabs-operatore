@@ -114,7 +114,15 @@ export function creaClientMbe(username:string,password:string,trasporto:typeof f
  async function leggiTracking(gruppo:string[]):Promise<EsitoTrackingMbe[]> {
   const campi=gruppo.map(id=>`<TrackingMBE>${escapeXml(id)}</TrackingMBE>`).join('');
   const risposta=await leggi('TrackingRequest',campi);
-  const ricevuti=esitiMbe(risposta,gruppo,gruppo.length>1);
+  // Discard ambiguous batches; re-query disjoint subsets under the same deadline.
+  const identificati=new Set<string>();
+  const ambiguo=gruppo.length>1 && lista(risposta.TrackingResult).some(riga=>{
+   const id=nodo(riga,'TrackingResult').TrackingMBE;
+   if(typeof id!=='string'||!gruppo.includes(id)||identificati.has(id))return true;
+   identificati.add(id);
+   return false;
+  });
+  const ricevuti=ambiguo?[]:esitiMbe(risposta,gruppo,gruppo.length>1);
   if(ricevuti.length===gruppo.length)return ricevuti;
   const confermati=new Set(ricevuti.map(r=>r.tracking_mbe));
   const mancanti=gruppo.filter(id=>!confermati.has(id));

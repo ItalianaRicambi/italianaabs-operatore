@@ -95,3 +95,16 @@ test('un tracking singolo senza esito, o con identità diversa, impedisce il com
  await assert.rejects(c.tracking([codice(1),codice(2)]),/0 risultati su 1/);
  assert.throws(()=>esitiMbe({TrackingStatus:'DELIVERED',TrackingMBE:codice(2)},[codice(1)]),ErroreMbe);
 });
+test('gli esiti estranei o duplicati di un batch non entrano nel registro',async()=>{
+ const ids=[codice(1),codice(2)];
+ const esito=(id:string,stato:string)=>`<TrackingResult><TrackingMBE>${id}</TrackingMBE><TrackingStatus>${stato}</TrackingStatus></TrackingResult>`;
+ for(const extra of [ids[0],codice(7)]){
+  const c=creaClientMbe('utente',chiave,async(_url,init)=>{
+   const richiesti=[...String(init?.body).matchAll(/<TrackingMBE>([^<]+)</g)].map(m=>m[1]);
+   const contenuto=richiesti.length===2?[...ids,extra].map(id=>esito(id,'EXCEPTION')).join(''):esito(richiesti[0],'DELIVERED');
+   return new Response(soap('TrackingRequest',contenuto));
+  });
+  const r=await c.tracking(ids);
+  assert.deepEqual(r.map(x=>[x.tracking_mbe,x.stato]),ids.map(id=>[id,'DELIVERED']));
+ }
+});
