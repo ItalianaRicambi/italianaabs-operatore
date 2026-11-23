@@ -75,3 +75,23 @@ test('la diagnostica identifica la pagina e il campo senza esporne il valore',as
  });
  await assert.rejects(c.spedizioni('2026-09-16','2026-10-16'),e=>e instanceof ErroreMbe&&e.message.includes('pagina 1')&&e.message.includes('ShipmentInfo.Date')&&!e.message.includes('dato-riservato'));
 });
+test('un batch parziale riprende solo gli assenti; una risposta singola vale per il codice richiesto',async()=>{
+ const ids=[codice(1),codice(2),codice(3)];
+ const chiamate:string[][]=[];
+ const c=creaClientMbe('utente',chiave,async(_url,init)=>{
+  const gruppo=[...String(init?.body).matchAll(/<TrackingMBE>([^<]+)</g)].map(m=>m[1]);
+  chiamate.push(gruppo);
+  if(gruppo.length===3)return new Response(soap('TrackingRequest',`<TrackingResult><TrackingMBE>${ids[1]}</TrackingMBE><TrackingStatus>DELIVERED</TrackingStatus></TrackingResult>`));
+  if(gruppo.length===2)return new Response(soap('TrackingRequest',''));
+  return new Response(soap('TrackingRequest','<TrackingStatus>NOT_AVAILABLE</TrackingStatus>'));
+ });
+ const esiti=await c.tracking(ids);
+ assert.deepEqual(chiamate,[ids,[ids[0],ids[2]],[ids[0]],[ids[2]]]);
+ assert.deepEqual(esiti.map(x=>x.tracking_mbe).sort(),ids);
+ assert.equal(esiti.find(x=>x.tracking_mbe===ids[1])?.stato,'DELIVERED');
+});
+test('un tracking singolo senza esito, o con identità diversa, impedisce il commit',async()=>{
+ const c=creaClientMbe('utente',chiave,async()=>new Response(soap('TrackingRequest','')));
+ await assert.rejects(c.tracking([codice(1),codice(2)]),/0 risultati su 1/);
+ assert.throws(()=>esitiMbe({TrackingStatus:'DELIVERED',TrackingMBE:codice(2)},[codice(1)]),ErroreMbe);
+});

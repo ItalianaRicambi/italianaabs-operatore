@@ -69,12 +69,13 @@ export function paginaMbe(r:Nodo,pagina:number) {
  });
  return {spedizioni,totale:Math.max(1,totale)};
 }
-export function esitiMbe(r:Nodo,richiesti:string[]):EsitoTrackingMbe[] {
+export function esitiMbe(r:Nodo,richiesti:string[],accettaSottoinsieme=false):EsitoTrackingMbe[] {
  let risultati=lista(r.TrackingResult);
- if(!risultati.length && richiesti.length===1 && r.TrackingStatus!==undefined)risultati=[{...r,TrackingMBE:richiesti[0]}];
- if(risultati.length!==richiesti.length)return invalido('TrackingResult: numero di risultati');
+ if(!risultati.length && richiesti.length===1 && r.TrackingStatus!==undefined)risultati=[{TrackingMBE:richiesti[0],...r}];
+ if(risultati.length>richiesti.length || (!accettaSottoinsieme && risultati.length!==richiesti.length))
+  return invalido(`TrackingResult: ${risultati.length} risultati su ${richiesti.length} richiesti`);
  const visti=new Set<string>();
- return risultati.map(v=>{const n=nodo(v,'TrackingResult'),id=codice(n.TrackingMBE,'TrackingResult.TrackingMBE'),stato=testo(n.TrackingStatus,'TrackingStatus',30) as StatoMbe;
+ return risultati.map(v=>{const n=nodo(v,'TrackingResult'),id=codice(n.TrackingMBE??(richiesti.length===1?richiesti[0]:undefined),'TrackingResult.TrackingMBE'),stato=testo(n.TrackingStatus,'TrackingStatus',30) as StatoMbe;
   if(!richiesti.includes(id)||visti.has(id))return invalido('TrackingResult.TrackingMBE');
   if(!STATI.includes(stato))return invalido('TrackingResult.TrackingStatus');
   visti.add(id);
@@ -110,6 +111,20 @@ export function creaClientMbe(username:string,password:string,trasporto:typeof f
   bytes+=Buffer.byteLength(xml);if(bytes>16*1024*1024)return invalido('dimensione complessiva SOAP');
   return contenitoreMbe(xml,operazione,id);
  }
+ async function leggiTracking(gruppo:string[]):Promise<EsitoTrackingMbe[]> {
+  const campi=gruppo.map(id=>`<TrackingMBE>${escapeXml(id)}</TrackingMBE>`).join('');
+  const risposta=await leggi('TrackingRequest',campi);
+  const ricevuti=esitiMbe(risposta,gruppo,gruppo.length>1);
+  if(ricevuti.length===gruppo.length)return ricevuti;
+  const confermati=new Set(ricevuti.map(r=>r.tracking_mbe));
+  const mancanti=gruppo.filter(id=>!confermati.has(id));
+  // Split even an empty batch response so each retry gets strictly smaller.
+  const passo=Math.min(10,Math.ceil(gruppo.length/2));
+  for(let i=0;i<mancanti.length;i+=passo){
+   ricevuti.push(...await leggiTracking(mancanti.slice(i,i+passo)));
+  }
+  return ricevuti;
+ }
  return {
   async spedizioni(da:string,a:string):Promise<SpedizioneMbe[]> {
    data(da,'DateFrom');data(a,'DateTo');let totale=1;const tutte:SpedizioneMbe[]=[];const viste=new Set<string>();
@@ -121,7 +136,10 @@ export function creaClientMbe(username:string,password:string,trasporto:typeof f
   },
   async tracking(ids:string[]):Promise<EsitoTrackingMbe[]> {
    if(ids.length>1000||new Set(ids).size!==ids.length)return invalido('TrackingRequest: elenco codici');const esiti:EsitoTrackingMbe[]=[];
-   for(let i=0;i<ids.length;i+=100){const gruppo=ids.slice(i,i+100).map(x=>codice(x,'TrackingRequest.TrackingMBE'));esiti.push(...await conContesto(`TrackingRequest, gruppo ${i/100+1}`,async()=>esitiMbe(await leggi('TrackingRequest',gruppo.map(id=>`<TrackingMBE>${escapeXml(id)}</TrackingMBE>`).join('')),gruppo)));}
+   for(let i=0;i<ids.length;i+=100){
+    const gruppo=ids.slice(i,i+100).map(x=>codice(x,'TrackingRequest.TrackingMBE'));
+    esiti.push(...await conContesto(`TrackingRequest, gruppo ${i/100+1}`,()=>leggiTracking(gruppo)));
+   }
    return esiti;
   }
  };
