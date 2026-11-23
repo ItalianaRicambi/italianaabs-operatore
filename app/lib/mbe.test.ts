@@ -58,3 +58,20 @@ test('elenco vuoto esplicito è valido; pagine o risultati non univoci restano b
  let n=0;const c=creaClientMbe('utente',chiave,async(_url,init)=>{const ref=String(init?.body).match(/<InternalReferenceID>([^<]+)</)![1];return new Response(pagina(++n,2,spedizione(1),ref));});
  await assert.rejects(c.spedizioni('2026-09-16','2026-10-16'),ErroreMbe);
 });
+test('elenco MBE con paese per esteso e tracking del singolo collo',()=>{
+ const master=codice(1);
+ const riga=spedizione(1).replace('<Country>IT</Country>','<Country>Italy</Country>')
+  .replace('</TrackingInfo>',`<TrackingsMBE><TrackingMBE>${master}-01</TrackingMBE></TrackingsMBE></TrackingInfo>`);
+ const risposta=contenitoreMbe(pagina(1,1,riga),'ShipmentsListV3Request',id);
+ const [r]=paginaMbe(risposta,1).spedizioni;
+ assert.equal(r.destinatario.paese,'Italy');
+ assert.deepEqual(r.colli_mbe,[master+'-01']);
+ assert.equal(r.tracking_mbe,master);
+});
+test('la diagnostica identifica la pagina e il campo senza esporne il valore',async()=>{
+ const c=creaClientMbe('utente',chiave,async(_url,init)=>{
+  const ref=String(init?.body).match(/<InternalReferenceID>([^<]+)</)![1];
+  return new Response(pagina(1,1,spedizione(1).replace('2026-10-15','dato-riservato'),ref));
+ });
+ await assert.rejects(c.spedizioni('2026-09-16','2026-10-16'),e=>e instanceof ErroreMbe&&e.message.includes('pagina 1')&&e.message.includes('ShipmentInfo.Date')&&!e.message.includes('dato-riservato'));
+});
