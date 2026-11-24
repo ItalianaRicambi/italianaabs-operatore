@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { messaggioRaccoltaKeplero } from "./indicazioniRaccolta.ts";
+import { campiPerRichiestaFiscale, indicazioniAnagraficheKeplero, messaggioRaccoltaKeplero } from "./indicazioniRaccolta.ts";
 
 test("message impedisce richieste ripetute di spie e diagnosi", () => {
   const message = messaggioRaccoltaKeplero({}, {}, "codici_acquisiti");
@@ -43,4 +43,36 @@ test("una richiesta precedente non prevale sull'ambiguità anagrafica", () => {
   const message = messaggioRaccoltaKeplero({stato:"ambiguo"}, {necessaria:true,campi:["partita_iva"]}, "codici_acquisiti");
   assert.match(message, /verifica dell’operatore/);
   assert.doesNotMatch(message, /Richiesta amministrativa: chiedi/);
+});
+
+test("alla conferma ordine entrambe le indicazioni rispettano il controllo in Fatture in Cloud", () => {
+  const richiesta = { necessaria: true, campi: ["denominazione", "indirizzo_fatturazione"] };
+  for (const istruzione of [
+    "La verifica è in attesa dell’operatore.",
+    "Per verificare l’identità chiedi solo partita IVA o codice fiscale, se non già forniti.",
+  ]) {
+    const contesto = { stato: "verifica_fatture_in_cloud", istruzione };
+    const ordine = indicazioniAnagraficheKeplero(contesto, richiesta);
+    assert.ok(ordine.includes(istruzione));
+    assert.doesNotMatch(ordine, /indirizzo_fatturazione|Richiesta amministrativa: chiedi/);
+    assert.ok(messaggioRaccoltaKeplero(contesto, richiesta, "nessun_file").includes(ordine));
+    assert.deepEqual(campiPerRichiestaFiscale(contesto, richiesta.campi), []);
+  }
+});
+
+test("il testo per l’ordine riconosciuto esclude i solleciti per dati già presenti", () => {
+  const contesto = { stato: "riconosciuto", cliente_riconosciuto: true, dati_fiscali_completi: true };
+  const richiesta = { necessaria: true, campi: ["partita_iva"] };
+  assert.match(indicazioniAnagraficheKeplero(contesto, richiesta), /Dati fiscali già completi/);
+  for (const stato of ["ambiguo", "da_verificare", "errore"]) {
+    assert.deepEqual(campiPerRichiestaFiscale({ stato }, richiesta.campi), []);
+  }
+  assert.deepEqual(campiPerRichiestaFiscale(contesto, richiesta.campi), []);
+});
+
+test("un sollecito fiscale rimane possibile per i soli campi effettivamente mancanti", () => {
+  const contesto = { stato: "riconosciuto", cliente_riconosciuto: true, campi_mancanti: ["codice_sdi"] };
+  assert.deepEqual(campiPerRichiestaFiscale(contesto, ["codice_sdi"]), ["codice_sdi"]);
+  assert.deepEqual(campiPerRichiestaFiscale(contesto, ["codice_sdi", "partita_iva"]), []);
+  assert.deepEqual(campiPerRichiestaFiscale({ stato: "non_trovato" }, ["indirizzo_fatturazione"]), ["indirizzo_fatturazione"]);
 });
