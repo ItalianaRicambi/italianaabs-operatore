@@ -14,7 +14,7 @@ import {
   decidiEventoKeplero,
   type ContattoOperativo,
 } from "./decisioneEvento";
-import { messaggioRaccoltaKeplero } from "./indicazioniRaccolta";
+import { campiPerRichiestaFiscale, indicazioniAnagraficheKeplero, messaggioRaccoltaKeplero } from "./indicazioniRaccolta";
 import { diagnosiSenzaErroriDichiarata } from "./esitoDiagnosi";
 import { classificaRichiesta } from "./classificazioneRichiesta";
 import { leggiOrdineContestuale } from "./ordineContestuale";
@@ -1339,7 +1339,7 @@ export async function POST(request: NextRequest) {
       && !bool(primo(body,"is_group","gruppo"))) {
       const richiesta = richiestaDatiAmministrativi as {necessaria?:boolean; messaggio?:string; campi?:string[]} | null;
       const dati = richiesta?.necessaria === true
-        ? prepareFiscalRequest(richiesta.messaggio ?? null, richiesta.campi ?? [])
+        ? prepareFiscalRequest(richiesta.messaggio ?? null, campiPerRichiestaFiscale(contestoCliente, richiesta.campi))
         : prepareTechnicalRequest(decisione.completezza.datiMancanti);
       if (dati) {
         try {
@@ -1353,10 +1353,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Alcune configurazioni Keplero leggono soltanto ok e message.
+    const istruzioneClienteOrdine = registrazione.ordine_registrato && tipoFlusso === "commerciale"
+      ? " " + indicazioniAnagraficheKeplero(contestoCliente, richiestaDatiAmministrativi)
+      : "";
     return NextResponse.json({
       ok: true,
 
-      message: registrazione.istruzione + istruzioneFlusso + istruzioneRitiro + istruzioneAssistenza + istruzioneFollowup,
+      message: registrazione.istruzione + istruzioneFlusso + istruzioneRitiro + istruzioneAssistenza + istruzioneClienteOrdine + istruzioneFollowup,
       registrazione,
       indicazioni_dati: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini) + istruzioneFollowup,
 
