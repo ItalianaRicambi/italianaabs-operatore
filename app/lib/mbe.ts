@@ -13,7 +13,10 @@ export type SpedizioneMbe = {
 export type EsitoTrackingMbe = { tracking_mbe:string; stato:StatoMbe; data_consegna:string|null; descrizione:string; tracking_corriere:string };
 type Nodo = Record<string, unknown>;
 export class ErroreMbe extends Error {}
-class LetturaTrackingRifiutata extends ErroreMbe {}
+class LetturaTrackingRifiutata extends ErroreMbe {
+ readonly codiceMbe:string;
+ constructor(message:string,codiceMbe:string){super(message);this.codiceMbe=codiceMbe;}
+}
 function invalido(campo:string):never {
  throw new ErroreMbe(`Risposta MBE non valida (${campo}). Nessun dato importato.`);
 }
@@ -57,7 +60,7 @@ export function contenitoreMbe(xml:string,operazione:'ShipmentsListV3Request'|'T
    const errore=Array.isArray(errori?.Error)?errori.Error[0]:errori?.Error;
    const codice=errore?.ErrorCode;
    const dettaglio=typeof codice==='string' && /^[A-Z0-9][A-Z0-9_.-]{0,30}$/.test(codice) ? ' Codice MBE: '+codice+'.' : '';
-   throw new LetturaTrackingRifiutata('MBE non ha confermato il tracking richiesto.'+dettaglio);
+   throw new LetturaTrackingRifiutata('MBE non ha confermato il tracking richiesto.'+dettaglio,typeof codice==='string' && (!Array.isArray(errori?.Error) || errori.Error.every(e=>e.ErrorCode===codice))?codice:'');
   }
   throw new ErroreMbe('MBE non ha confermato la lettura. Verificare le autorizzazioni del centro MBE.');
  }
@@ -122,7 +125,7 @@ export function creaClientMbe(username:string,password:string,trasporto:typeof f
   bytes+=Buffer.byteLength(xml);if(bytes>16*1024*1024)return invalido('dimensione complessiva SOAP');
   return contenitoreMbe(xml,operazione,id);
  }
- async function leggiTracking(gruppo:string[]):Promise<EsitoTrackingMbe[]> {
+ async function leggiTracking(gruppo:string[], rifiutati?:Set<string>):Promise<EsitoTrackingMbe[]> {
   const campi=gruppo.map(id=>`<TrackingMBE>${escapeXml(id)}</TrackingMBE>`).join('');
   let risposta:Nodo;
   try{risposta=await leggi('TrackingRequest',campi);}
@@ -130,10 +133,13 @@ export function creaClientMbe(username:string,password:string,trasporto:typeof f
    // Only a negative business response can be specific to a mixed batch.
    // Transport, rate limit and authentication failures propagate immediately.
    if(!(e instanceof LetturaTrackingRifiutata))throw e;
-   if(gruppo.length===1)throw new ErroreMbe(e.message+' Spedizione: '+gruppo[0]+'.');
+   if(gruppo.length===1){
+    if(rifiutati && e.codiceMbe==='TR_001'){rifiutati.add(gruppo[0]);return [];}
+    throw new ErroreMbe(e.message+' Spedizione: '+gruppo[0]+'.');
+   }
    const meta=Math.ceil(gruppo.length/2);
-   const prima=await leggiTracking(gruppo.slice(0,meta));
-   return prima.concat(await leggiTracking(gruppo.slice(meta)));
+   const prima=await leggiTracking(gruppo.slice(0,meta),rifiutati);
+   return prima.concat(await leggiTracking(gruppo.slice(meta),rifiutati));
   }
   // Discard ambiguous batches; re-query disjoint subsets under the same deadline.
   const identificati=new Set<string>();
@@ -150,7 +156,7 @@ export function creaClientMbe(username:string,password:string,trasporto:typeof f
   // Split even an empty batch response so each retry gets strictly smaller.
   const passo=Math.min(10,Math.ceil(gruppo.length/2));
   for(let i=0;i<mancanti.length;i+=passo){
-   ricevuti.push(...await leggiTracking(mancanti.slice(i,i+passo)));
+   ricevuti.push(...await leggiTracking(mancanti.slice(i,i+passo),rifiutati));
   }
   return ricevuti;
  }
@@ -163,11 +169,11 @@ export function creaClientMbe(username:string,password:string,trasporto:typeof f
     for(const s of r.spedizioni){if(viste.has(s.tracking_mbe))return invalido('MasterTrackingMBE duplicato');viste.add(s.tracking_mbe);tutte.push(s);}
    }return tutte;
   },
-  async tracking(ids:string[]):Promise<EsitoTrackingMbe[]> {
+  async tracking(ids:string[],rifiutati?:Set<string>):Promise<EsitoTrackingMbe[]> {
    if(ids.length>1000||new Set(ids).size!==ids.length)return invalido('TrackingRequest: elenco codici');const esiti:EsitoTrackingMbe[]=[];
    for(let i=0;i<ids.length;i+=100){
     const gruppo=ids.slice(i,i+100).map(x=>codice(x,'TrackingRequest.TrackingMBE'));
-    esiti.push(...await conContesto(`TrackingRequest, gruppo ${i/100+1}`,()=>leggiTracking(gruppo)));
+    esiti.push(...await conContesto(`TrackingRequest, gruppo ${i/100+1}`,()=>leggiTracking(gruppo,rifiutati)));
    }
    return esiti;
   }

@@ -1,7 +1,7 @@
 import 'server-only';
 import { connessioneGlsDb } from './glsServer';
 import { creaClientMbe, trackingMbeDaAggiornare, ErroreMbe, type SpedizioneMbe, type StatoMbe } from './mbe';
-export type RigaMbe = SpedizioneMbe & {tracking_corriere_stato:string;pratica_id:string|null;abbinamento:string;motivo:string;tipo_destinazione:string;stato:StatoMbe|null;data_consegna:string|null;descrizione:string;ultima_lettura_at:string};
+export type RigaMbe = SpedizioneMbe & {tracking_rifiutato_at:string|null;cliente_segnalato:string|null;tracking_corriere_stato:string;pratica_id:string|null;abbinamento:string;motivo:string;tipo_destinazione:string;stato:StatoMbe|null;data_consegna:string|null;descrizione:string;ultima_lettura_at:string};
 export type CollegamentoMbe = {automatico:boolean;ultimo_tentativo_at:string|null;ultimo_successo_at:string|null;ultimo_errore:string|null;importate:number;controllate:number;lease_scade_at:string|null};
 export function credenzialiMbePresenti() {return Boolean(process.env.MBE_API_USERNAME && process.env.MBE_API_PASSWORD);}
 export function collaudoMbeRecente(stato:CollegamentoMbe) {return Boolean(credenzialiMbePresenti()&&stato.ultimo_successo_at&&!stato.ultimo_errore&&Date.now()-Date.parse(stato.ultimo_successo_at)<86400000);}
@@ -37,15 +37,25 @@ export async function sincronizzaMbe() {
   const nuove=new Set(recenti.map(s=>s.tracking_mbe));
   const spedizioni=[...recenti,...pendenti.filter(s=>!nuove.has(s.tracking_mbe))];
   // Continue monitoring older undelivered shipments, without assuming creation = pickup.
-  const [precedenti,consegnate]=await Promise.all([
+  const [precedenti,consegnate,inVerifica]=await Promise.all([
    righeDb<{tracking_mbe:string}[]>('mbe_spedizioni?select=tracking_mbe&or=(stato.is.null,stato.neq.DELIVERED)&order=tracking_mbe.asc&limit=1001'),
    righeDb<{tracking_mbe:string}[]>('mbe_spedizioni?select=tracking_mbe&stato=eq.DELIVERED&order=data_spedizione.desc,tracking_mbe.asc&limit=1000'),
+   righeDb<{tracking_mbe:string}[]>('mbe_spedizioni?select=tracking_mbe&tracking_rifiutato_at=not.is.null&order=tracking_mbe.asc&limit=1001'),
   ]);
-  const ids=[...new Set([...spedizioni.map(s=>s.tracking_mbe),...precedenti.map(s=>s.tracking_mbe)])];
+  const ids=[...new Set([...spedizioni.map(s=>s.tracking_mbe),...precedenti.map(s=>s.tracking_mbe),...inVerifica.map(s=>s.tracking_mbe)])];
   if(ids.length>1000)throw new ErroreMbe('Oltre 1000 spedizioni da controllare: verificare il registro prima di ampliare il periodo.');
-  const daControllare=trackingMbeDaAggiornare(ids,new Set(consegnate.map(s=>s.tracking_mbe)));
-  const tracking=await client.tracking(daControllare);
-  return await rpcMbe<{esito:string;importate:number;controllate:number}>('termina_sincronizzazione_mbe',{p_lease:lease,p_spedizioni:spedizioni,p_tracking:tracking});
+  const riprovare=new Set(inVerifica.map(s=>s.tracking_mbe));
+  const ordinari=trackingMbeDaAggiornare(ids.filter(id=>!riprovare.has(id)),new Set(consegnate.map(s=>s.tracking_mbe)));
+  const rifiutati=new Set<string>();
+  const [aggiornati,ritentati]=await Promise.all([
+   client.tracking(ordinari,rifiutati),
+   client.tracking([...riprovare],rifiutati),
+  ]);
+  const tracking=[...aggiornati,...ritentati];
+  if(tracking.length+rifiutati.size!==ordinari.length+riprovare.size)throw new ErroreMbe('Esiti tracking MBE incompleti.');
+  return await rpcMbe<{esito:string;importate:number;controllate:number;da_verificare:number}>('registra_ciclo_tracking_mbe',{
+   p_lease:lease,p_spedizioni:spedizioni,p_tracking:tracking,p_rifiutati:[...rifiutati],
+  });
  }catch(e){
   const messaggio=e instanceof ErroreMbe?e.message:'Sincronizzazione MBE non completata. Nessuna importazione parziale; verificare il collegamento e riprovare.';
   await rpcMbe('termina_sincronizzazione_mbe',{p_lease:lease,p_spedizioni:[],p_tracking:[],p_errore:messaggio}).catch(()=>{});
