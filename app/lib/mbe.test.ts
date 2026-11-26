@@ -122,7 +122,7 @@ test('controlla sempre i nuovi e gli aperti, e tutti i consegnati una volta al g
 
 test('un gruppo rifiutato viene verificato in parti; un rifiuto sul singolo resta un errore',async()=>{
  const ids=[codice(1),codice(2)];
- const ko=soap('TrackingRequest','').replace('<Status>OK</Status>','<Status>KO</Status>');
+ const ko=soap('TrackingRequest','<Errors><Error><ErrorCode>E001</ErrorCode><Description>dato da omettere</Description></Error></Errors>').replace('<Status>OK</Status>','<Status>ERROR</Status>');
  for(const singoloRifiutato of [false,true]){
   const chiamate:string[][]=[];
   const c=creaClientMbe('utente',chiave,async(_url,init)=>{
@@ -131,7 +131,8 @@ test('un gruppo rifiutato viene verificato in parti; un rifiuto sul singolo rest
    if(gruppo.length>1 || (singoloRifiutato && gruppo[0]===ids[1]))return new Response(ko);
    return new Response(soap('TrackingRequest','<TrackingStatus>WAITING_DELIVERY</TrackingStatus>'));
   });
-  if(singoloRifiutato)await assert.rejects(c.tracking(ids),/non ha confermato il tracking/);
+  if(singoloRifiutato)await assert.rejects(c.tracking(ids),e=>e instanceof ErroreMbe &&
+   e.message.includes('E001') && e.message.includes(ids[1]) && !e.message.includes('dato da omettere'));
   else assert.deepEqual((await c.tracking(ids)).map(r=>r.tracking_mbe),ids);
   assert.deepEqual(chiamate,[ids,[ids[0]],[ids[1]]]);
  }
