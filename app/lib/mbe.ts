@@ -13,6 +13,7 @@ export type SpedizioneMbe = {
 export type EsitoTrackingMbe = { tracking_mbe:string; stato:StatoMbe; data_consegna:string|null; descrizione:string; tracking_corriere:string };
 type Nodo = Record<string, unknown>;
 export class ErroreMbe extends Error {}
+class LetturaTrackingRifiutata extends ErroreMbe {}
 function invalido(campo:string):never {
  throw new ErroreMbe(`Risposta MBE non valida (${campo}). Nessun dato importato.`);
 }
@@ -47,9 +48,13 @@ export function contenitoreMbe(xml:string,operazione:'ShipmentsListV3Request'|'T
  const body=nodo(nodo(nodo(doc,'XML').Envelope,'Envelope').Body,'Envelope.Body');
  if(body.Fault)throw new ErroreMbe('Il servizio MBE ha restituito un errore SOAP. Verificare il collegamento.');
  const r=nodo(nodo(body[`${operazione}Response`],operazione+'Response').RequestContainer,'RequestContainer');
- if(testo(r.Status,'Status',20)!=='OK')throw new ErroreMbe('MBE non ha confermato la lettura. Verificare le autorizzazioni del centro MBE.');
+
  if(operazione==='ShipmentsListV3Request' && testo(r.InternalReferenceID,'InternalReferenceID',100)!==id)return invalido('InternalReferenceID');
  if(r.InternalReferenceID!==undefined && testo(r.InternalReferenceID,'InternalReferenceID',100)!==id)return invalido('InternalReferenceID');
+ if(testo(r.Status,'Status',20)!=='OK'){
+  if(operazione==='TrackingRequest')throw new LetturaTrackingRifiutata('MBE non ha confermato il tracking richiesto.');
+  throw new ErroreMbe('MBE non ha confermato la lettura. Verificare le autorizzazioni del centro MBE.');
+ }
  return r;
 }
 export function paginaMbe(r:Nodo,pagina:number) {
@@ -113,7 +118,16 @@ export function creaClientMbe(username:string,password:string,trasporto:typeof f
  }
  async function leggiTracking(gruppo:string[]):Promise<EsitoTrackingMbe[]> {
   const campi=gruppo.map(id=>`<TrackingMBE>${escapeXml(id)}</TrackingMBE>`).join('');
-  const risposta=await leggi('TrackingRequest',campi);
+  let risposta:Nodo;
+  try{risposta=await leggi('TrackingRequest',campi);}
+  catch(e){
+   // Only a negative business response can be specific to a mixed batch.
+   // Transport, rate limit and authentication failures propagate immediately.
+   if(!(e instanceof LetturaTrackingRifiutata) || gruppo.length===1)throw e;
+   const meta=Math.ceil(gruppo.length/2);
+   const prima=await leggiTracking(gruppo.slice(0,meta));
+   return prima.concat(await leggiTracking(gruppo.slice(meta)));
+  }
   // Discard ambiguous batches; re-query disjoint subsets under the same deadline.
   const identificati=new Set<string>();
   const ambiguo=gruppo.length>1 && lista(risposta.TrackingResult).some(riga=>{
