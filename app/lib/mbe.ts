@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 
 // Only these two read operations are exposed. No arbitrary SOAP operation/URL.
@@ -153,3 +153,11 @@ export function creaClientMbe(username:string,password:string,trasporto:typeof f
  };
 }
 export const NOMI_STATI_MBE:Record<StatoMbe,string> = {DELIVERED:'Consegnata (MBE)',PARTIALLY_DELIVERED:'Consegnata parzialmente',WAITING_DELIVERY:'Consegna in attesa (MBE)',NOT_AVAILABLE:'Stato non disponibile',EXCEPTION:'Anomalia segnalata da MBE'};
+
+// A delivered parcel is rechecked once a day. New and unfinished parcels are
+// always checked, even if none of the day's delivered parcels are due.
+export function trackingMbeDaAggiornare(ids: string[], consegnate: Set<string>, ora=Date.now()) {
+ const turno=Math.floor(ora / (15*60_000)) % 96;
+ return [...new Set(ids)].filter(id=>!consegnate.has(id) ||
+  createHash('sha256').update(id).digest().readUInt32BE(0) % 96 === turno);
+}

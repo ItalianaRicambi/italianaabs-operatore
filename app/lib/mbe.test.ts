@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {creaClientMbe,contenitoreMbe,paginaMbe,esitiMbe,ErroreMbe} from './mbe.ts';
+import {trackingMbeDaAggiornare,creaClientMbe,contenitoreMbe,paginaMbe,esitiMbe,ErroreMbe} from './mbe.ts';
 const chiave='password-fittizia-test',id='correlazione-test';
 const codice=(i:number)=>`IT0001-0L-${String(i).padStart(10,'0')}`;
 const soap=(op:string,c:string)=>`<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"><SOAP-ENV:Body><ns3:${op}Response xmlns:ns3="http://www.onlinembe.eu/ws/"><RequestContainer><Status>OK</Status>${c}</RequestContainer></ns3:${op}Response></SOAP-ENV:Body></SOAP-ENV:Envelope>`;
@@ -107,4 +107,15 @@ test('gli esiti estranei o duplicati di un batch non entrano nel registro',async
   const r=await c.tracking(ids);
   assert.deepEqual(r.map(x=>[x.tracking_mbe,x.stato]),ids.map(id=>[id,'DELIVERED']));
  }
+});
+
+test('controlla sempre i nuovi e gli aperti, e tutti i consegnati una volta al giorno',()=>{
+ const consegnati=new Set(['D1','D2','D3']);
+ const riletti:string[]=[];
+ for(let turno=0;turno<96;turno++){
+  const selezionati=trackingMbeDaAggiornare(['N','A','N',...consegnati],consegnati,turno*900000);
+  assert.deepEqual(selezionati.filter(id=>!consegnati.has(id)),['N','A']);
+  riletti.push(...selezionati.filter(id=>consegnati.has(id)));
+ }
+ assert.deepEqual(riletti.sort(),[...consegnati]);
 });
