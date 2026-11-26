@@ -66,6 +66,7 @@ type Pratica = {
   blocco_operatore: boolean;
   preventivo_inviato_at: string | null;
   ordine_acquisito_at: string | null;
+  ordine_annullato_cliente_at?: string | null;
   followup_previsto_at: string | null;
   ultimo_importo_preventivo: number | null;
   numero_fattura: string | null;
@@ -256,6 +257,7 @@ async function getPratiche(): Promise<{
       stato_amministrativo: Pratica["stato_amministrativo"];
       stato_amministrativo_at: string | null;
       nota_amministrativa: string | null;
+      ordine_annullato_cliente_at: string | null;
       stato_richiesta_amministrativa: Pratica["stato_richiesta_amministrativa"];
       campi_richiesta_amministrativa: string[] | null;
       richiesta_amministrativa_preparata_at: string | null;
@@ -266,7 +268,7 @@ async function getPratiche(): Promise<{
 
     try {
       metadati = await fetchTutteLePagine(
-        `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at,da_verificare_at,cliente_id,stato_amministrativo,stato_amministrativo_at,nota_amministrativa,stato_richiesta_amministrativa,campi_richiesta_amministrativa,richiesta_amministrativa_preparata_at,richiesta_amministrativa_inviata_at,data_fattura,dati_raw&order=id.asc`,
+        `${url}/rest/v1/pratiche?select=id,fonte_completezza,stato_conferma_cliente,conferma_cliente_at,da_preventivare_at,da_verificare_at,cliente_id,stato_amministrativo,stato_amministrativo_at,nota_amministrativa,ordine_annullato_cliente_at,stato_richiesta_amministrativa,campi_richiesta_amministrativa,richiesta_amministrativa_preparata_at,richiesta_amministrativa_inviata_at,data_fattura,dati_raw&order=id.asc`,
         { headers }
       );
     } catch (error) {
@@ -339,6 +341,7 @@ async function getPratiche(): Promise<{
               stato_amministrativo: meta.stato_amministrativo,
               stato_amministrativo_at: meta.stato_amministrativo_at,
               nota_amministrativa: meta.nota_amministrativa,
+              ordine_annullato_cliente_at: meta.ordine_annullato_cliente_at,
               stato_richiesta_amministrativa:
                 meta.stato_richiesta_amministrativa,
               campi_richiesta_amministrativa:

@@ -11,7 +11,7 @@ export function AvvisoOrdine({ pratica }: { pratica: PraticaOggi }) {
     <p className="text-lg font-black">⚠ {a.titolo}</p>
     <p className="mt-2 text-sm font-medium">{a.testo}</p>
     <a href="#sezione-amministrazione" className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-slate-950 px-4 py-2 font-bold text-white">Apri fatturazione e dati cliente →</a>
-    <p className="mt-3 text-xs">L’avviso si chiude quando la fattura della pratica è verificata. Ritiri, lavorazione e spedizione mantengono il proprio avanzamento.</p>
+    <p className="mt-3 text-xs">L’avviso si chiude quando la fattura viene verificata o l’operatore registra la rinuncia del cliente. Ritiri e spedizioni sono consultabili nella sezione Logistica.</p>
   </section>;
 }
 

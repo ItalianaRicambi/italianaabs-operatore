@@ -3,6 +3,7 @@ import { prontaPerFatturazione } from "./fatturazione.ts";
 type PraticaCoda = {
   tipo_flusso: string;
   stato_commerciale: string;
+  ordine_annullato_cliente_at?: string | null;
   stato_fatturazione: string;
   stato_completezza: string;
   stato_amministrativo?: string | null;
@@ -28,7 +29,7 @@ export function correggiCodaOperativa<T extends PraticaCoda>(pratica: T): T {
     coda = "RIFIUTATA";
     priorita = 99;
   } else if (pratica.stato_commerciale === "chiuso") {
-    coda = "CHIUSA";
+    coda = pratica.ordine_annullato_cliente_at ? "ORDINE ANNULLATO DAL CLIENTE" : "CHIUSA";
     priorita = 99;
   } else if (pratica.stato_fatturazione === "fatturato") {
     // Una pratica fatturata non deve competere con attività ancora da svolgere.

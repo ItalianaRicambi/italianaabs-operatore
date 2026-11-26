@@ -241,6 +241,33 @@ async function chiamaRpc(
    LETTURA / AGGIORNAMENTO PRATICA
    ============================================================ */
 
+export async function gestisciRinunciaOrdine(
+  _stato: { messaggio: string }, formData: FormData
+): Promise<{ messaggio: string }> {
+  const comando = formData.get("comando");
+  if (comando !== "annulla" && comando !== "riapri") return { messaggio: "Comando non valido." };
+  try {
+    const operatore = await richiediOperatoreAttivo();
+    const praticaId = uuidFlusso(formData.get("pratica_id"));
+    const esito = await chiamaRpc("gestisci_rinuncia_ordine_cliente", {
+      p_pratica_id: praticaId,
+      p_azione: comando,
+      p_riferimento: formData.get("riferimento") || null,
+      p_operatore: operatore,
+      p_nota: String(formData.get("nota") || "").trim() || null,
+    });
+    if (typeof esito !== "boolean") return { messaggio: "Aggiornamento da verificare. Ricarica la scheda." };
+    revalidatePath(`/pratica/${praticaId}`);
+    revalidatePath("/");
+    return { messaggio: esito ? "Pratica aggiornata." : "La pratica risulta già aggiornata." };
+  } catch (errore) {
+    const dettaglio = errore instanceof Error ? errore.message : "";
+    if (dettaglio.includes("senza fattura")) return { messaggio: "Verifica la fattura e lo stato commerciale della pratica." };
+    if (dettaglio.includes("stato dell’ordine è cambiato")) return { messaggio: "Lo stato dell’ordine è cambiato. Ricarica la scheda." };
+    return { messaggio: "Aggiornamento non riuscito. Ricarica la scheda e verifica l’accesso operatore." };
+  }
+}
+
 export async function gestisciFatturazioneOperatore(formData: FormData) {
   const praticaId = String(formData.get("pratica_id") || "").trim();
   const comando = String(formData.get("comando") || "");
