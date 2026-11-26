@@ -1,4 +1,5 @@
 import 'server-only';
+import type { OrdineTracking } from './trackingWhatsApp';
 import { NEGOZIO_SHOPIFY } from './ordiniShopify';
 import { QUERY_ORDINI, SHOPIFY_API_VERSION, normalizzaApi, type OrdineApi, type Pagina, type StatoSync } from './shopifyApi';
 import { connessioneGlsDb } from './glsServer';
@@ -68,4 +69,18 @@ export async function sincronizzaShopify() {
   await rpc('termina_sync_shopify',{p_token:lease,p_errore:motivo,p_ordini:n,p_da:da});
   return {ok:false,errore:motivo};
  }
+}
+
+export async function leggiTrackingOrdineShopify(id: string): Promise<OrdineTracking | null> {
+ if (!/^\d{1,20}$/.test(id)) throw new Error('Identificativo ordine non valido');
+ const bearer=await accessToken();
+ const response=await fetch('https://'+NEGOZIO_SHOPIFY+'/admin/api/'+SHOPIFY_API_VERSION+'/graphql.json',{
+  method:'POST',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(8000),
+  headers:{'Content-Type':'application/json','X-Shopify-Access-Token':bearer},
+  body:JSON.stringify({query:'query TrackingOrdine($id: ID!) { order(id: $id) { id name test cancelledAt shippingAddress { phone } fulfillments(first:100) { status trackingInfo { number url } } } }',
+   variables:{id:'gid://shopify/Order/'+id}})});
+ if (!response.ok) throw new Error('Tracking Shopify non disponibile');
+ const payload=await response.json();
+ if (payload.errors?.length || !payload.data) throw new Error('Lettura tracking Shopify incompleta');
+ return payload.data.order;
 }

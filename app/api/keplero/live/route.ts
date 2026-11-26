@@ -2,6 +2,8 @@ import { prepareFiscalRequest, prepareTechnicalRequest } from "../../../lib/foll
 import { rpcOriginaliK } from "../../../lib/originaliKepleroServer";
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { risolviTracking, selezionaPratica, trackingIncerto, type PraticaTracking } from "../../../lib/trackingWhatsApp";
+import { leggiTrackingOrdineShopify } from "../../../lib/shopifySyncServer";
 import { leggiIdConversazioneKeplero } from "./identitaConversazione";
 
 import {
@@ -334,6 +336,30 @@ export async function POST(request: NextRequest) {
      */
 
     const body = (await request.json()) as Body;
+
+    // Keplero supplies the authenticated session header. The customer's text and
+    // agent-supplied phone or session are never used to grant access to a shipment.
+    const filtroTracking = testo(body.motivo_incompletezza).trim();
+    if (/^TRACKING_CLIENTE\b/i.test(filtroTracking)) {
+      const sessione = request.headers.get("x-keplero-sessionid")?.trim() ?? "";
+      const filtro = /^TRACKING_CLIENTE(?:\s+(#\d{1,12}|[a-z0-9]{5,12}))?$/i.exec(filtroTracking);
+      if (!filtro || !uuidValido(sessione) || bool(primo(body, "is_group", "gruppo")) ||
+          testo(primo(body, "channel", "canale")).toLowerCase() !== "whatsapp") {
+        return NextResponse.json(trackingIncerto(true));
+      }
+      const riferimento = (filtro[1] || "").toUpperCase();
+      try {
+        const pratiche = await rpcOriginaliK<PraticaTracking[]>("pratiche_tracking_whatsapp", {p_sessione:sessione});
+        const numero = riferimento.startsWith("#") ? riferimento : "";
+        const pratica = selezionaPratica(pratiche, numero ? "" : riferimento, numero);
+        if (!pratica) return NextResponse.json(trackingIncerto(!!riferimento));
+        const ordine = pratica.ordine_id ? await leggiTrackingOrdineShopify(pratica.ordine_id) : null;
+        return NextResponse.json(risolviTracking(pratica, ordine, !!riferimento));
+      } catch {
+        console.warn("keplero_tracking_consultazione_non_disponibile");
+        return NextResponse.json(trackingIncerto(true));
+      }
+    }
 
     const conversationId = leggiIdConversazioneKeplero(body, request.headers);
 
