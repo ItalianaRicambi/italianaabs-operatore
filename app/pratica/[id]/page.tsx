@@ -9,6 +9,7 @@ import { leggiDocumentiPreventivo } from "../../lib/documentiPreventivoServer";
 import { DocumentiPreventivoAutomatici } from "../../components/DocumentiPreventivoAutomatici";
 import { AssistenzeRientro, GestioneRitiro, OfferteEScelta } from "../../components/FlussiOperativi";
 import { ImportazioneDocumentoAmministrativo } from "../../components/DocumentoAmministrativo";
+import { RinunciaOrdine } from "../../components/RinunciaOrdine";
 import { AnagraficaFiscale } from "../../components/AnagraficaFiscale";
 import { datiFiscaliDaChat } from "../../lib/datiFiscaliChat";
 import { leggiEsitiGls } from "../../lib/glsServer";
@@ -95,6 +96,8 @@ type Pratica = {
   blocco_classificazione_operatore?: boolean | null;
   preventivo_inviato_at?: string | null;
   ordine_acquisito_at?: string | null;
+  ordine_annullato_cliente_at?: string | null;
+  data_fattura?: string | null;
   followup_previsto_at?: string | null;
   assistenza_aperta_at?: string | null;
   assistenza_chiusa_at?: string | null;
@@ -504,6 +507,8 @@ function etichettaAzione(azione: string) {
     commerciale_dati_verificati: "Dati verificati / da preventivare",
     commerciale_preventivo_inviato: "Preventivo segnato come inviato",
     commerciale_ordine_acquisito: "Ordine segnato come acquisito",
+    ordine_annullato_cliente: "Ordine annullato dal cliente",
+    riapertura_dopo_rinuncia_cliente: "Pratica riaperta dopo la rinuncia",
     commerciale_fatturata: "Pratica segnata come fatturata",
     fatturazione_sospesa_dati_cliente: "Fatturazione sospesa: dati cliente",
     fatturazione_abilitata_dati_cliente: "Dati cliente confermati / fatturazione abilitata",
@@ -636,6 +641,12 @@ export default async function PraticaPage({
   const noteInterne = annotazioniOperatore;
   const ultimaNotaOperatore = noteInterne[0] || null;
   const azioniStorico = storicoOperatore;
+  const annullatoAt = pratica.ordine_annullato_cliente_at;
+  const statoCommerciale = annullatoAt ? "Ordine annullato dal cliente" : etichettaStato(pratica.stato_commerciale);
+  const archivioMensile = String(navigazione.filtro || "").includes("mese_precedente");
+  const ordineAnnullabile = pratica.tipo_flusso === "commerciale" && pratica.stato_commerciale === "ordine_acquisito"
+    && pratica.stato_fatturazione !== "fatturato" && !pratica.data_fattura
+    && !documentiAmministrativi.some(documento => documento.tipo_documento === "fattura");
 
   const rawCodes = rawArray<RawCode>(
     pratica.dati_raw,
@@ -848,7 +859,7 @@ export default async function PraticaPage({
               </h1>
 
               <p className="mt-2 text-base font-semibold text-slate-700">{[pratica.marca_veicolo, pratica.modello_veicolo].filter(Boolean).join(' ') || 'Veicolo da identificare'} · {pratica.nome_cliente || 'Cliente da identificare'}</p>
-              <p className="mt-2 text-sm text-slate-600">Stato: {etichettaStato(pratica.tipo_flusso === 'assistenza' ? pratica.stato_assistenza : pratica.stato_commerciale)} · Fatturazione: {etichettaStato(pratica.stato_fatturazione)}</p>
+              <p className="mt-2 text-sm text-slate-600">Stato: {pratica.tipo_flusso === 'assistenza' ? etichettaStato(pratica.stato_assistenza) : statoCommerciale} · Fatturazione: {etichettaStato(pratica.stato_fatturazione)}</p>
 
               <p className="mt-2 text-sm text-slate-500">
                 Creata {formattaData(pratica.created_at)}
@@ -899,6 +910,11 @@ export default async function PraticaPage({
           </div>
         </header>
 
+        {!archivioMensile && (ordineAnnullabile || annullatoAt) && (
+          <RinunciaOrdine key={annullatoAt || "ordine-aperto"} praticaId={pratica.id}
+            annullatoAt={annullatoAt} acquisitoAt={pratica.ordine_acquisito_at} />
+        )}
+
         {ultimaNotaOperatore && (
           <section
             aria-label="Ultima annotazione operatore"
@@ -940,7 +956,7 @@ export default async function PraticaPage({
             <section className="rounded-xl border bg-slate-50 p-4"><h2 className="text-xl font-bold">Spedizioni MBE</h2><Link href="/mbe" className="text-blue-800 underline">Apri registro MBE</Link>{spedizioniMbe === null ? <p role="alert">Registro MBE non disponibile.</p> : <SpedizioniMbe righe={spedizioniMbe} />}</section>
             </SezionePraticaVisibile>
             <SezionePraticaVisibile sezioni={['offerta']}>
-            <OfferteEScelta dataInvio={pratica.preventivo_inviato_at || null} praticaId={pratica.id} scelta={sceltaCliente} offerte={offerte} opzioni={opzioniOfferta} preventivi={preventiviOfferta} solaLettura={String(navigazione.filtro || "").includes("mese_precedente")} />
+            <OfferteEScelta dataInvio={pratica.preventivo_inviato_at || null} praticaId={pratica.id} scelta={sceltaCliente} offerte={offerte} opzioni={opzioniOfferta} preventivi={preventiviOfferta} solaLettura={archivioMensile || Boolean(annullatoAt)} />
             </SezionePraticaVisibile>
             <Card titolo="Cliente e veicolo">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1383,7 +1399,7 @@ export default async function PraticaPage({
           </section>
 
           <aside className="space-y-6">
-            <Card titolo="Azioni operatore">
+            {!annullatoAt && <Card titolo="Azioni operatore">
               <p className="mb-4 text-sm leading-6 text-slate-500">
                 Usa questi pulsanti solo quando vuoi cambiare realmente lo stato
                 della pratica. Ogni azione viene registrata nello storico.
@@ -1705,7 +1721,7 @@ export default async function PraticaPage({
                   </details>
                 </div>
               )}
-            </Card>
+            </Card>}
 
             <SezionePraticaVisibile sezioni={['logistica']}>
             {(esitiGls.righe.length > 0 || esitiGls.errore) && <section className="mb-5 rounded-2xl border border-blue-200 bg-white p-5">
@@ -2212,7 +2228,7 @@ export default async function PraticaPage({
                     value={formattaData(pratica.conferma_cliente_at)}
                   />
                 )}
-                <Campo label="Stato commerciale" value={etichettaStato(pratica.stato_commerciale)} />
+                <Campo label="Stato commerciale" value={statoCommerciale} />
                 <Campo label="Fatturazione" value={pratica.stato_fatturazione === "da_fatturare" &&
                   !prontaPerFatturazione(pratica) ? "In attesa dati cliente" : etichettaStato(pratica.stato_fatturazione)} />
                 <Campo label="Logistica" value={etichettaStato(pratica.stato_logistica)} />

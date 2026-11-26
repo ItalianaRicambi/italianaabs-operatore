@@ -66,3 +66,13 @@ test("le richieste di assistenza conservano coda e priorità", () => {
   const assistenza = { ...richiesta, tipo_flusso: "assistenza", coda: "ASSISTENZA PRIORITARIA", priorita: 1 };
   assert.deepEqual(correggiCodaOperativa(assistenza), assistenza);
 });
+
+test("la rinuncia del cliente chiude ordine e fatturazione conservando il motivo in elenco", () => {
+  const annullata = correggiCodaOperativa({
+    ...richiesta, stato_commerciale: "chiuso", ordine_annullato_cliente_at: "2026-11-01T12:00:00Z",
+  });
+  assert.equal(annullata.coda, "ORDINE ANNULLATO DAL CLIENTE");
+  assert.equal(ordineConfermatoAperto(annullata), false);
+  assert.equal(ordineDaCompletare(annullata), false);
+  assert.equal(correggiCodaOperativa({ ...annullata, ordine_annullato_cliente_at: null }).coda, "CHIUSA");
+});
