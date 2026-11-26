@@ -119,3 +119,20 @@ test('controlla sempre i nuovi e gli aperti, e tutti i consegnati una volta al g
  }
  assert.deepEqual(riletti.sort(),[...consegnati]);
 });
+
+test('un gruppo rifiutato viene verificato in parti; un rifiuto sul singolo resta un errore',async()=>{
+ const ids=[codice(1),codice(2)];
+ const ko=soap('TrackingRequest','').replace('<Status>OK</Status>','<Status>KO</Status>');
+ for(const singoloRifiutato of [false,true]){
+  const chiamate:string[][]=[];
+  const c=creaClientMbe('utente',chiave,async(_url,init)=>{
+   const gruppo=[...String(init?.body).matchAll(/<TrackingMBE>([^<]+)</g)].map(m=>m[1]);
+   chiamate.push(gruppo);
+   if(gruppo.length>1 || (singoloRifiutato && gruppo[0]===ids[1]))return new Response(ko);
+   return new Response(soap('TrackingRequest','<TrackingStatus>WAITING_DELIVERY</TrackingStatus>'));
+  });
+  if(singoloRifiutato)await assert.rejects(c.tracking(ids),/non ha confermato il tracking/);
+  else assert.deepEqual((await c.tracking(ids)).map(r=>r.tracking_mbe),ids);
+  assert.deepEqual(chiamate,[ids,[ids[0]],[ids[1]]]);
+ }
+});
