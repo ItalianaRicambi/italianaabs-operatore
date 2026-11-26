@@ -1,3 +1,4 @@
+import {AvvisoResi} from './resi/Avviso';
 import { AbbinamentoPresa } from "./components/AbbinamentoPresa";
 import { leggiEsitiGls } from "./lib/glsServer";
 import { statoGlsAttuale, presaPrenotata, etichettaPresa, type MetadatiGls } from "./lib/esitiGls";
@@ -1224,7 +1225,7 @@ export default async function Home({
     >
     <main className="min-h-screen bg-slate-50">
       <BarraOperatore operatore={operatoreAttivo} />
-      {!solaLettura && <><AggiornaAvvisi /><CodaOrdini /><AvvisiOrdini pratiche={pratiche} /></>}
+      {!solaLettura && <><AvvisoResi /><AggiornaAvvisi /><CodaOrdini /><AvvisiOrdini pratiche={pratiche} /></>}
 
       <div className="mx-auto max-w-[1750px] px-6 py-8">
         <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

@@ -1,3 +1,4 @@
+import {AvvisoResi} from '../resi/Avviso';
 import { AvvisiOrdini } from './AvvisoOrdine';
 import { CodaOrdini } from './CodaOrdini';
 import { AggiornaAvvisi } from './AggiornaAvvisi';
@@ -85,7 +86,7 @@ export function HomeOggi({ operatore, pratiche, righe, filtro, etichetta, cerca,
       ritorno={href(filtro, cerca, pagina)} righePerPagina={perPagina}
       voci={elenco.map(p => ({ id: p.id, codice: p.codice_pratica || p.id }))}>
       <main className="min-h-screen bg-slate-50 text-slate-900">
-        <BarraOperatore operatore={operatore} /><AggiornaAvvisi />
+        <BarraOperatore operatore={operatore} /><AggiornaAvvisi /><AvvisoResi />
         <div className="mx-auto grid max-w-[1600px] lg:grid-cols-[210px_minmax(0,1fr)]">
           <aside className="border-b border-slate-200 bg-white p-4 lg:min-h-[calc(100vh-72px)] lg:border-r lg:p-6">
             <Link href="/" className="block text-lg font-black tracking-tight text-blue-950">Italiana<span className="text-blue-600">ABS</span></Link>
