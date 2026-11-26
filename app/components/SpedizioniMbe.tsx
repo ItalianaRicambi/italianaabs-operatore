@@ -5,7 +5,9 @@ import {ClassificaMbe} from '../mbe/ComandiMbe';
 export function SpedizioniMbe({righe,classificabile=false}:{righe:RigaMbe[];classificabile?:boolean}) {
  if(!righe.length)return <p className="mt-4">Nessuna spedizione MBE acquisita{classificabile?'': ' collegata a questa pratica'}.</p>;
  return <div className="mt-4 space-y-4">{righe.map(r=><article key={r.tracking_mbe} className="rounded-xl border bg-white p-4">
- <h3 className="font-bold">MBE {r.tracking_mbe} · {r.stato?NOMI_STATI_MBE[r.stato]:'Tracking da verificare'}</h3>
+ <h3 className="font-bold">MBE {r.tracking_mbe} · {r.tracking_rifiutato_at?'Tracking da verificare':r.stato?NOMI_STATI_MBE[r.stato]:'Tracking da verificare'}</h3>
+ {r.tracking_rifiutato_at&&<p className="mt-2 text-amber-800">MBE ha rifiutato il tracking con codice TR_001 il {new Date(r.tracking_rifiutato_at).toLocaleString('it-IT',{timeZone:'Europe/Rome'})}. Verrà ritentato al prossimo ciclo.{r.stato&&<> Ultimo stato confermato: {NOMI_STATI_MBE[r.stato]}.</>}</p>}
+ {r.cliente_segnalato&&<p>Cliente indicato dall’operatore: {r.cliente_segnalato}</p>}
  <p className="mt-2">Riferimento: {r.riferimento||'Assente'}{r.pratica_id&&<> · <Link className="text-blue-800 underline" href={`/pratica/${r.pratica_id}`}>Apri pratica</Link></>}</p>
  <p className={r.abbinamento==='abbinata'?'text-green-800':'text-amber-800'}>{r.motivo}</p>
  <p className="mt-2">Da: {r.mittente.nome||'Non indicato'} · {r.mittente.citta} {r.mittente.paese}<br/>A: {r.destinatario.nome||'Non indicato'} · {r.destinatario.citta} {r.destinatario.paese}</p>

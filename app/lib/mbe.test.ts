@@ -137,3 +137,20 @@ test('un gruppo rifiutato viene verificato in parti; un rifiuto sul singolo rest
   assert.deepEqual(chiamate,[ids,[ids[0]],[ids[1]]]);
  }
 });
+
+test('un TR_001 isolato non blocca il vicino, si risolve appena confermato; gli altri errori restano bloccanti',async()=>{
+ const ids=[codice(7),codice(8)];
+ let negativo='TR_001';
+ const c=creaClientMbe('utente',chiave,async(_url,init)=>{
+  const gruppo=[...String(init?.body).matchAll(/<TrackingMBE>([^<]+)</g)].map(m=>m[1]);
+  if(gruppo.includes(ids[0]) && negativo)return new Response(soap('TrackingRequest','<Errors><Error><ErrorCode>'+negativo+'</ErrorCode></Error></Errors>').replace('<Status>OK</Status>','<Status>ERROR</Status>'));
+  return new Response(soap('TrackingRequest','<TrackingStatus>DELIVERED</TrackingStatus>'));
+ });
+ const rifiutati=new Set<string>();
+ assert.deepEqual((await c.tracking(ids,rifiutati)).map(t=>t.tracking_mbe),[ids[1]]);
+ assert.deepEqual([...rifiutati],[ids[0]]);
+ negativo='ALTRA_CAUSA';
+ await assert.rejects(c.tracking([ids[0]],new Set()),/ALTRA_CAUSA/);
+ negativo='';
+ assert.equal((await c.tracking([...rifiutati],new Set()))[0].stato,'DELIVERED');
+});

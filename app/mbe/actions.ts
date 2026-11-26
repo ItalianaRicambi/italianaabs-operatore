@@ -7,7 +7,7 @@ export type StatoAzioneMbe={errore:string|null;successo:string|null};
 export async function collaudaMbe(_s:StatoAzioneMbe):Promise<StatoAzioneMbe> {
  void _s;
  await richiediOperatoreAttivo();
- try{const r=await sincronizzaMbe();revalidatePath('/mbe');return {errore:null,successo:`Lettura completata: ${r.importate} spedizioni importate, ${r.controllate} tracking controllati. È possibile attivare l’aggiornamento automatico.`};}
+ try{const r=await sincronizzaMbe();revalidatePath('/mbe');return {errore:null,successo:`Lettura completata: ${r.importate} spedizioni importate, ${r.controllate} tracking confermati, ${r.da_verificare} da verificare.`};}
  catch(e){revalidatePath('/mbe');return {errore:e instanceof ErroreMbe?e.message:'Collaudo non riuscito. Riprovare.',successo:null};}
 }
 export async function cambiaAutomaticoMbe(_s:StatoAzioneMbe,dati:FormData):Promise<StatoAzioneMbe> {
