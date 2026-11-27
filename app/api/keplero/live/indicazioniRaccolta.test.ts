@@ -5,14 +5,19 @@ import { campiPerRichiestaFiscale, indicazioneIdentitaScambioNumerato, indicazio
 test("scambio numerato confermato: chiede solo identificativo fiscale, senza presumere cliente nuovo", () => {
   const scelta = { stato: "confermata", numero: 2, servizio: "PS" };
   const verifica = { stato: "verifica_fatture_in_cloud", cliente_riconosciuto: false };
-  const testo = indicazioneIdentitaScambioNumerato(2, scelta, verifica);
+  const richiesta = { necessaria: true, stato: "da_inviare" };
+  const istruzione = (n: number | null, s: unknown, c: unknown, r: unknown = richiesta) =>
+    indicazioneIdentitaScambioNumerato(n, s, c, r);
+  const testo = istruzione(2, scelta, verifica);
   assert.match(testo, /partita IVA/);
   assert.match(testo, /Non dichiarare che l'anagrafica è nuova/);
-  assert.equal(indicazioneIdentitaScambioNumerato(1, scelta, verifica), "");
-  assert.equal(indicazioneIdentitaScambioNumerato(2, { ...scelta, stato: "preferenza" }, verifica), "");
-  assert.equal(indicazioneIdentitaScambioNumerato(2, { ...scelta, servizio: "RI" }, verifica), "");
-  assert.equal(indicazioneIdentitaScambioNumerato(2, scelta, { stato: "riconosciuto", cliente_riconosciuto: true }), "");
-  assert.equal(indicazioneIdentitaScambioNumerato(2, scelta, { stato: "ambiguo" }), "");
+  assert.equal(istruzione(1, scelta, verifica), "");
+  assert.equal(istruzione(2, { ...scelta, stato: "preferenza" }, verifica), "");
+  assert.equal(istruzione(2, { ...scelta, servizio: "RI" }, verifica), "");
+  assert.equal(istruzione(2, scelta, { stato: "riconosciuto", cliente_riconosciuto: true }), "");
+  assert.equal(istruzione(2, scelta, { stato: "ambiguo" }), "");
+  assert.equal(istruzione(2, scelta, verifica, { necessaria: true, stato: "inviata" }), "");
+  assert.equal(istruzione(2, scelta, verifica, { necessaria: false, stato: "completata" }), "");
 });
 
 test("message impedisce richieste ripetute di spie e diagnosi", () => {
