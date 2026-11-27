@@ -51,7 +51,16 @@ function normalizzaFrase(value: string) {
     .trim();
 }
 
+// Il numero da solo non basta: il database dovrà anche verificare che
+// l'alternativa numerata del preventivo sia effettivamente uno scambio.
+export function numeroProgrammaScambioConcluso(value: string): number | null {
+  const match = /^(?:(?:buon pomeriggio|buongiorno|buonasera)[,!. ]*)?per noi andrebbe bene anche il programma ([1-8]) quindi lo scambio della parte[.! ]*$/.exec(normalizzaFrase(value));
+  return match ? Number(match[1]) : null;
+}
+
 function contieneNegazioneODubbio(frase: string) {
+  if (/\bandrebbe bene\b/.test(frase) && /\bprogramma [1-8]\b/.test(frase) &&
+      numeroProgrammaScambioConcluso(frase) === null) return true;
   if (/\b(?:ripariamo|riparate|revisioniamo|revisionate)\b/.test(frase) &&
       /[?]|\b(?:se|qualora|altrimenti|forse|eventualmente)\b/.test(frase)) return true;
   if (/\bnon\b.{0,50}\b(?:scelt[oa]|decis[oa])\b/.test(frase)) return true;
@@ -142,7 +151,7 @@ export function riconosciConfermaOrdine(
     /\bordine\b.{0,80}\b(?:modificar|procedere|ritiro)\b/,
     /^(?:la\s+)?lavorazione\s+(?:elettronica\s+)?(?:del|dello|sul)\s+dispositivo[.! ]*$/,
     /\b(va bene|confermo)[, ]+.{0,25}\bprocedete\b/,
-  ].some((regola) => regola.test(frase));
+  ].some((regola) => regola.test(frase)) || numeroProgrammaScambioConcluso(messaggio) !== null;
 
   if (confermaEsplicita) {
     return {

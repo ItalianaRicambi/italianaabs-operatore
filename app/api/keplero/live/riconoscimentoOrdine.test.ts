@@ -1,7 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { riconosciConfermaOrdine } from "./riconoscimentoOrdine.ts";
+import { numeroProgrammaScambioConcluso, riconosciConfermaOrdine } from "./riconoscimentoOrdine.ts";
+
+test("programma numerato di scambio concluso, senza promuovere condizioni o domande", () => {
+  const frase = "BUON POMERIGGIO PER NOI ANDREBBE BENE ANCHE IL PROGRAMMA 2 QUINDI LO SCAMBIO DELLA PARTE";
+  assert.equal(numeroProgrammaScambioConcluso(frase), 2);
+  assert.equal(riconosciConfermaOrdine({ ultimo_messaggio_cliente: frase }).confermato, true);
+  for (const testo of [
+    "Per noi andrebbe bene anche il programma 2?",
+    "Per noi andrebbe bene anche il programma 2 quindi lo scambio della parte se disponibile",
+    "Forse per noi andrebbe bene anche il programma 2 quindi lo scambio della parte",
+    "Per noi andrebbe bene anche il programma 2 quindi lo scambio della parte, ma prima sento il meccanico",
+  ]) {
+    assert.equal(numeroProgrammaScambioConcluso(testo), null, testo);
+    assert.equal(riconosciConfermaOrdine({ ultimo_messaggio_cliente: testo, ordine_confermato: true }).confermato, false, testo);
+  }
+});
 
 test("la direttiva di riparare il proprio dispositivo è distinta dalle domande e dalle ipotesi",()=>{
  for(const frase of ["Ripariamo la nostra","Ok, riparate il nostro ABS.","Revisionate la mia centralina"])

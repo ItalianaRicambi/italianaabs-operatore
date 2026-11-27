@@ -16,7 +16,8 @@ import {
   decidiEventoKeplero,
   type ContattoOperativo,
 } from "./decisioneEvento";
-import { campiPerRichiestaFiscale, indicazioniAnagraficheKeplero, messaggioRaccoltaKeplero } from "./indicazioniRaccolta";
+import { campiPerRichiestaFiscale, indicazioneIdentitaScambioNumerato, indicazioniAnagraficheKeplero, messaggioRaccoltaKeplero } from "./indicazioniRaccolta";
+import { numeroProgrammaScambioConcluso } from "./riconoscimentoOrdine";
 import { diagnosiSenzaErroriDichiarata } from "./esitoDiagnosi";
 import { classificaRichiesta } from "./classificazioneRichiesta";
 import { leggiOrdineContestuale } from "./ordineContestuale";
@@ -1383,12 +1384,15 @@ export async function POST(request: NextRequest) {
     const istruzioneClienteOrdine = registrazione.ordine_registrato && tipoFlusso === "commerciale"
       ? " " + indicazioniAnagraficheKeplero(contestoCliente, richiestaDatiAmministrativi)
       : "";
+    const istruzioneIdentitaScambio = registrazione.ordine_registrato && tipoFlusso === "commerciale"
+      ? indicazioneIdentitaScambioNumerato(numeroProgrammaScambioConcluso(riconoscimentoOrdine.messaggio), scelta, contestoCliente)
+      : "";
     return NextResponse.json({
       ok: true,
 
-      message: registrazione.istruzione + istruzioneFlusso + istruzioneRitiro + istruzioneAssistenza + istruzioneClienteOrdine + istruzioneFollowup,
+      message: registrazione.istruzione + istruzioneFlusso + istruzioneRitiro + istruzioneAssistenza + istruzioneClienteOrdine + istruzioneIdentitaScambio + istruzioneFollowup,
       registrazione,
-      indicazioni_dati: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini) + istruzioneFollowup,
+      indicazioni_dati: messaggioRaccoltaKeplero(contestoCliente, richiestaDatiAmministrativi, statoImmagini) + istruzioneIdentitaScambio + istruzioneFollowup,
 
       contesto_offerta: contestoOfferta,
       contesto_ritiro: contestoRientro,

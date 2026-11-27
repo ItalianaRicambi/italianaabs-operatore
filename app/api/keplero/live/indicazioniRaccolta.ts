@@ -62,6 +62,15 @@ export function indicazioniAnagraficheKeplero(contestoCliente: unknown, richiest
   return indicazioni.join(" ");
 }
 
+export function indicazioneIdentitaScambioNumerato(numero: number | null, scelta: unknown, contestoCliente: unknown): string {
+  const s = record(scelta);
+  const c = record(contestoCliente);
+  if (numero === null || s.stato !== "confermata" || s.numero !== numero ||
+      !["PS", "PSMI"].includes(stringa(s.servizio)) ||
+      c.stato !== "verifica_fatture_in_cloud" || c.cliente_riconosciuto === true) return "";
+  return " La scelta del Programma Scambio corrisponde all'alternativa numerata del preventivo. Per identificare l'officina e verificare i dati fiscali già presenti, chiedi soltanto la partita IVA, se non è già stata fornita. Non dichiarare che l'anagrafica è nuova o che la fattura è pronta prima del controllo.";
+}
+
 export function messaggioRaccoltaKeplero(
   contestoCliente: unknown,
   richiestaAmministrativa: unknown,
