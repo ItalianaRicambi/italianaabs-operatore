@@ -1385,7 +1385,9 @@ export async function POST(request: NextRequest) {
       ? " " + indicazioniAnagraficheKeplero(contestoCliente, richiestaDatiAmministrativi)
       : "";
     const istruzioneIdentitaScambio = registrazione.ordine_registrato && tipoFlusso === "commerciale"
-      ? indicazioneIdentitaScambioNumerato(numeroProgrammaScambioConcluso(riconoscimentoOrdine.messaggio), scelta, contestoCliente)
+      ? indicazioneIdentitaScambioNumerato(
+          numeroProgrammaScambioConcluso(riconoscimentoOrdine.messaggio) ?? numeroProgrammaScambioConcluso(testo(scelta?.evidenza)),
+          scelta, contestoCliente, richiestaDatiAmministrativi)
       : "";
     return NextResponse.json({
       ok: true,
